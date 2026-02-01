@@ -131,18 +131,12 @@ class PDFDocument:
 
     def create_new(self) -> bool:
         """Create a new empty PDF document"""
-        try:
-            self.close()
-            # Create a new empty PDF document
-            self._doc = fitz.open()
-            if self._doc is None:
-                raise RuntimeError("Failed to create new PDF document")
-            self._filepath = None
-            self._is_modified = True
-            return True
-        except Exception as e:
-            self._doc = None
-            raise
+        self.close()
+        # Create a new empty PDF document
+        self._doc = fitz.open()
+        self._filepath = None
+        self._is_modified = True
+        return True
 
     def close(self):
         """Close the current document"""
@@ -182,7 +176,7 @@ class PDFDocument:
         Returns:
             True if successful
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         save_path = Path(filepath) if filepath else self._filepath
@@ -223,7 +217,7 @@ class PDFDocument:
 
     def save_copy(self, filepath: Union[str, Path]) -> bool:
         """Save a copy without changing the current document path"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         try:
@@ -236,7 +230,7 @@ class PDFDocument:
 
     def get_page(self, page_num: int) -> fitz.Page:
         """Get a page object by page number (0-indexed)"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         if page_num < 0 or page_num >= len(self._doc):
             raise IndexError(f"Page {page_num} out of range")
@@ -299,7 +293,7 @@ class PDFDocument:
         Returns:
             Index of the new page
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         if index < 0:
@@ -311,7 +305,7 @@ class PDFDocument:
 
     def delete_page(self, page_num: int):
         """Delete a page from the document"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         self._doc.delete_page(page_num)
         self._is_modified = True
@@ -342,7 +336,7 @@ class PDFDocument:
 
     def move_page(self, from_index: int, to_index: int):
         """Move a page from one position to another"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         self._doc.move_page(from_index, to_index)
         self._is_modified = True
@@ -358,7 +352,7 @@ class PDFDocument:
         Returns:
             Index of the new page
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         if to_index < 0:
@@ -370,7 +364,7 @@ class PDFDocument:
 
     def extract_pages(self, page_nums: List[int], output_path: Union[str, Path]) -> bool:
         """Extract specific pages to a new PDF"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         new_doc = fitz.open()
@@ -391,7 +385,7 @@ class PDFDocument:
             other_path: Path to the PDF to merge
             position: Insert position (-1 for end)
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         other_doc = fitz.open(str(other_path))
@@ -429,7 +423,7 @@ class PDFDocument:
         Returns:
             List of created file paths
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         output_dir = Path(output_dir)
@@ -464,7 +458,7 @@ class PDFDocument:
         Returns:
             List of created file paths
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         output_dir = Path(output_dir)
@@ -512,7 +506,7 @@ class PDFDocument:
         Returns:
             List of dicts with page number and rectangles
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         results = []
@@ -564,13 +558,13 @@ class PDFDocument:
 
     def extract_image(self, xref: int) -> bytes:
         """Extract an image by its xref"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         return self._doc.extract_image(xref)["image"]
 
     def extract_all_images(self, output_dir: Union[str, Path]) -> List[str]:
         """Extract all images from the document"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         output_dir = Path(output_dir)
@@ -621,7 +615,7 @@ class PDFDocument:
 
     def get_metadata(self) -> DocumentMetadata:
         """Get document metadata"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         meta = self._doc.metadata
@@ -643,7 +637,7 @@ class PDFDocument:
 
     def set_metadata(self, metadata: Dict[str, str]) -> bool:
         """Set document metadata"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         self._doc.set_metadata(metadata)
@@ -654,7 +648,7 @@ class PDFDocument:
 
     def get_toc(self) -> List:
         """Get table of contents (bookmarks)"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         return self._doc.get_toc()
 
@@ -665,7 +659,7 @@ class PDFDocument:
         Args:
             toc: List of [level, title, page, dest] entries
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
         self._doc.set_toc(toc)
         self._is_modified = True
@@ -809,7 +803,7 @@ class PDFDocument:
                       rotation: float = 45,
                       pages: Optional[List[int]] = None) -> bool:
         """Add a text watermark to pages"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         target_pages = pages if pages else range(self.page_count)
@@ -843,7 +837,7 @@ class PDFDocument:
                             opacity: float = 0.3,
                             pages: Optional[List[int]] = None) -> bool:
         """Add an image watermark to pages"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         target_pages = pages if pages else range(self.page_count)
@@ -871,7 +865,7 @@ class PDFDocument:
             owner_password: Password for full permissions
             permissions: Permission flags
         """
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         # Permissions can be combined:
@@ -890,7 +884,7 @@ class PDFDocument:
 
     def decrypt(self, password: str) -> bool:
         """Decrypt the document"""
-        if not self._doc:
+        if self._doc is None:
             raise ValueError("No document is open")
 
         if self._doc.authenticate(password):

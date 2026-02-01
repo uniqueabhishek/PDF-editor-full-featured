@@ -196,23 +196,28 @@ class UserSettings:
         """Load settings from JSON file"""
         if path.exists():
             try:
+                import base64
                 with open(path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                # Convert base64 strings back to bytes for window geometry/state
+                if data.get('window_geometry') and isinstance(data['window_geometry'], str):
+                    data['window_geometry'] = base64.b64decode(data['window_geometry'])
+                if data.get('window_state') and isinstance(data['window_state'], str):
+                    data['window_state'] = base64.b64decode(data['window_state'])
                 return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, ValueError):
                 pass
         return cls()
 
     def save(self, path: Path):
         """Save settings to JSON file"""
+        import base64
         path.parent.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
         # Convert bytes to base64 for JSON serialization
-        if data.get('window_geometry'):
-            import base64
+        if data.get('window_geometry') and isinstance(data['window_geometry'], bytes):
             data['window_geometry'] = base64.b64encode(data['window_geometry']).decode('utf-8')
-        if data.get('window_state'):
-            import base64
+        if data.get('window_state') and isinstance(data['window_state'], bytes):
             data['window_state'] = base64.b64encode(data['window_state']).decode('utf-8')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
