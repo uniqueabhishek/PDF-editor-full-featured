@@ -13,7 +13,10 @@
       "Bash(uv run:*)",
       "Bash(git rm:*)",
       "Bash(.venvScriptspython.exe -c \"import fitz; doc = fitz.open\\(\\); print\\(f''doc is None: {doc is None}''\\); print\\(f''doc type: {type\\(doc\\)}''\\); doc.new_page\\(\\); print\\(f''page count: {len\\(doc\\)}''\\)\")",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(cmd /c dir /b)",
+      "Bash(\".\\\\.venv\\\\Scripts\\\\python.exe\" main.py)"
     ]
   }
 }

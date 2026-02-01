@@ -261,6 +261,7 @@ class SettingsDialog(QDialog):
         font_layout = QFormLayout(font_group)
 
         self._default_font = QFontComboBox()
+        self._default_font.setCurrentFont(QFont("Arial"))
         font_layout.addRow("Font:", self._default_font)
 
         self._default_font_size = QSpinBox()

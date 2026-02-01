@@ -498,6 +498,7 @@ class AnnotationToolbar(QToolBar):
         self.addSeparator()
 
         self.font_combo = QFontComboBox()
+        self.font_combo.setCurrentFont(QFont("Arial"))
         self.font_combo.setMaximumWidth(150)
         self.font_combo.setToolTip("Font family")
         self.addWidget(self.font_combo)
