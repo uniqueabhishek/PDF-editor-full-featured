@@ -375,12 +375,15 @@ class MainWindow(QMainWindow):
         if not self._confirm_close():
             return
 
-        self._document.create_new()
-        self._document.add_blank_page()
-        self._load_document_to_viewer()
-        self._current_file = None
-        self._is_modified = True
-        self._update_title()
+        try:
+            self._document.create_new()
+            self._document.add_blank_page()
+            self._current_file = None
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create new document:\n{e}")
 
     def _open_document(self):
         """Open a document"""

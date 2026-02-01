@@ -17,51 +17,46 @@ Features:
 Author: Ultra PDF Team
 Version: 1.0.0
 """
-import sys
+import importlib.util
 import os
+import sys
 from pathlib import Path
 
-# Add the project root to the path
+# Add the project root to the path before importing local modules
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-
-from PyQt6.QtWidgets import QApplication, QSplashScreen, QMessageBox
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPixmap, QFont, QIcon
-import darkdetect
-
-from config import config, UserSettings
 
 
 def check_dependencies():
     """Check if all required dependencies are installed"""
     missing = []
 
-    try:
-        import fitz  # PyMuPDF
-    except ImportError:
+    if importlib.util.find_spec("fitz") is None:
         missing.append("PyMuPDF")
 
-    try:
-        from PyQt6.QtWidgets import QApplication
-    except ImportError:
+    if importlib.util.find_spec("PyQt6") is None:
         missing.append("PyQt6")
 
-    try:
-        from PIL import Image
-    except ImportError:
+    if importlib.util.find_spec("PIL") is None:
         missing.append("Pillow")
 
     if missing:
         print(f"Missing dependencies: {', '.join(missing)}")
-        print("Please install them using: pip install -r requirements.txt")
+        print("Please install them using: uv sync")
         return False
 
     return True
 
 
-def setup_application() -> QApplication:
+def setup_application():
     """Setup and configure the Qt application"""
+    # Import here after path setup and dependency check
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QFont
+    import darkdetect
+
+    from config import config, UserSettings
+
     # Enable high DPI scaling
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 
@@ -88,7 +83,7 @@ def setup_application() -> QApplication:
     return app
 
 
-def apply_dark_theme(app: QApplication):
+def apply_dark_theme(app):
     """Apply dark theme to application"""
     dark_stylesheet = """
     QMainWindow {
@@ -199,7 +194,7 @@ def apply_dark_theme(app: QApplication):
     app.setStyleSheet(dark_stylesheet)
 
 
-def apply_light_theme(app: QApplication):
+def apply_light_theme(app):
     """Apply light theme to application"""
     light_stylesheet = """
     QMainWindow {

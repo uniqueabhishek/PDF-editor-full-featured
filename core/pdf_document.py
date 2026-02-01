@@ -133,11 +133,15 @@ class PDFDocument:
         """Create a new empty PDF document"""
         try:
             self.close()
+            # Create a new empty PDF document
             self._doc = fitz.open()
+            if self._doc is None:
+                raise RuntimeError("Failed to create new PDF document")
             self._filepath = None
             self._is_modified = True
             return True
         except Exception as e:
+            self._doc = None
             raise
 
     def close(self):
