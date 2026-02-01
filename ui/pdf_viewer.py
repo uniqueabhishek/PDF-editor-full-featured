@@ -385,9 +385,254 @@ class PDFViewer(QScrollArea):
         self.page_changed.emit(page_num)
 
     def _on_annotation_created(self, page_num: int, annot_type: str, rect: QRectF):
-        """Handle annotation creation"""
+        """Handle annotation creation based on current tool mode"""
+        if not self._doc or rect.width() < 5 or rect.height() < 5:
+            return
+
         if self._tool_mode == ToolMode.SELECT:
             self.selection_changed.emit(page_num, rect)
+
+        elif self._tool_mode == ToolMode.HIGHLIGHT:
+            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_HIGHLIGHT)
+
+        elif self._tool_mode == ToolMode.UNDERLINE:
+            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_UNDERLINE)
+
+        elif self._tool_mode == ToolMode.STRIKETHROUGH:
+            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_STRIKEOUT)
+
+        elif self._tool_mode == ToolMode.TEXT_BOX:
+            self._create_text_annotation(page_num, rect, free_text=True)
+
+        elif self._tool_mode == ToolMode.STICKY_NOTE:
+            self._create_text_annotation(page_num, rect, free_text=False)
+
+        elif self._tool_mode == ToolMode.RECTANGLE:
+            self._create_shape_annotation(page_num, rect, "rectangle")
+
+        elif self._tool_mode == ToolMode.CIRCLE:
+            self._create_shape_annotation(page_num, rect, "circle")
+
+        elif self._tool_mode == ToolMode.LINE:
+            self._create_line_annotation(page_num, rect, arrow=False)
+
+        elif self._tool_mode == ToolMode.ARROW:
+            self._create_line_annotation(page_num, rect, arrow=True)
+
+        elif self._tool_mode == ToolMode.REDACT:
+            self._create_redaction_annotation(page_num, rect)
+
+        elif self._tool_mode == ToolMode.ERASER:
+            self._erase_annotation_at(page_num, rect)
+
+    def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: int):
+        """Create highlight, underline, or strikethrough annotation"""
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                   rect.x() + rect.width(),
+                                   rect.y() + rect.height())
+
+            # Get quads for text in the area
+            text_dict = page.get_text("dict", clip=fitz_rect)
+            quads = []
+
+            for block in text_dict.get("blocks", []):
+                if "lines" in block:
+                    for line in block["lines"]:
+                        for span in line.get("spans", []):
+                            span_rect = fitz.Rect(span["bbox"])
+                            if fitz_rect.intersects(span_rect):
+                                quads.append(span_rect.quad)
+
+            if quads:
+                annot = page.add_highlight_annot(quads) if annot_type == fitz.PDF_ANNOT_HIGHLIGHT else \
+                        page.add_underline_annot(quads) if annot_type == fitz.PDF_ANNOT_UNDERLINE else \
+                        page.add_strikeout_annot(quads)
+            else:
+                # No text found, create annotation on the rect itself
+                if annot_type == fitz.PDF_ANNOT_HIGHLIGHT:
+                    annot = page.add_highlight_annot(fitz_rect)
+                elif annot_type == fitz.PDF_ANNOT_UNDERLINE:
+                    annot = page.add_underline_annot(fitz_rect)
+                else:
+                    annot = page.add_strikeout_annot(fitz_rect)
+
+            # Set color
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
+            annot.set_colors(stroke=color)
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, "text_markup", {"rect": rect})
+
+        except Exception as e:
+            print(f"Error creating text markup annotation: {e}")
+
+    def _create_text_annotation(self, page_num: int, rect: QRectF, free_text: bool = False):
+        """Create text box or sticky note annotation"""
+        from PyQt6.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getMultiLineText(
+            self, "Add Text",
+            "Enter text:" if free_text else "Enter note:",
+            ""
+        )
+        if not ok or not text:
+            return
+
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                   rect.x() + rect.width(),
+                                   rect.y() + rect.height())
+
+            if free_text:
+                # Free text annotation (text box)
+                annot = page.add_freetext_annot(
+                    fitz_rect, text,
+                    fontsize=self._font_size,
+                    fontname="helv",
+                    text_color=(0, 0, 0),
+                    fill_color=(1, 1, 0.8)
+                )
+            else:
+                # Sticky note
+                point = fitz.Point(rect.x(), rect.y())
+                annot = page.add_text_annot(point, text)
+                color = (self._annotation_color.redF(),
+                         self._annotation_color.greenF(),
+                         self._annotation_color.blueF())
+                annot.set_colors(stroke=color)
+
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, "text", {"text": text, "rect": rect})
+
+        except Exception as e:
+            print(f"Error creating text annotation: {e}")
+
+    def _create_shape_annotation(self, page_num: int, rect: QRectF, shape: str):
+        """Create rectangle or circle annotation"""
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                   rect.x() + rect.width(),
+                                   rect.y() + rect.height())
+
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
+
+            if shape == "rectangle":
+                annot = page.add_rect_annot(fitz_rect)
+            else:  # circle
+                annot = page.add_circle_annot(fitz_rect)
+
+            annot.set_colors(stroke=color)
+            annot.set_border(width=self._stroke_width)
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, shape, {"rect": rect})
+
+        except Exception as e:
+            print(f"Error creating shape annotation: {e}")
+
+    def _create_line_annotation(self, page_num: int, rect: QRectF, arrow: bool = False):
+        """Create line or arrow annotation"""
+        try:
+            page = self._doc[page_num]
+
+            # Line from top-left to bottom-right of selection
+            p1 = fitz.Point(rect.x(), rect.y())
+            p2 = fitz.Point(rect.x() + rect.width(), rect.y() + rect.height())
+
+            annot = page.add_line_annot(p1, p2)
+
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
+            annot.set_colors(stroke=color)
+            annot.set_border(width=self._stroke_width)
+
+            if arrow:
+                # Set line ending to arrow
+                annot.set_line_ends(fitz.PDF_ANNOT_LE_NONE, fitz.PDF_ANNOT_LE_OPEN_ARROW)
+
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, "line" if not arrow else "arrow", {"rect": rect})
+
+        except Exception as e:
+            print(f"Error creating line annotation: {e}")
+
+    def _create_redaction_annotation(self, page_num: int, rect: QRectF):
+        """Create redaction annotation"""
+        from PyQt6.QtWidgets import QMessageBox
+
+        result = QMessageBox.question(
+            self, "Apply Redaction",
+            "This will permanently remove content in the selected area.\n"
+            "The redaction will be applied when you save the document.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                   rect.x() + rect.width(),
+                                   rect.y() + rect.height())
+
+            annot = page.add_redact_annot(fitz_rect)
+            annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+            annot.update()
+
+            # Apply the redaction
+            page.apply_redactions()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, "redaction", {"rect": rect})
+
+        except Exception as e:
+            print(f"Error creating redaction: {e}")
+
+    def _erase_annotation_at(self, page_num: int, rect: QRectF):
+        """Erase annotations that intersect with the given rect"""
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                   rect.x() + rect.width(),
+                                   rect.y() + rect.height())
+
+            deleted = False
+            for annot in page.annots():
+                if annot.rect.intersects(fitz_rect):
+                    page.delete_annot(annot)
+                    deleted = True
+
+            if deleted:
+                self.document_modified.emit()
+                self.refresh()
+
+        except Exception as e:
+            print(f"Error erasing annotation: {e}")
 
     # ==================== Public Interface ====================
 
@@ -491,9 +736,93 @@ class PDFViewer(QScrollArea):
         self._page_cache.clear()
         self._render_visible_pages()
 
+    def set_view_mode(self, mode: ViewMode):
+        """Set the view mode (single page, two page, continuous)"""
+        if self._view_mode == mode:
+            return
+
+        self._view_mode = mode
+        self._rebuild_layout()
+
+    def _rebuild_layout(self):
+        """Rebuild the page layout based on current view mode"""
+        if not self._doc or not self._page_widgets:
+            return
+
+        # Clear current layout
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+            elif item.layout():
+                # Clear nested layout
+                while item.layout().count():
+                    sub_item = item.layout().takeAt(0)
+                    if sub_item.widget():
+                        sub_item.widget().setParent(None)
+
+        if self._view_mode == ViewMode.CONTINUOUS:
+            # All pages in vertical layout
+            for page_widget in self._page_widgets:
+                page_widget.setParent(self._container)
+                self._layout.addWidget(page_widget)
+
+        elif self._view_mode == ViewMode.SINGLE_PAGE:
+            # Only show current page
+            for i, page_widget in enumerate(self._page_widgets):
+                page_widget.setParent(self._container)
+                if i == self._current_page:
+                    self._layout.addWidget(page_widget)
+                    page_widget.show()
+                else:
+                    page_widget.hide()
+
+        elif self._view_mode == ViewMode.TWO_PAGE:
+            # Show pages in pairs
+            for i in range(0, len(self._page_widgets), 2):
+                row_layout = QHBoxLayout()
+                row_layout.setSpacing(20)
+                row_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                # Left page
+                self._page_widgets[i].setParent(self._container)
+                row_layout.addWidget(self._page_widgets[i])
+                self._page_widgets[i].show()
+
+                # Right page (if exists)
+                if i + 1 < len(self._page_widgets):
+                    self._page_widgets[i + 1].setParent(self._container)
+                    row_layout.addWidget(self._page_widgets[i + 1])
+                    self._page_widgets[i + 1].show()
+
+                self._layout.addLayout(row_layout)
+
+        self._render_visible_pages()
+
     def get_selected_text(self) -> str:
-        """Get currently selected text"""
-        # Implementation would extract text from selection rectangle
+        """Get currently selected text from selection rectangle"""
+        if not self._doc:
+            return ""
+
+        # Get text from current page widget's selection
+        if self._current_page < len(self._page_widgets):
+            page_widget = self._page_widgets[self._current_page]
+            if page_widget._selection_rect:
+                rect = page_widget._selection_rect
+                page_rect = QRectF(
+                    rect.x() / page_widget._zoom,
+                    rect.y() / page_widget._zoom,
+                    rect.width() / page_widget._zoom,
+                    rect.height() / page_widget._zoom
+                )
+                fitz_rect = fitz.Rect(
+                    page_rect.x(), page_rect.y(),
+                    page_rect.x() + page_rect.width(),
+                    page_rect.y() + page_rect.height()
+                )
+                page = self._doc[self._current_page]
+                text = page.get_text("text", clip=fitz_rect)
+                return text.strip()
         return ""
 
     def refresh(self):
