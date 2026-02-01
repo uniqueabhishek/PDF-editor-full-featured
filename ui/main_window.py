@@ -23,6 +23,17 @@ from config import config, UserSettings, SUPPORTED_PDF_EXTENSIONS
 class MainWindow(QMainWindow):
     """Main application window"""
 
+    def _create_action(self, text: str, slot=None, shortcut=None, checkable=False) -> QAction:
+        """Helper to create menu actions (PyQt6 compatible)"""
+        action = QAction(text, self)
+        if slot:
+            action.triggered.connect(slot)
+        if shortcut:
+            action.setShortcut(shortcut)
+        if checkable:
+            action.setCheckable(True)
+        return action
+
     def __init__(self):
         super().__init__()
 
@@ -168,25 +179,39 @@ class MainWindow(QMainWindow):
 
         # Zoom submenu
         zoom_menu = view_menu.addMenu("Zoom")
-        zoom_menu.addAction("Zoom In", self._zoom_in, QKeySequence("Ctrl++"))
-        zoom_menu.addAction("Zoom Out", self._zoom_out, QKeySequence("Ctrl+-"))
+        zoom_in_action = zoom_menu.addAction("Zoom In")
+        zoom_in_action.setShortcut(QKeySequence("Ctrl++"))
+        zoom_in_action.triggered.connect(self._zoom_in)
+        zoom_out_action = zoom_menu.addAction("Zoom Out")
+        zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
+        zoom_out_action.triggered.connect(self._zoom_out)
         zoom_menu.addSeparator()
-        zoom_menu.addAction("Fit Width", self._fit_width, QKeySequence("Ctrl+1"))
-        zoom_menu.addAction("Fit Page", self._fit_page, QKeySequence("Ctrl+2"))
-        zoom_menu.addAction("100%", lambda: self._viewer.set_zoom(100), QKeySequence("Ctrl+0"))
+        fit_width_action = zoom_menu.addAction("Fit Width")
+        fit_width_action.setShortcut(QKeySequence("Ctrl+1"))
+        fit_width_action.triggered.connect(self._fit_width)
+        fit_page_action = zoom_menu.addAction("Fit Page")
+        fit_page_action.setShortcut(QKeySequence("Ctrl+2"))
+        fit_page_action.triggered.connect(self._fit_page)
+        zoom_100_action = zoom_menu.addAction("100%")
+        zoom_100_action.setShortcut(QKeySequence("Ctrl+0"))
+        zoom_100_action.triggered.connect(lambda: self._viewer.set_zoom(100))
 
         # Rotation submenu
         rotate_menu = view_menu.addMenu("Rotate")
-        rotate_menu.addAction("Rotate Clockwise", lambda: self._rotate(90), QKeySequence("Ctrl+R"))
-        rotate_menu.addAction("Rotate Counter-Clockwise", lambda: self._rotate(-90), QKeySequence("Ctrl+Shift+R"))
+        rotate_cw_action = rotate_menu.addAction("Rotate Clockwise")
+        rotate_cw_action.setShortcut(QKeySequence("Ctrl+R"))
+        rotate_cw_action.triggered.connect(lambda: self._rotate(90))
+        rotate_ccw_action = rotate_menu.addAction("Rotate Counter-Clockwise")
+        rotate_ccw_action.setShortcut(QKeySequence("Ctrl+Shift+R"))
+        rotate_ccw_action.triggered.connect(lambda: self._rotate(-90))
 
         view_menu.addSeparator()
 
         # View mode submenu
         view_mode_menu = view_menu.addMenu("View Mode")
-        view_mode_menu.addAction("Single Page", lambda: self._set_view_mode(ViewMode.SINGLE_PAGE))
-        view_mode_menu.addAction("Two Pages", lambda: self._set_view_mode(ViewMode.TWO_PAGE))
-        view_mode_menu.addAction("Continuous", lambda: self._set_view_mode(ViewMode.CONTINUOUS))
+        view_mode_menu.addAction(self._create_action("Single Page", lambda: self._set_view_mode(ViewMode.SINGLE_PAGE)))
+        view_mode_menu.addAction(self._create_action("Two Pages", lambda: self._set_view_mode(ViewMode.TWO_PAGE)))
+        view_mode_menu.addAction(self._create_action("Continuous", lambda: self._set_view_mode(ViewMode.CONTINUOUS)))
 
         view_menu.addSeparator()
 
@@ -207,45 +232,46 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        view_menu.addAction("Full Screen", self._toggle_fullscreen, QKeySequence("F11"))
+        fullscreen_action = self._create_action("Full Screen", self._toggle_fullscreen, QKeySequence("F11"))
+        view_menu.addAction(fullscreen_action)
 
         # === Page Menu ===
         page_menu = menubar.addMenu("&Page")
 
-        page_menu.addAction("Insert Blank Page...", self._insert_blank_page)
-        page_menu.addAction("Insert Pages from File...", self._insert_from_file)
+        page_menu.addAction(self._create_action("Insert Blank Page...", self._insert_blank_page))
+        page_menu.addAction(self._create_action("Insert Pages from File...", self._insert_from_file))
         page_menu.addSeparator()
-        page_menu.addAction("Delete Page", self._delete_current_page)
-        page_menu.addAction("Extract Pages...", self._extract_pages)
+        page_menu.addAction(self._create_action("Delete Page", self._delete_current_page))
+        page_menu.addAction(self._create_action("Extract Pages...", self._extract_pages))
         page_menu.addSeparator()
-        page_menu.addAction("Rotate Clockwise", lambda: self._rotate_page(90))
-        page_menu.addAction("Rotate Counter-Clockwise", lambda: self._rotate_page(-90))
+        page_menu.addAction(self._create_action("Rotate Clockwise", lambda: self._rotate_page(90)))
+        page_menu.addAction(self._create_action("Rotate Counter-Clockwise", lambda: self._rotate_page(-90)))
         page_menu.addSeparator()
-        page_menu.addAction("Crop Page...", self._crop_page)
+        page_menu.addAction(self._create_action("Crop Page...", self._crop_page))
 
         # === Tools Menu ===
         tools_menu = menubar.addMenu("&Tools")
 
-        tools_menu.addAction("Merge PDFs...", self._merge_pdfs)
-        tools_menu.addAction("Split PDF...", self._split_pdf)
+        tools_menu.addAction(self._create_action("Merge PDFs...", self._merge_pdfs))
+        tools_menu.addAction(self._create_action("Split PDF...", self._split_pdf))
         tools_menu.addSeparator()
-        tools_menu.addAction("Compress PDF...", self._compress_pdf)
-        tools_menu.addAction("Optimize PDF...", self._optimize_pdf)
+        tools_menu.addAction(self._create_action("Compress PDF...", self._compress_pdf))
+        tools_menu.addAction(self._create_action("Optimize PDF...", self._optimize_pdf))
         tools_menu.addSeparator()
-        tools_menu.addAction("OCR (Recognize Text)...", self._run_ocr)
+        tools_menu.addAction(self._create_action("OCR (Recognize Text)...", self._run_ocr))
         tools_menu.addSeparator()
-        tools_menu.addAction("Add Watermark...", self._add_watermark)
-        tools_menu.addAction("Add Header/Footer...", self._add_header_footer)
+        tools_menu.addAction(self._create_action("Add Watermark...", self._add_watermark))
+        tools_menu.addAction(self._create_action("Add Header/Footer...", self._add_header_footer))
         tools_menu.addSeparator()
-        tools_menu.addAction("Encrypt PDF...", self._encrypt_pdf)
-        tools_menu.addAction("Remove Password...", self._remove_password)
+        tools_menu.addAction(self._create_action("Encrypt PDF...", self._encrypt_pdf))
+        tools_menu.addAction(self._create_action("Remove Password...", self._remove_password))
         tools_menu.addSeparator()
-        tools_menu.addAction("Batch Process...", self._batch_process)
+        tools_menu.addAction(self._create_action("Batch Process...", self._batch_process))
 
         # === Help Menu ===
         help_menu = menubar.addMenu("&Help")
-        help_menu.addAction("&About", self._show_about)
-        help_menu.addAction("Keyboard Shortcuts", self._show_shortcuts)
+        help_menu.addAction(self._create_action("&About", self._show_about))
+        help_menu.addAction(self._create_action("Keyboard Shortcuts", self._show_shortcuts))
 
     def _setup_toolbars(self):
         """Setup toolbars"""
