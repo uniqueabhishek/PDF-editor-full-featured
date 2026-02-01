@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Item -Path ''d:\\\\D Desktop\\\\PDF editor full featured\\\\*'' -Force | Select-Object Name, Length, LastWriteTime\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''d:\\\\D Desktop\\\\PDF editor full featured\\\\.claude'' -Force | Select-Object Name, Length, LastWriteTime\")",
+      "Bash(powershell -Command \"Get-Content ''d:\\\\D Desktop\\\\PDF editor full featured\\\\Ultra_PDF_Editor.py'' -Raw\")"
+    ]
+  }
+}
