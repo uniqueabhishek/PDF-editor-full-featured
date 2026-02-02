@@ -44,3 +44,7 @@ desktop.ini
 *.log
 *.tmp
 .claude/
+
+# Third-party utilities
+PyMuPDF-Utilities-master/
+PyMuPDF-Utilities-master.zip
