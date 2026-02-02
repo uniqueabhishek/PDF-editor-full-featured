@@ -73,7 +73,7 @@ class PageRenderWorker(QThread):
         self._running = True
         self._current_zoom = 1.0
 
-    def set_document(self, doc: fitz.Document, render_dpi: int = 150):
+    def set_document(self, doc: Optional[fitz.Document], render_dpi: int = 150):
         """Set the document to render"""
         self._doc = doc
         self._render_dpi = render_dpi
@@ -403,7 +403,7 @@ class PDFViewer(QScrollArea):
         # Connect scroll for page tracking
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
-    def set_document(self, doc: fitz.Document, filepath: str = None):
+    def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None):
         """Set the document to display"""
         self._doc = doc
         self._filepath = filepath

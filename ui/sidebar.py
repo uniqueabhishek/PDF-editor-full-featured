@@ -159,7 +159,7 @@ class ThumbnailPanel(QScrollArea):
 
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
-    def set_document(self, doc: fitz.Document):
+    def set_document(self, doc: Optional[fitz.Document]):
         """Set the document for thumbnail generation"""
         self._doc = doc
         self._clear_thumbnails()
@@ -317,7 +317,7 @@ class BookmarkPanel(QTreeWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
-    def set_document(self, doc: fitz.Document):
+    def set_document(self, doc: Optional[fitz.Document]):
         """Set document and load bookmarks"""
         self._doc = doc
         self.clear()
@@ -463,7 +463,7 @@ class AnnotationPanel(QListWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
-    def set_document(self, doc: fitz.Document):
+    def set_document(self, doc: Optional[fitz.Document]):
         """Set document and load annotations"""
         self._doc = doc
         self.clear()
@@ -594,7 +594,7 @@ class Sidebar(QTabWidget):
             }
         """)
 
-    def set_document(self, doc: fitz.Document):
+    def set_document(self, doc: Optional[fitz.Document]):
         """Set document for all panels"""
         self.thumbnail_panel.set_document(doc)
         self.bookmark_panel.set_document(doc)

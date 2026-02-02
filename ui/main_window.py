@@ -113,10 +113,12 @@ class MainWindow(QMainWindow):
         assert file_menu is not None
 
         self._new_action = file_menu.addAction("&New", self._new_document)
+        assert self._new_action is not None
         self._new_action.setShortcut(QKeySequence.StandardKey.New)
 
         self._open_action = file_menu.addAction(
             "&Open...", self._open_document)
+        assert self._open_action is not None
         self._open_action.setShortcut(QKeySequence.StandardKey.Open)
 
         # Recent files submenu
@@ -127,16 +129,19 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
 
         self._save_action = file_menu.addAction("&Save", self._save_document)
+        assert self._save_action is not None
         self._save_action.setShortcut(QKeySequence.StandardKey.Save)
 
         self._save_as_action = file_menu.addAction(
             "Save &As...", self._save_document_as)
+        assert self._save_as_action is not None
         self._save_as_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
 
         file_menu.addSeparator()
 
         self._close_action = file_menu.addAction(
             "&Close", self._close_document)
+        assert self._close_action is not None
         self._close_action.setShortcut(QKeySequence.StandardKey.Close)
 
         file_menu.addSeparator()
@@ -152,6 +157,7 @@ class MainWindow(QMainWindow):
 
         self._print_action = file_menu.addAction(
             "&Print...", self._print_document)
+        assert self._print_action is not None
         self._print_action.setShortcut(QKeySequence.StandardKey.Print)
 
         file_menu.addSeparator()
@@ -168,38 +174,47 @@ class MainWindow(QMainWindow):
         assert edit_menu is not None
 
         self._undo_action = edit_menu.addAction("&Undo", self._undo)
+        assert self._undo_action is not None
         self._undo_action.setShortcut(QKeySequence.StandardKey.Undo)
 
         self._redo_action = edit_menu.addAction("&Redo", self._redo)
+        assert self._redo_action is not None
         self._redo_action.setShortcut(QKeySequence.StandardKey.Redo)
 
         edit_menu.addSeparator()
 
         self._cut_action = edit_menu.addAction("Cu&t", self._cut)
+        assert self._cut_action is not None
         self._cut_action.setShortcut(QKeySequence.StandardKey.Cut)
 
         self._copy_action = edit_menu.addAction("&Copy", self._copy)
+        assert self._copy_action is not None
         self._copy_action.setShortcut(QKeySequence.StandardKey.Copy)
 
         self._paste_action = edit_menu.addAction("&Paste", self._paste)
+        assert self._paste_action is not None
         self._paste_action.setShortcut(QKeySequence.StandardKey.Paste)
 
         self._delete_action = edit_menu.addAction("&Delete", self._delete)
+        assert self._delete_action is not None
         self._delete_action.setShortcut(QKeySequence.StandardKey.Delete)
 
         edit_menu.addSeparator()
 
         self._select_all_action = edit_menu.addAction(
             "Select &All", self._select_all)
+        assert self._select_all_action is not None
         self._select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
 
         edit_menu.addSeparator()
 
         self._find_action = edit_menu.addAction("&Find...", self._show_find)
+        assert self._find_action is not None
         self._find_action.setShortcut(QKeySequence.StandardKey.Find)
 
         self._replace_action = edit_menu.addAction(
             "Find && &Replace...", self._show_replace)
+        assert self._replace_action is not None
         self._replace_action.setShortcut(QKeySequence("Ctrl+H"))
 
         # === View Menu ===
@@ -210,19 +225,24 @@ class MainWindow(QMainWindow):
         zoom_menu = view_menu.addMenu("Zoom")
         assert zoom_menu is not None
         zoom_in_action = zoom_menu.addAction("Zoom In")
+        assert zoom_in_action is not None
         zoom_in_action.setShortcut(QKeySequence("Ctrl++"))
         zoom_in_action.triggered.connect(self._zoom_in)
         zoom_out_action = zoom_menu.addAction("Zoom Out")
+        assert zoom_out_action is not None
         zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
         zoom_out_action.triggered.connect(self._zoom_out)
         zoom_menu.addSeparator()
         fit_width_action = zoom_menu.addAction("Fit Width")
+        assert fit_width_action is not None
         fit_width_action.setShortcut(QKeySequence("Ctrl+1"))
         fit_width_action.triggered.connect(self._fit_width)
         fit_page_action = zoom_menu.addAction("Fit Page")
+        assert fit_page_action is not None
         fit_page_action.setShortcut(QKeySequence("Ctrl+2"))
         fit_page_action.triggered.connect(self._fit_page)
         zoom_100_action = zoom_menu.addAction("100%")
+        assert zoom_100_action is not None
         zoom_100_action.setShortcut(QKeySequence("Ctrl+0"))
         zoom_100_action.triggered.connect(lambda: self._viewer.set_zoom(100))
 
@@ -230,9 +250,11 @@ class MainWindow(QMainWindow):
         rotate_menu = view_menu.addMenu("Rotate")
         assert rotate_menu is not None
         rotate_cw_action = rotate_menu.addAction("Rotate Clockwise")
+        assert rotate_cw_action is not None
         rotate_cw_action.setShortcut(QKeySequence("Ctrl+R"))
         rotate_cw_action.triggered.connect(lambda: self._rotate(90))
         rotate_ccw_action = rotate_menu.addAction("Rotate Counter-Clockwise")
+        assert rotate_ccw_action is not None
         rotate_ccw_action.setShortcut(QKeySequence("Ctrl+Shift+R"))
         rotate_ccw_action.triggered.connect(lambda: self._rotate(-90))
 
@@ -252,17 +274,20 @@ class MainWindow(QMainWindow):
 
         # Sidebar toggle
         self._sidebar_action = view_menu.addAction("Show Sidebar")
+        assert self._sidebar_action is not None
         self._sidebar_action.setCheckable(True)
         self._sidebar_action.setChecked(True)
         self._sidebar_action.triggered.connect(self._toggle_sidebar)
 
         # Toolbar toggles
         self._main_toolbar_action = view_menu.addAction("Show Main Toolbar")
+        assert self._main_toolbar_action is not None
         self._main_toolbar_action.setCheckable(True)
         self._main_toolbar_action.setChecked(True)
 
         self._annotation_toolbar_action = view_menu.addAction(
             "Show Annotation Toolbar")
+        assert self._annotation_toolbar_action is not None
         self._annotation_toolbar_action.setCheckable(True)
         self._annotation_toolbar_action.setChecked(True)
 
@@ -431,7 +456,8 @@ class MainWindow(QMainWindow):
 
         # Restore sidebar visibility
         self._sidebar.setVisible(self._settings.sidebar_visible)
-        self._sidebar_action.setChecked(self._settings.sidebar_visible)
+        if self._sidebar_action:
+            self._sidebar_action.setChecked(self._settings.sidebar_visible)
 
     def _save_settings(self):
         """Save current settings"""
@@ -514,9 +540,9 @@ class MainWindow(QMainWindow):
 
     def _load_document_to_viewer(self):
         """Load the current document into the viewer"""
-        if self._document.is_open:
+        if self._document.is_open and self._document._doc:
             self._viewer.set_document(self._document._doc, str(
-                self._current_file) if self._current_file else None)
+                self._current_file) if self._current_file else "")
             self._sidebar.set_document(self._document._doc)
             self._main_toolbar.set_page_count(self._document.page_count)
             self._update_actions_state()
@@ -630,6 +656,9 @@ class MainWindow(QMainWindow):
             painter.begin(printer)
 
             try:
+                doc = self._document._doc
+                if not doc:
+                    return
                 for i in range(self._document.page_count):
                     if progress.wasCanceled():
                         break
@@ -643,7 +672,7 @@ class MainWindow(QMainWindow):
                         printer.newPage()
 
                     # Render page to image at printer resolution
-                    page = self._document._doc[i]
+                    page = doc[i]
                     # Calculate scale for printer DPI
                     dpi = printer.resolution()
                     scale = dpi / 72.0  # PDF points to printer DPI
@@ -739,7 +768,8 @@ Encrypted: {metadata.encryption}
         selected_text = self._viewer.get_selected_text()
         if selected_text:
             clipboard = QApplication.clipboard()
-            clipboard.setText(selected_text)
+            if clipboard:
+                clipboard.setText(selected_text)
             self._statusbar.showMessage("Text copied to clipboard", 2000)
         else:
             self._statusbar.showMessage("No text selected", 2000)
@@ -747,7 +777,7 @@ Encrypted: {metadata.encryption}
     def _paste(self):
         """Paste from clipboard"""
         clipboard = QApplication.clipboard()
-        text = clipboard.text()
+        text = clipboard.text() if clipboard else ""
         if text:
             # For now, show info that paste creates text annotation
             self._statusbar.showMessage(
@@ -1063,7 +1093,7 @@ Encrypted: {metadata.encryption}
 
     def _crop_page(self):
         """Crop current page"""
-        if not self._document.is_open:
+        if not self._document.is_open or not self._document._doc:
             return
 
         page_num = self._viewer.get_current_page()
@@ -1213,6 +1243,9 @@ Encrypted: {metadata.encryption}
         progress.show()
 
         try:
+            doc = self._document._doc
+            if not doc:
+                return
             for i in range(self._document.page_count):
                 if progress.wasCanceled():
                     break
@@ -1223,7 +1256,7 @@ Encrypted: {metadata.encryption}
                 QApplication.processEvents()
 
                 # Render page to image
-                page = self._document._doc[i]
+                page = doc[i]
                 # Higher resolution for better OCR
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
                 img_data = pix.tobytes("png")
@@ -1270,6 +1303,9 @@ Encrypted: {metadata.encryption}
         dialog = HeaderFooterDialog(self._document.page_count, self)
         if dialog.exec():
             try:
+                doc = self._document._doc
+                if not doc:
+                    return
                 # Get settings from dialog
                 header_texts = dialog.get_header_texts()
                 footer_texts = dialog.get_footer_texts()
@@ -1283,7 +1319,7 @@ Encrypted: {metadata.encryption}
                 margin_side = margins['side']
 
                 for i in range(page_range[0], page_range[1] + 1):
-                    page = self._document._doc[i]
+                    page = doc[i]
                     rect = page.rect
 
                     # Process variables in text
@@ -1371,7 +1407,7 @@ Encrypted: {metadata.encryption}
 
     def _remove_password(self):
         """Remove password protection"""
-        if not self._document.is_open:
+        if not self._document.is_open or not self._document._doc:
             return
 
         if not self._document._doc.is_encrypted:
@@ -1390,14 +1426,17 @@ Encrypted: {metadata.encryption}
             return
 
         try:
+            doc = self._document._doc
+            if not doc:
+                return
             # Try to authenticate with the password
-            if self._document._doc.authenticate(password):
+            if doc.authenticate(password):
                 # Save without encryption
                 filepath, _ = QFileDialog.getSaveFileName(
                     self, "Save Unprotected PDF", "", "PDF Files (*.pdf)"
                 )
                 if filepath:
-                    self._document._doc.save(
+                    doc.save(
                         filepath, encryption=0)  # PDF_ENCRYPT_NONE
                     self._statusbar.showMessage(
                         "Password removed and saved", 3000)
@@ -1630,15 +1669,23 @@ Encrypted: {metadata.encryption}
         """Update enabled state of actions"""
         has_doc = self._document.is_open
 
-        self._save_action.setEnabled(has_doc)
-        self._save_as_action.setEnabled(has_doc)
-        self._close_action.setEnabled(has_doc)
-        self._print_action.setEnabled(has_doc)
-        self._properties_action.setEnabled(has_doc)
-        self._find_action.setEnabled(has_doc)
+        if self._save_action:
+            self._save_action.setEnabled(has_doc)
+        if self._save_as_action:
+            self._save_as_action.setEnabled(has_doc)
+        if self._close_action:
+            self._close_action.setEnabled(has_doc)
+        if self._print_action:
+            self._print_action.setEnabled(has_doc)
+        if self._properties_action:
+            self._properties_action.setEnabled(has_doc)
+        if self._find_action:
+            self._find_action.setEnabled(has_doc)
 
     def _update_recent_files_menu(self):
         """Update recent files menu"""
+        if not self._recent_menu:
+            return
         self._recent_menu.clear()
 
         for filepath in self._settings.recent_files[:10]:
@@ -1647,7 +1694,8 @@ Encrypted: {metadata.encryption}
                     os.path.basename(filepath),
                     lambda f=filepath: self._open_file(f)
                 )
-                action.setToolTip(filepath)
+                if action:
+                    action.setToolTip(filepath)
 
         if self._settings.recent_files:
             self._recent_menu.addSeparator()
