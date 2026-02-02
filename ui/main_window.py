@@ -1466,6 +1466,8 @@ Encrypted: {metadata.encryption}
         """Handle document modification"""
         self._is_modified = True
         self._update_title()
+        # Refresh sidebar thumbnails to reflect changes
+        self._sidebar.refresh()
 
     def _on_tool_changed(self, tool: str):
         """Handle tool change"""
@@ -1530,6 +1532,7 @@ Encrypted: {metadata.encryption}
         """Handle window close"""
         if self._confirm_close():
             self._save_settings()
+            self._viewer.cleanup()  # Stop background render thread
             self._document.close()
             event.accept()
         else:

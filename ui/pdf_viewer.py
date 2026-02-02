@@ -60,6 +60,82 @@ class RenderTask:
     priority: int = 0
 
 
+class PageRenderWorker(QThread):
+    """Background worker for rendering PDF pages"""
+
+    page_rendered = pyqtSignal(int, QImage, float)  # page_num, image, zoom
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._doc: Optional[fitz.Document] = None
+        self._tasks: List[RenderTask] = []
+        self._render_dpi = 150
+        self._rotation = 0
+        self._running = True
+        self._current_zoom = 1.0
+
+    def set_document(self, doc: fitz.Document, render_dpi: int = 150):
+        """Set the document to render"""
+        self._doc = doc
+        self._render_dpi = render_dpi
+        self._tasks.clear()
+
+    def set_rotation(self, rotation: int):
+        """Set rotation angle"""
+        self._rotation = rotation
+
+    def request_page(self, page_num: int, zoom: float, priority: int = 0):
+        """Request a page to be rendered"""
+        # Remove any existing task for this page
+        self._tasks = [t for t in self._tasks if t.page_num != page_num]
+        self._tasks.append(RenderTask(page_num, zoom, priority))
+        self._current_zoom = zoom
+        # Sort by priority (higher first)
+        self._tasks.sort(key=lambda t: t.priority, reverse=True)
+
+    def clear_tasks(self):
+        """Clear pending tasks"""
+        self._tasks.clear()
+
+    def stop(self):
+        """Stop the worker"""
+        self._running = False
+        self.wait()
+
+    def run(self):
+        """Main render loop"""
+        while self._running:
+            if self._tasks and self._doc:
+                task = self._tasks.pop(0)
+
+                # Skip if zoom changed (task is outdated)
+                if abs(task.zoom - self._current_zoom) > 0.001:
+                    continue
+
+                try:
+                    page = self._doc[task.page_num]
+                    zoom_matrix = fitz.Matrix(
+                        task.zoom * self._render_dpi / 72,
+                        task.zoom * self._render_dpi / 72
+                    )
+                    zoom_matrix = zoom_matrix.prerotate(self._rotation)
+
+                    pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
+
+                    # Convert to QImage (can be done in thread)
+                    img = QImage(
+                        pixmap.samples, pixmap.width, pixmap.height,
+                        pixmap.stride, QImage.Format.Format_RGB888
+                    ).copy()  # Copy to detach from pixmap memory
+
+                    self.page_rendered.emit(task.page_num, img, task.zoom)
+
+                except Exception as e:
+                    print(f"Error rendering page {task.page_num}: {e}")
+            else:
+                self.msleep(10)  # Sleep briefly when idle
+
+
 class PageWidget(QLabel):
     """Widget representing a single PDF page"""
 
@@ -77,17 +153,42 @@ class PageWidget(QLabel):
         self._rubber_band: Optional[QRubberBand] = None
         self._annotations: List[Dict] = []
         self._highlights: List[QRectF] = []
+        self._is_loading = True
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("background-color: white; border: 1px solid #ccc;")
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setText("")  # Clear any default text
 
     def set_pixmap(self, pixmap: QPixmap, zoom: float = 1.0):
         """Set the page pixmap"""
         self._pixmap = pixmap
         self._zoom = zoom
+        self._is_loading = False
         self.setPixmap(pixmap)
         self.setFixedSize(pixmap.size())
+
+    def set_placeholder(self, width: int, height: int):
+        """Set a white placeholder of the given size"""
+        self._is_loading = True
+        self._pixmap = None
+
+        # Ensure valid dimensions
+        width = max(1, width)
+        height = max(1, height)
+
+        # Create a proper white pixmap
+        placeholder = QPixmap(width, height)
+        placeholder.fill(Qt.GlobalColor.white)
+
+        # Draw a subtle loading indicator
+        painter = QPainter(placeholder)
+        painter.setPen(QPen(QColor(200, 200, 200), 1))
+        painter.drawRect(0, 0, width - 1, height - 1)
+        painter.end()
+
+        self.setPixmap(placeholder)
+        self.setFixedSize(width, height)
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
         """Convert widget position to page coordinates"""
@@ -188,13 +289,18 @@ class PDFViewer(QScrollArea):
         self._last_pan_pos = QPoint()
         self._freehand_points: List[QPointF] = []
 
+        # Background render worker
+        self._render_worker = PageRenderWorker()
+        self._render_worker.page_rendered.connect(self._on_page_rendered)
+        self._render_worker.start()
+
         # Setup UI
         self._setup_ui()
 
         # Render timer for debouncing
         self._render_timer = QTimer()
         self._render_timer.setSingleShot(True)
-        self._render_timer.timeout.connect(self._render_visible_pages)
+        self._render_timer.timeout.connect(self._request_visible_pages)
 
     def _setup_ui(self):
         """Setup the viewer UI"""
@@ -248,16 +354,22 @@ class PDFViewer(QScrollArea):
         self._current_page = 0
         self._page_cache.clear()
 
+        # Update render worker
+        self._render_worker.clear_tasks()
+        self._render_worker.set_document(doc, self._render_dpi)
+
         # Clear existing pages
         self._clear_pages()
 
         if doc and len(doc) > 0:
-            # Create page widgets
+            # Create page widgets with placeholders
             self._create_page_widgets()
 
-            # Initial render
+            # Calculate initial zoom
             self._update_zoom()
-            self._render_visible_pages()
+
+            # Request visible pages to be rendered
+            QTimer.singleShot(50, self._request_visible_pages)
 
     def _clear_pages(self):
         """Clear all page widgets"""
@@ -275,6 +387,15 @@ class PDFViewer(QScrollArea):
             page_widget = PageWidget(i, self._container)
             page_widget.clicked.connect(self._on_page_clicked)
             page_widget.annotation_created.connect(self._on_annotation_created)
+
+            # Set initial placeholder size based on page dimensions
+            page = self._doc[i]
+            width = int(page.rect.width * self._zoom * self._render_dpi / 72)
+            height = int(page.rect.height * self._zoom * self._render_dpi / 72)
+            if self._rotation in (90, 270):
+                width, height = height, width
+            page_widget.set_placeholder(width, height)
+
             self._layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
 
@@ -309,8 +430,8 @@ class PDFViewer(QScrollArea):
         self._page_cache[page_num] = qpixmap
         return qpixmap
 
-    def _render_visible_pages(self):
-        """Render pages that are currently visible"""
+    def _request_visible_pages(self):
+        """Request visible pages to be rendered in background"""
         if not self._doc or not self._page_widgets:
             return
 
@@ -321,10 +442,64 @@ class PDFViewer(QScrollArea):
             widget_rect = page_widget.geometry()
             widget_rect.translate(0, -scroll_pos)
 
-            # Check if visible
+            # Check if visible and needs rendering
             if viewport.intersects(widget_rect):
-                pixmap = self._render_page(i)
-                page_widget.set_pixmap(pixmap, self._zoom)
+                # Check cache first
+                if i in self._page_cache:
+                    page_widget.set_pixmap(self._page_cache[i], self._zoom)
+                elif page_widget._is_loading:
+                    # Request background render
+                    # Priority based on distance from center
+                    center_dist = abs(widget_rect.center().y() - viewport.center().y())
+                    priority = int(1000 - center_dist)
+                    self._render_worker.request_page(i, self._zoom, priority)
+
+    def _on_page_rendered(self, page_num: int, image: QImage, zoom: float):
+        """Handle page rendered from background worker"""
+        # Check if zoom still matches (ignore stale renders)
+        if abs(zoom - self._zoom) > 0.001:
+            return
+
+        if page_num < len(self._page_widgets):
+            qpixmap = QPixmap.fromImage(image)
+
+            # Cache the pixmap
+            if len(self._page_cache) >= self._cache_size:
+                oldest = next(iter(self._page_cache))
+                del self._page_cache[oldest]
+            self._page_cache[page_num] = qpixmap
+
+            # Update widget
+            self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
+
+    def _render_all_pages(self):
+        """Update all page sizes and request rendering (used when zoom changes)"""
+        if not self._doc or not self._page_widgets:
+            return
+
+        # Clear cache and pending tasks
+        self._page_cache.clear()
+        self._render_worker.clear_tasks()
+
+        # Update all page sizes with white placeholders
+        for i, page_widget in enumerate(self._page_widgets):
+            page = self._doc[i]
+            # Calculate new size based on zoom
+            width = int(page.rect.width * self._zoom * self._render_dpi / 72)
+            height = int(page.rect.height * self._zoom * self._render_dpi / 72)
+
+            # Apply rotation if needed
+            if self._rotation in (90, 270):
+                width, height = height, width
+
+            # Set placeholder with correct size
+            page_widget.set_placeholder(width, height)
+
+        # Process events to update layout immediately
+        QApplication.processEvents()
+
+        # Request visible pages to be rendered
+        self._request_visible_pages()
 
     def _on_scroll(self):
         """Handle scroll events"""
@@ -650,31 +825,41 @@ class PDFViewer(QScrollArea):
 
     def set_zoom(self, zoom: float):
         """Set zoom level (percentage)"""
-        self._zoom = max(0.1, min(8.0, zoom / 100))
+        new_zoom = max(0.1, min(8.0, zoom / 100))
+        if abs(new_zoom - self._zoom) < 0.001:
+            return  # No significant change
+
+        self._zoom = new_zoom
         self._zoom_mode = ZoomMode.CUSTOM
         self._page_cache.clear()
-        self._render_visible_pages()
+
+        # Re-render all visible pages with new zoom
+        self._render_all_pages()
         self.zoom_changed.emit(self._zoom * 100)
 
     def zoom_in(self, factor: float = 1.25):
         """Zoom in by factor"""
-        self.set_zoom(self._zoom * 100 * factor)
+        new_zoom = self._zoom * 100 * factor
+        self.set_zoom(new_zoom)
 
     def zoom_out(self, factor: float = 1.25):
         """Zoom out by factor"""
-        self.set_zoom(self._zoom * 100 / factor)
+        new_zoom = self._zoom * 100 / factor
+        self.set_zoom(new_zoom)
 
     def fit_width(self):
         """Fit page to viewport width"""
         self._zoom_mode = ZoomMode.FIT_WIDTH
+        self._page_cache.clear()
         self._update_zoom()
-        self._render_visible_pages()
+        self._render_all_pages()
 
     def fit_page(self):
         """Fit entire page in viewport"""
         self._zoom_mode = ZoomMode.FIT_PAGE
+        self._page_cache.clear()
         self._update_zoom()
-        self._render_visible_pages()
+        self._render_all_pages()
 
     def go_to_page(self, page_num: int):
         """Navigate to a specific page"""
@@ -733,8 +918,9 @@ class PDFViewer(QScrollArea):
     def rotate_view(self, degrees: int):
         """Rotate the view"""
         self._rotation = (self._rotation + degrees) % 360
+        self._render_worker.set_rotation(self._rotation)
         self._page_cache.clear()
-        self._render_visible_pages()
+        self._render_all_pages()
 
     def set_view_mode(self, mode: ViewMode):
         """Set the view mode (single page, two page, continuous)"""
@@ -828,7 +1014,12 @@ class PDFViewer(QScrollArea):
     def refresh(self):
         """Refresh the view"""
         self._page_cache.clear()
-        self._render_visible_pages()
+        self._render_worker.clear_tasks()
+        self._request_visible_pages()
+
+    def cleanup(self):
+        """Clean up resources (call before closing)"""
+        self._render_worker.stop()
 
     # ==================== Event Handlers ====================
 
