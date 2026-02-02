@@ -268,7 +268,6 @@ class MainToolbar(QToolBar):
     """Main application toolbar"""
 
     # File signals
-    new_requested = pyqtSignal()
     open_requested = pyqtSignal()
     save_requested = pyqtSignal()
     save_as_requested = pyqtSignal()
@@ -316,7 +315,6 @@ class MainToolbar(QToolBar):
 
     def _setup_ui(self):
         # === File Section ===
-        self._add_action("New", "📄", "New Document (Ctrl+N)", self.new_requested)
         self._add_action("Open", "📂", "Open File (Ctrl+O)", self.open_requested)
         self._add_action("Save", "💾", "Save (Ctrl+S)", self.save_requested)
         self._add_action("Save As", "📥", "Save As (Ctrl+Shift+S)", self.save_as_requested)

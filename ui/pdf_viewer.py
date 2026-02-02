@@ -567,6 +567,15 @@ class PDFViewer(QScrollArea):
         if self._tool_mode == ToolMode.SELECT:
             self.selection_changed.emit(page_num, rect)
 
+        elif self._tool_mode == ToolMode.TEXT_SELECT:
+            # Extract text from the selected area
+            text = self._extract_text_from_rect(page_num, rect)
+            if text:
+                self.text_selected.emit(text)
+                # Copy to clipboard
+                clipboard = QApplication.clipboard()
+                clipboard.setText(text)
+
         elif self._tool_mode == ToolMode.HIGHLIGHT:
             self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_HIGHLIGHT)
 
@@ -599,6 +608,21 @@ class PDFViewer(QScrollArea):
 
         elif self._tool_mode == ToolMode.ERASER:
             self._erase_annotation_at(page_num, rect)
+
+    def _extract_text_from_rect(self, page_num: int, rect: QRectF) -> str:
+        """Extract text from a rectangular area on a page"""
+        try:
+            page = self._doc[page_num]
+            fitz_rect = fitz.Rect(
+                rect.x(), rect.y(),
+                rect.x() + rect.width(),
+                rect.y() + rect.height()
+            )
+            text = page.get_text("text", clip=fitz_rect)
+            return text.strip()
+        except Exception as e:
+            print(f"Error extracting text: {e}")
+            return ""
 
     def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: int):
         """Create highlight, underline, or strikethrough annotation"""

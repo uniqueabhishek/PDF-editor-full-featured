@@ -299,7 +299,6 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self._annotation_toolbar)
 
         # Connect toolbar signals
-        self._main_toolbar.new_requested.connect(self._new_document)
         self._main_toolbar.open_requested.connect(self._open_document)
         self._main_toolbar.save_requested.connect(self._save_document)
         self._main_toolbar.save_as_requested.connect(self._save_document_as)
