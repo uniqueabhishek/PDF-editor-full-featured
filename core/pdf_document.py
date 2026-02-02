@@ -4,7 +4,7 @@ Handles PDF loading, manipulation, and saving using PyMuPDF (fitz)
 """
 import fitz  # PyMuPDF
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any, Union
+from typing import List, Optional, Tuple, Dict, Any, Union, Sequence
 from dataclasses import dataclass
 from enum import Enum
 import os
@@ -411,7 +411,7 @@ class PDFDocument:
         self._is_modified = True
         return True
 
-    def merge_pdfs(self, pdf_paths: List[Union[str, Path]], output_path: Union[str, Path]) -> bool:
+    def merge_pdfs(self, pdf_paths: Sequence[Union[str, Path]], output_path: Union[str, Path]) -> bool:
         """Merge multiple PDFs into a new file"""
         merged_doc = fitz.open()
 

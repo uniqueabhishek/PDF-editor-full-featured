@@ -798,7 +798,8 @@ Encrypted: {metadata.encryption}
         text = self._document.get_page_text(page_num)
         if text:
             clipboard = QApplication.clipboard()
-            clipboard.setText(text)
+            if clipboard:
+                clipboard.setText(text)
             self._statusbar.showMessage("Page text copied to clipboard", 2000)
 
     def _show_find(self):
