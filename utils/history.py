@@ -2,11 +2,10 @@
 Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Any, Dict
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
-import copy
 
 
 class CommandType(Enum):
@@ -75,16 +74,17 @@ class PageAddCommand(Command):
 
     def execute(self) -> bool:
         try:
-            self.document.add_blank_page(self.width, self.height, self.page_index)
+            self.document.add_blank_page(
+                self.width, self.height, self.page_index)
             return True
-        except:
+        except Exception:
             return False
 
     def undo(self) -> bool:
         try:
             self.document.delete_page(self.page_index)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -96,7 +96,8 @@ class PageDeleteCommand(Command):
     page_data: bytes = None
 
     def __init__(self, document, page_index: int):
-        super().__init__(CommandType.PAGE_DELETE, f"Delete page {page_index + 1}")
+        super().__init__(CommandType.PAGE_DELETE,
+                         f"Delete page {page_index + 1}")
         self.document = document
         self.page_index = page_index
         self.page_data = None
@@ -107,7 +108,7 @@ class PageDeleteCommand(Command):
             # Note: In real implementation, we'd save the page content
             self.document.delete_page(self.page_index)
             return True
-        except:
+        except Exception:
             return False
 
     def undo(self) -> bool:
@@ -116,7 +117,7 @@ class PageDeleteCommand(Command):
             # Note: In real implementation, we'd restore from saved data
             self.document.add_blank_page(index=self.page_index)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -129,7 +130,8 @@ class PageRotateCommand(Command):
     original_rotation: int = 0
 
     def __init__(self, document, page_index: int, rotation: int):
-        super().__init__(CommandType.PAGE_ROTATE, f"Rotate page {page_index + 1}")
+        super().__init__(CommandType.PAGE_ROTATE,
+                         f"Rotate page {page_index + 1}")
         self.document = document
         self.page_index = page_index
         self.rotation = rotation
@@ -141,7 +143,7 @@ class PageRotateCommand(Command):
             self.original_rotation = page_info.rotation
             self.document.rotate_page(self.page_index, self.rotation)
             return True
-        except:
+        except Exception:
             return False
 
     def undo(self) -> bool:
@@ -149,7 +151,7 @@ class PageRotateCommand(Command):
             # Rotate back to original
             self.document.rotate_page(self.page_index, -self.rotation)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -161,7 +163,8 @@ class PageMoveCommand(Command):
     to_index: int
 
     def __init__(self, document, from_index: int, to_index: int):
-        super().__init__(CommandType.PAGE_MOVE, f"Move page {from_index + 1} to {to_index + 1}")
+        super().__init__(CommandType.PAGE_MOVE,
+                         f"Move page {from_index + 1} to {to_index + 1}")
         self.document = document
         self.from_index = from_index
         self.to_index = to_index
@@ -170,14 +173,89 @@ class PageMoveCommand(Command):
         try:
             self.document.move_page(self.from_index, self.to_index)
             return True
-        except:
+        except Exception:
             return False
 
     def undo(self) -> bool:
         try:
             self.document.move_page(self.to_index, self.from_index)
             return True
-        except:
+        except Exception:
+            return False
+
+
+@dataclass
+class AnnotationAddCommand(Command):
+    """Command for adding an annotation"""
+    document: Any
+    page_index: int
+    annot_type: str
+    rect: Any  # Tuple or Rect
+    annot_data: Optional[Dict[str, Any]] = None
+    _annot_xref: int = 0
+
+    def __init__(self, document, page_index: int, annot_type: str, rect: Any, annot_data: Optional[Dict[str, Any]] = None):
+        super().__init__(CommandType.ANNOTATION_ADD, f"Add {annot_type}")
+        self.document = document
+        self.page_index = page_index
+        self.annot_type = annot_type
+        self.rect = rect
+        self.annot_data = annot_data or {}
+        self._annot_xref = 0
+
+    def execute(self) -> bool:
+        try:
+            annot = None
+            if self.annot_type == "highlight":
+                annot = self.document.add_highlight(self.page_index, self.rect)
+            elif self.annot_type == "underline":
+                annot = self.document.add_underline(self.page_index, self.rect)
+            elif self.annot_type == "strikethrough":
+                annot = self.document.add_strikethrough(
+                    self.page_index, self.rect)
+            elif self.annot_type == "rectangle":
+                annot = self.document.add_rect_annotation(
+                    self.page_index, self.rect)
+            elif self.annot_type == "circle":
+                annot = self.document.add_circle_annotation(
+                    self.page_index, self.rect)
+            elif self.annot_type == "line":
+                # Expecting 'end' in annot_data or rect as start/end
+                pass
+            elif self.annot_type == "ink":
+                # Expecting 'points' in annot_data
+                if self.annot_data and "points" in self.annot_data:
+                    annot = self.document.add_ink_annotation(
+                        self.page_index, self.annot_data["points"])
+
+            # Text annotations
+            elif self.annot_type == "text_box":
+                annot = self.document.add_freetext(
+                    self.page_index, self.rect, "Text")
+            elif self.annot_type == "sticky_note":
+                # Rect to point
+                point = (self.rect[0], self.rect[1])
+                annot = self.document.add_text_annotation(
+                    self.page_index, point, "")
+
+            if annot:
+                self._annot_xref = annot.xref
+                return True
+            return False
+        except Exception as e:
+            print(f"Execute error: {e}")
+            return False
+
+    def undo(self) -> bool:
+        try:
+            if self._annot_xref:
+                page = self.document.get_page(self.page_index)
+                for annot in page.annots():
+                    if annot.xref == self._annot_xref:
+                        page.delete_annot(annot)
+                        return True
+            return False
+        except Exception:
             return False
 
 

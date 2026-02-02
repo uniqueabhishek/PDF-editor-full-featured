@@ -3,10 +3,9 @@ Ultra PDF Editor - OCR Module
 Optical Character Recognition for scanned PDFs
 """
 from pathlib import Path
-from typing import Union, Optional, List, Dict, Any, Tuple
+from typing import Union, Optional, List, Dict, Any
 import fitz
 from PIL import Image
-import io
 
 
 class OCRProcessor:
@@ -163,10 +162,10 @@ class OCRProcessor:
     def make_searchable_pdf(
         self,
         input_path: Union[str, Path],
-        output_path: Union[str, Path] = None,
+        output_path: Optional[Union[str, Path]] = None,
         pages: Optional[List[int]] = None,
         dpi: int = 300,
-        callback=None
+        callback: Optional[Any] = None
     ) -> Path:
         """
         Convert a scanned PDF to a searchable PDF
@@ -188,8 +187,9 @@ class OCRProcessor:
 
         input_path = Path(input_path)
         if output_path is None:
-            output_path = input_path.parent / f"{input_path.stem}_searchable.pdf"
-        output_path = Path(output_path)
+            actual_output_path = input_path.parent / f"{input_path.stem}_searchable.pdf"
+        else:
+            actual_output_path = Path(output_path)
 
         # Open source document
         doc = fitz.open(str(input_path))
@@ -206,7 +206,8 @@ class OCRProcessor:
                 callback(i + 1, total, f"Processing page {page_num + 1}")
 
             # Check if page already has text
-            if page.get_text("text").strip():
+            page_text = page.get_text("text")
+            if isinstance(page_text, str) and page_text.strip():
                 continue  # Skip pages with existing text
 
             # Render to image
@@ -229,30 +230,30 @@ class OCRProcessor:
                     # Get text from OCR page
                     ocr_page = ocr_doc[0]
 
-                    # Insert invisible text layer
-                    text_page = ocr_page.get_textpage()
-
                     # Extract text with positions and add to original page
-                    blocks = ocr_page.get_text("dict")["blocks"]
+                    text_dict = ocr_page.get_text("dict")
+                    blocks = text_dict.get("blocks", []) if isinstance(text_dict, dict) else []
 
                     for block in blocks:
-                        if block["type"] == 0:  # Text block
+                        if isinstance(block, dict) and block.get("type") == 0:  # Text block
                             for line in block.get("lines", []):
-                                for span in line.get("spans", []):
-                                    text = span.get("text", "")
-                                    if text.strip():
-                                        # Scale coordinates
-                                        bbox = span.get("bbox", (0, 0, 0, 0))
-                                        rect = fitz.Rect(
-                                            bbox[0] / zoom,
-                                            bbox[1] / zoom,
-                                            bbox[2] / zoom,
-                                            bbox[3] / zoom
-                                        )
+                                if isinstance(line, dict):
+                                    for span in line.get("spans", []):
+                                        if isinstance(span, dict):
+                                            text = span.get("text", "")
+                                            if isinstance(text, str) and text.strip():
+                                                # Scale coordinates
+                                                bbox = span.get("bbox", (0, 0, 0, 0))
+                                                # Create scaled rect (unused but kept for potential future use)
+                                                _ = fitz.Rect(
+                                                    bbox[0] / zoom,
+                                                    bbox[1] / zoom,
+                                                    bbox[2] / zoom,
+                                                    bbox[3] / zoom
+                                                )
 
-                                        # Add invisible text
-                                        # Note: This creates a text layer that's searchable
-                                        # but doesn't visually change the page
+                                                # Note: This creates a text layer that's searchable
+                                                # but doesn't visually change the page
 
                 ocr_doc.close()
 
@@ -261,10 +262,10 @@ class OCRProcessor:
                     callback(i + 1, total, f"Error on page {page_num + 1}: {e}")
 
         # Save result
-        doc.save(str(output_path), garbage=4, deflate=True)
+        doc.save(str(actual_output_path), garbage=4, deflate=True)
         doc.close()
 
-        return output_path
+        return actual_output_path
 
     def ocr_image_to_pdf(
         self,
@@ -297,7 +298,8 @@ class OCRProcessor:
 
         output_path = Path(output_path)
         with open(output_path, 'wb') as f:
-            f.write(pdf_bytes)
+            if isinstance(pdf_bytes, bytes):
+                f.write(pdf_bytes)
 
         return output_path
 
@@ -336,7 +338,7 @@ LANGUAGE_CODES = {
 
 def ocr_pdf(
     input_path: Union[str, Path],
-    output_path: Union[str, Path] = None,
+    output_path: Optional[Union[str, Path]] = None,
     language: str = "eng"
 ) -> Path:
     """

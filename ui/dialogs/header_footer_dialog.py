@@ -3,11 +3,11 @@ Ultra PDF Editor - Header and Footer Dialog
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QGroupBox, QComboBox, QSpinBox, QCheckBox, QFontComboBox
+    QLabel, QGroupBox, QSpinBox, QCheckBox, QFontComboBox
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 class HeaderFooterDialog(QDialog):

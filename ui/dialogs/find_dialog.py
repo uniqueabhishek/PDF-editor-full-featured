@@ -3,7 +3,7 @@ Ultra PDF Editor - Find and Replace Dialog
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QCheckBox, QLabel, QGroupBox, QMessageBox, QWidget
+    QCheckBox, QLabel, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut

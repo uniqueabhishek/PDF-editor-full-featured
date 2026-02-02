@@ -3,8 +3,8 @@ Ultra PDF Editor - Batch Processing Dialog
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QGroupBox, QCheckBox, QListWidget, QListWidgetItem, QFileDialog,
-    QProgressBar, QComboBox, QLineEdit, QSpinBox, QMessageBox,
+    QGroupBox, QCheckBox, QListWidget, QFileDialog,
+    QProgressBar, QLineEdit, QMessageBox,
     QAbstractItemView
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
@@ -60,9 +60,7 @@ class BatchWorker(QThread):
                         shape.finish(fill_opacity=0.3)
                         shape.commit()
 
-                if self._operations.get("encrypt"):
-                    password = self._operations.get("password", "")
-                    # Will be applied on save
+                # Encryption will be applied on save if enabled
 
                 # Determine output path
                 output_path = Path(self._output_dir) / filename
@@ -74,7 +72,7 @@ class BatchWorker(QThread):
                     save_opts["deflate_fonts"] = True
 
                 if self._operations.get("encrypt") and self._operations.get("password"):
-                    save_opts["encryption"] = fitz.PDF_ENCRYPT_AES_256
+                    save_opts["encryption"] = 4  # PDF_ENCRYPT_AES_256
                     save_opts["user_pw"] = self._operations["password"]
                     save_opts["owner_pw"] = self._operations["password"]
 

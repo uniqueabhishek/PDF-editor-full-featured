@@ -3,7 +3,7 @@ Ultra PDF Editor - Crop Page Dialog
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSpinBox, QGroupBox, QCheckBox, QFrame
+    QSpinBox, QGroupBox, QCheckBox
 )
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor

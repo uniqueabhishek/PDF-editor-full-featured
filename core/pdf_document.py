@@ -5,10 +5,8 @@ Handles PDF loading, manipulation, and saving using PyMuPDF (fitz)
 import fitz  # PyMuPDF
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-import tempfile
-import shutil
 import os
 
 
@@ -124,7 +122,7 @@ class PDFDocument:
             self._is_modified = False
             return True
 
-        except Exception as e:
+        except Exception:
             self._doc = None
             self._filepath = None
             raise
@@ -152,7 +150,7 @@ class PDFDocument:
             try:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
-            except:
+            except OSError:
                 pass
         self._temp_files.clear()
 
@@ -194,7 +192,8 @@ class PDFDocument:
 
             # Handle encryption
             if encryption:
-                save_options["encryption"] = encryption.get("method", fitz.PDF_ENCRYPT_AES_256)
+                # PDF_ENCRYPT_AES_256 = 4
+                save_options["encryption"] = encryption.get("method", 4)
                 if "user_password" in encryption:
                     save_options["user_pw"] = encryption["user_password"]
                 if "owner_password" in encryption:
@@ -204,7 +203,8 @@ class PDFDocument:
 
             # If saving to same file, use incremental save or temp file
             if save_path == self._filepath:
-                self._doc.save(str(save_path), incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+                # PDF_ENCRYPT_KEEP = 1
+                self._doc.save(str(save_path), incremental=True, encryption=1)
             else:
                 self._doc.save(str(save_path), **save_options)
 
@@ -212,7 +212,7 @@ class PDFDocument:
             self._is_modified = False
             return True
 
-        except Exception as e:
+        except Exception:
             raise
 
     def save_copy(self, filepath: Union[str, Path]) -> bool:
@@ -223,7 +223,7 @@ class PDFDocument:
         try:
             self._doc.save(str(filepath), garbage=4, deflate=True)
             return True
-        except Exception as e:
+        except Exception:
             raise
 
     # ==================== Page Operations ====================
@@ -236,6 +236,19 @@ class PDFDocument:
             raise IndexError(f"Page {page_num} out of range")
         return self._doc[page_num]
 
+    def _get_page_label(self, page_num: int) -> str:
+        """Get the label for a specific page"""
+        try:
+            if self._doc is None:
+                return str(page_num + 1)
+            labels = self._doc.get_page_labels()
+            if labels and isinstance(labels, list) and page_num < len(labels):
+                label = labels[page_num]
+                return str(label) if label else str(page_num + 1)
+        except Exception:
+            pass
+        return str(page_num + 1)
+
     def get_page_info(self, page_num: int) -> PageInfo:
         """Get information about a specific page"""
         page = self.get_page(page_num)
@@ -246,10 +259,10 @@ class PDFDocument:
             width=rect.width,
             height=rect.height,
             rotation=page.rotation,
-            has_text=bool(page.get_text("text").strip()),
+            has_text=bool(str(page.get_text("text")).strip()),
             has_images=bool(page.get_images()),
             has_annotations=bool(page.annots()),
-            label=self._doc.page_label(page_num) or str(page_num + 1)
+            label=self._get_page_label(page_num)
         )
 
     def get_all_pages_info(self) -> List[PageInfo]:
@@ -490,7 +503,11 @@ class PDFDocument:
             text_type: Type of text extraction ("text", "blocks", "words", "html", "dict", "json", "rawdict", "xhtml", "xml")
         """
         page = self.get_page(page_num)
-        return page.get_text(text_type)
+        result = page.get_text(text_type)
+        # Ensure we return a string for the common "text" type
+        if isinstance(result, str):
+            return result
+        return str(result)
 
     def get_all_text(self) -> str:
         """Extract all text from the document"""
@@ -531,7 +548,7 @@ class PDFDocument:
 
         text_writer = fitz.TextWriter(page.rect)
         font = fitz.Font(font_name)
-        text_writer.append(position, text, font=font, fontsize=font_size)
+        text_writer.append(position, text, font=font, fontsize=int(font_size))
         text_writer.write_text(page, color=color)
 
         self._is_modified = True
@@ -618,21 +635,21 @@ class PDFDocument:
         if self._doc is None:
             raise ValueError("No document is open")
 
-        meta = self._doc.metadata
+        meta = self._doc.metadata or {}
 
         return DocumentMetadata(
-            title=meta.get("title", ""),
-            author=meta.get("author", ""),
-            subject=meta.get("subject", ""),
-            keywords=meta.get("keywords", ""),
-            creator=meta.get("creator", ""),
-            producer=meta.get("producer", ""),
-            creation_date=meta.get("creationDate", ""),
-            modification_date=meta.get("modDate", ""),
+            title=meta.get("title", "") if meta else "",
+            author=meta.get("author", "") if meta else "",
+            subject=meta.get("subject", "") if meta else "",
+            keywords=meta.get("keywords", "") if meta else "",
+            creator=meta.get("creator", "") if meta else "",
+            producer=meta.get("producer", "") if meta else "",
+            creation_date=meta.get("creationDate", "") if meta else "",
+            modification_date=meta.get("modDate", "") if meta else "",
             encryption="Yes" if self.is_encrypted else "No",
             page_count=self.page_count,
             file_size=self._filepath.stat().st_size if self._filepath else 0,
-            pdf_version=f"PDF {self._doc.metadata.get('format', 'Unknown')}"
+            pdf_version=f"PDF {meta.get('format', 'Unknown') if meta else 'Unknown'}"
         )
 
     def set_metadata(self, metadata: Dict[str, str]) -> bool:
@@ -742,7 +759,7 @@ class PDFDocument:
         page = self.get_page(page_num)
         annot = page.add_rect_annot(fitz.Rect(rect))
         annot.set_colors(stroke=stroke_color, fill=fill_color)
-        annot.set_border(width=width)
+        annot.set_border(width=int(width))
         annot.update()
         self._is_modified = True
         return annot
@@ -755,7 +772,7 @@ class PDFDocument:
         page = self.get_page(page_num)
         annot = page.add_circle_annot(fitz.Rect(rect))
         annot.set_colors(stroke=stroke_color, fill=fill_color)
-        annot.set_border(width=width)
+        annot.set_border(width=int(width))
         annot.update()
         self._is_modified = True
         return annot
@@ -768,7 +785,7 @@ class PDFDocument:
         page = self.get_page(page_num)
         annot = page.add_line_annot(fitz.Point(start), fitz.Point(end))
         annot.set_colors(stroke=color)
-        annot.set_border(width=width)
+        annot.set_border(width=int(width))
         annot.update()
         self._is_modified = True
         return annot
@@ -783,7 +800,7 @@ class PDFDocument:
             [fitz.Point(p) for p in stroke] for stroke in points
         ])
         annot.set_colors(stroke=color)
-        annot.set_border(width=width)
+        annot.set_border(width=int(width))
         annot.update()
         self._is_modified = True
         return annot
@@ -824,7 +841,7 @@ class PDFDocument:
                 text,
                 fontsize=font_size,
                 color=color,
-                rotate=rotation,
+                rotate=int(rotation),
             )
 
             shape.finish(color=color, fill=color, fill_opacity=opacity)
@@ -856,7 +873,7 @@ class PDFDocument:
     # ==================== Security ====================
 
     def encrypt(self, user_password: str = "", owner_password: str = "",
-                permissions: int = fitz.PDF_PERM_ACCESSIBILITY) -> bool:
+                permissions: int = 2048) -> bool:  # 2048 = PDF_PERM_ACCESSIBILITY
         """
         Encrypt the document
 

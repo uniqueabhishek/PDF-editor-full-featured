@@ -5,10 +5,9 @@ Dialog for merging multiple PDF files
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
     QListWidgetItem, QFileDialog, QLabel, QProgressBar, QMessageBox,
-    QGroupBox, QCheckBox, QComboBox, QSpinBox
+    QGroupBox, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
-from PyQt6.QtGui import QIcon
 from pathlib import Path
 from typing import List, Optional
 import fitz
@@ -193,26 +192,32 @@ class MergeDialog(QDialog):
         current_row = self._file_list.currentRow()
         if current_row > 0:
             item = self._file_list.takeItem(current_row)
+            if item is None:
+                return
             self._file_list.insertItem(current_row - 1, item)
             self._file_list.setCurrentRow(current_row - 1)
 
             # Update files list
             filepath = item.data(Qt.ItemDataRole.UserRole)
-            self._files.remove(filepath)
-            self._files.insert(current_row - 1, filepath)
+            if filepath:
+                self._files.remove(filepath)
+                self._files.insert(current_row - 1, filepath)
 
     def _move_down(self):
         """Move selected item down"""
         current_row = self._file_list.currentRow()
         if current_row < self._file_list.count() - 1:
             item = self._file_list.takeItem(current_row)
+            if item is None:
+                return
             self._file_list.insertItem(current_row + 1, item)
             self._file_list.setCurrentRow(current_row + 1)
 
             # Update files list
             filepath = item.data(Qt.ItemDataRole.UserRole)
-            self._files.remove(filepath)
-            self._files.insert(current_row + 1, filepath)
+            if filepath:
+                self._files.remove(filepath)
+                self._files.insert(current_row + 1, filepath)
 
     def _update_merge_button(self):
         """Update merge button state"""
@@ -235,7 +240,10 @@ class MergeDialog(QDialog):
         ordered_files = []
         for i in range(self._file_list.count()):
             item = self._file_list.item(i)
-            ordered_files.append(item.data(Qt.ItemDataRole.UserRole))
+            if item:
+                filepath = item.data(Qt.ItemDataRole.UserRole)
+                if filepath:
+                    ordered_files.append(filepath)
 
         # Prepare options
         options = {

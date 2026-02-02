@@ -3,20 +3,20 @@ Ultra PDF Editor - PDF to Word Converter
 Convert PDF documents to Microsoft Word format
 """
 from pathlib import Path
-from typing import Union, Optional, List, Dict, Any
+from typing import Union, Optional, List, Dict, Any, TYPE_CHECKING
 import fitz
-from docx import Document
-from docx.shared import Inches, Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.style import WD_STYLE_TYPE
+from docx import Document as WordDocument
+from docx.shared import Inches, Pt
 import io
-import re
+
+if TYPE_CHECKING:
+    from docx.document import Document as WordDocumentType
 
 
 class PDFToWordConverter:
     """Converts PDF documents to Word (.docx) format"""
 
-    def __init__(self, pdf_path: Union[str, Path] = None, document: fitz.Document = None):
+    def __init__(self, pdf_path: Optional[Union[str, Path]] = None, document: Optional[fitz.Document] = None):
         """
         Initialize converter
 
@@ -74,7 +74,7 @@ class PDFToWordConverter:
             pages = list(range(len(self._pdf_doc)))
 
         # Create Word document
-        doc = Document()
+        doc = WordDocument()
 
         total_pages = len(pages)
 
@@ -98,69 +98,80 @@ class PDFToWordConverter:
         doc.save(str(output_path))
         return output_path
 
-    def _convert_page_simple(self, doc: Document, page: fitz.Page, include_images: bool):
+    def _convert_page_simple(self, doc: "WordDocumentType", page: fitz.Page, include_images: bool):
         """Simple text extraction without layout preservation"""
         # Extract text
         text = page.get_text("text")
 
-        # Add text blocks
-        for paragraph_text in text.split('\n\n'):
-            paragraph_text = paragraph_text.strip()
-            if paragraph_text:
-                para = doc.add_paragraph(paragraph_text)
+        # Add text blocks - text is always a string from get_text("text")
+        if isinstance(text, str):
+            for paragraph_text in text.split('\n\n'):
+                paragraph_text = paragraph_text.strip()
+                if paragraph_text:
+                    doc.add_paragraph(paragraph_text)
 
         # Extract and add images
         if include_images:
             self._add_page_images(doc, page)
 
-    def _convert_page_with_layout(self, doc: Document, page: fitz.Page, include_images: bool):
+    def _convert_page_with_layout(self, doc: "WordDocumentType", page: fitz.Page, include_images: bool):
         """Convert page while trying to preserve layout"""
         # Get text blocks with positioning
-        blocks = page.get_text("dict")["blocks"]
+        text_dict = page.get_text("dict")
+        if not isinstance(text_dict, dict):
+            return
+
+        blocks = text_dict.get("blocks", [])
 
         for block in blocks:
-            if block["type"] == 0:  # Text block
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", -1)
+            if block_type == 0:  # Text block
                 self._process_text_block(doc, block)
-            elif block["type"] == 1 and include_images:  # Image block
+            elif block_type == 1 and include_images:  # Image block
                 self._process_image_block(doc, block, page)
 
-    def _process_text_block(self, doc: Document, block: Dict[str, Any]):
+    def _process_text_block(self, doc: "WordDocumentType", block: Dict[str, Any]):
         """Process a text block from PDF"""
         for line in block.get("lines", []):
+            if not isinstance(line, dict):
+                continue
             line_text = ""
-            font_size = 12
+            font_size = 12.0
             is_bold = False
             is_italic = False
 
             for span in line.get("spans", []):
+                if not isinstance(span, dict):
+                    continue
                 text = span.get("text", "")
                 line_text += text
 
                 # Get font info
-                font_size = span.get("size", 12)
+                font_size = span.get("size", 12.0)
                 flags = span.get("flags", 0)
-                is_bold = flags & 2 ** 4  # Bold flag
-                is_italic = flags & 2 ** 1  # Italic flag
+                is_bold = bool(flags & 2 ** 4)  # Bold flag
+                is_italic = bool(flags & 2 ** 1)  # Italic flag
 
             if line_text.strip():
                 para = doc.add_paragraph()
                 run = para.add_run(line_text)
                 run.font.size = Pt(font_size)
-                run.bold = bool(is_bold)
-                run.italic = bool(is_italic)
+                run.bold = is_bold
+                run.italic = is_italic
 
-    def _process_image_block(self, doc: Document, block: Dict[str, Any], page: fitz.Page):
+    def _process_image_block(self, doc: "WordDocumentType", block: Dict[str, Any], page: fitz.Page):
         """Process an image block from PDF"""
         # Get image from block
         bbox = block.get("bbox", (0, 0, 100, 100))
         width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
 
         # Try to extract the image
         try:
             # Get images on page
             images = page.get_images()
-            if images:
+            if images and self._pdf_doc:
                 xref = images[0][0]
                 image_info = self._pdf_doc.extract_image(xref)
                 image_bytes = image_info["image"]
@@ -173,18 +184,19 @@ class PDFToWordConverter:
         except Exception:
             pass  # Skip images that can't be extracted
 
-    def _add_page_images(self, doc: Document, page: fitz.Page):
+    def _add_page_images(self, doc: "WordDocumentType", page: fitz.Page):
         """Add all images from a page"""
         images = page.get_images()
 
         for img_info in images:
             try:
                 xref = img_info[0]
-                image_data = self._pdf_doc.extract_image(xref)
-                image_bytes = image_data["image"]
+                if self._pdf_doc:
+                    image_data = self._pdf_doc.extract_image(xref)
+                    image_bytes = image_data["image"]
 
-                image_stream = io.BytesIO(image_bytes)
-                doc.add_picture(image_stream, width=Inches(5))
+                    image_stream = io.BytesIO(image_bytes)
+                    doc.add_picture(image_stream, width=Inches(5))
             except Exception:
                 continue
 
@@ -226,10 +238,13 @@ class PDFToWordConverter:
         # For better table extraction, consider using camelot or pdfplumber
 
         page = self._pdf_doc[page_num]
-        tables = []
+        tables: List[List[List[str]]] = []
 
         # Try to find table-like structures in text blocks
-        blocks = page.get_text("dict")["blocks"]
+        text_dict = page.get_text("dict")
+        if isinstance(text_dict, dict):
+            # Process blocks if needed for table extraction
+            _ = text_dict.get("blocks", [])
 
         # Group blocks by vertical position (potential rows)
         # This is a very basic approach
@@ -244,7 +259,7 @@ class PDFToWordConverter:
 
 def convert_pdf_to_word(
     pdf_path: Union[str, Path],
-    output_path: Union[str, Path] = None,
+    output_path: Optional[Union[str, Path]] = None,
     include_images: bool = True
 ) -> Path:
     """
@@ -261,13 +276,18 @@ def convert_pdf_to_word(
     pdf_path = Path(pdf_path)
 
     if output_path is None:
-        output_path = pdf_path.with_suffix('.docx')
+        actual_output_path = pdf_path.with_suffix('.docx')
+    else:
+        actual_output_path = Path(output_path)
 
     converter = PDFToWordConverter(pdf_path)
-    return converter.convert(output_path, include_images=include_images)
+    return converter.convert(actual_output_path, include_images=include_images)
 
 
-def convert_pdf_to_text(pdf_path: Union[str, Path], output_path: Union[str, Path] = None) -> Path:
+def convert_pdf_to_text(
+    pdf_path: Union[str, Path],
+    output_path: Optional[Union[str, Path]] = None
+) -> Path:
     """
     Convert PDF to plain text file
 
@@ -281,12 +301,14 @@ def convert_pdf_to_text(pdf_path: Union[str, Path], output_path: Union[str, Path
     pdf_path = Path(pdf_path)
 
     if output_path is None:
-        output_path = pdf_path.with_suffix('.txt')
+        actual_output_path = pdf_path.with_suffix('.txt')
+    else:
+        actual_output_path = Path(output_path)
 
     converter = PDFToWordConverter(pdf_path)
     text = converter.extract_text()
 
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(actual_output_path, 'w', encoding='utf-8') as f:
         f.write(text)
 
-    return output_path
+    return actual_output_path

@@ -4,21 +4,19 @@ High-performance PDF rendering and interaction widget
 """
 from PyQt6.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QLabel,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QRubberBand,
-    QApplication, QMenu, QSizePolicy
+    QRubberBand, QApplication, QMenu, QSizePolicy
 )
 from PyQt6.QtCore import (
-    Qt, QPoint, QPointF, QRect, QRectF, QSize, pyqtSignal, QTimer, QThread
+    Qt, QPoint, QPointF, QRectF, pyqtSignal, QTimer, QThread
 )
 from PyQt6.QtGui import (
-    QPixmap, QImage, QPainter, QColor, QCursor, QPen, QBrush,
-    QWheelEvent, QMouseEvent, QKeyEvent, QTransform, QFont
+    QPixmap, QImage, QPainter, QColor, QPen, QBrush,
+    QWheelEvent, QMouseEvent, QKeyEvent
 )
 import fitz
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Dict
 from enum import Enum
 from dataclasses import dataclass
-import math
 
 
 class ViewMode(Enum):
@@ -43,6 +41,7 @@ class ToolMode(Enum):
     FREEHAND = "freehand"
     ERASER = "eraser"
     REDACT = "redact"
+    STAMP = "stamp"
 
 
 class ZoomMode(Enum):
@@ -141,12 +140,17 @@ class PageWidget(QLabel):
 
     clicked = pyqtSignal(int, QPointF)  # page_num, position
     annotation_created = pyqtSignal(int, str, QRectF)  # page_num, type, rect
+    # page_num, list of (x, y) points in PDF coordinates
+    freehand_created = pyqtSignal(int, list)
+    # page_num, position in PDF coordinates (for tooltip)
+    hover_position = pyqtSignal(int, QPointF)
 
-    def __init__(self, page_num: int, parent=None):
+    def __init__(self, page_num: int, render_dpi: int = 150, parent=None):
         super().__init__(parent)
         self.page_num = page_num
         self._pixmap: Optional[QPixmap] = None
         self._zoom = 1.0
+        self._render_dpi = render_dpi  # Store render DPI for coordinate conversion
         self._page_rect = QRectF()
         self._selection_start: Optional[QPointF] = None
         self._selection_rect: Optional[QRectF] = None
@@ -154,11 +158,19 @@ class PageWidget(QLabel):
         self._annotations: List[Dict] = []
         self._highlights: List[QRectF] = []
         self._is_loading = True
+        self._tool_mode: Optional[str] = None  # Current tool mode
+        # Points for freehand drawing
+        self._freehand_points: List[QPointF] = []
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("background-color: white; border: 1px solid #ccc;")
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setText("")  # Clear any default text
+        self.setMouseTracking(True)  # Enable mouse tracking for move events
+
+    def set_tool_mode(self, mode: str):
+        """Set the current tool mode"""
+        self._tool_mode = mode
 
     def set_pixmap(self, pixmap: QPixmap, zoom: float = 1.0):
         """Set the page pixmap"""
@@ -191,51 +203,91 @@ class PageWidget(QLabel):
         self.setFixedSize(width, height)
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
-        """Convert widget position to page coordinates"""
-        if self._zoom == 0:
+        """Convert widget position to PDF page coordinates (72 DPI)"""
+        # Widget pixels are rendered at: zoom * render_dpi / 72
+        # To convert back to PDF coordinates (72 DPI), divide by the full scale
+        scale = self._zoom * self._render_dpi / 72
+        if scale == 0:
             return QPointF(0, 0)
-        return QPointF(widget_pos.x() / self._zoom, widget_pos.y() / self._zoom)
+        return QPointF(widget_pos.x() / scale, widget_pos.y() / scale)
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self._selection_start = event.position()
-            self.clicked.emit(self.page_num, self.get_page_position(event.pos()))
-        super().mousePressEvent(event)
+            # Start collecting freehand points
+            self._freehand_points = [event.position()]
+            self.clicked.emit(
+                self.page_num, self.get_page_position(event.pos()))
+            event.accept()  # Accept the event to receive move/release events
+        else:
+            super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
         if self._selection_start:
-            # Update selection rectangle
             current = event.position()
+            # Update selection rectangle
             rect = QRectF(self._selection_start, current).normalized()
             self._selection_rect = rect
+            # Collect points for freehand drawing
+            if self._tool_mode == "freehand":
+                self._freehand_points.append(current)
             self.update()
-        super().mouseMoveEvent(event)
+            event.accept()
+        else:
+            # Emit hover position for tooltip handling (when not dragging)
+            pdf_pos = self.get_page_position(event.pos())
+            self.hover_position.emit(self.page_num, pdf_pos)
+            super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        if self._selection_rect and self._selection_start:
-            # Emit annotation created signal
-            page_rect = QRectF(
-                self._selection_rect.x() / self._zoom,
-                self._selection_rect.y() / self._zoom,
-                self._selection_rect.width() / self._zoom,
-                self._selection_rect.height() / self._zoom
-            )
-            self.annotation_created.emit(self.page_num, "selection", page_rect)
+        if self._selection_start is not None:
+            scale = self._zoom * self._render_dpi / 72
 
-        self._selection_start = None
-        self._selection_rect = None
-        self.update()
-        super().mouseReleaseEvent(event)
+            # Handle freehand drawing with collected points
+            if self._tool_mode == "freehand" and len(self._freehand_points) > 1 and scale > 0:
+                # Convert all points to PDF coordinates
+                pdf_points = []
+                for pt in self._freehand_points:
+                    pdf_points.append((pt.x() / scale, pt.y() / scale))
+                self.freehand_created.emit(self.page_num, pdf_points)
+            elif self._selection_rect and scale > 0:
+                # Convert widget coordinates to PDF page coordinates (72 DPI)
+                page_rect = QRectF(
+                    self._selection_rect.x() / scale,
+                    self._selection_rect.y() / scale,
+                    self._selection_rect.width() / scale,
+                    self._selection_rect.height() / scale
+                )
+                self.annotation_created.emit(
+                    self.page_num, "selection", page_rect)
+
+            self._selection_start = None
+            self._selection_rect = None
+            self._freehand_points = []
+            self.update()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        painter = QPainter(self)
 
-        if self._selection_rect:
-            painter = QPainter(self)
+        # Draw freehand stroke while drawing
+        if self._tool_mode == "freehand" and len(self._freehand_points) > 1:
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            for i in range(1, len(self._freehand_points)):
+                p1 = self._freehand_points[i - 1]
+                p2 = self._freehand_points[i]
+                painter.drawLine(int(p1.x()), int(p1.y()),
+                                 int(p2.x()), int(p2.y()))
+        elif self._selection_rect:
+            # Draw selection rectangle for other tools
             painter.setPen(QPen(QColor(0, 120, 215), 1))
             painter.setBrush(QBrush(QColor(0, 120, 215, 50)))
             painter.drawRect(self._selection_rect.toRect())
-            painter.end()
+
+        painter.end()
 
 
 class PDFViewer(QScrollArea):
@@ -253,6 +305,8 @@ class PDFViewer(QScrollArea):
     zoom_changed = pyqtSignal(float)  # new zoom level
     selection_changed = pyqtSignal(int, QRectF)  # page, selection rect
     annotation_added = pyqtSignal(int, str, dict)  # page, type, data
+    annotation_create_requested = pyqtSignal(
+        int, str, object, dict)  # page, type, rect/points, data
     document_modified = pyqtSignal()
     text_selected = pyqtSignal(str)  # selected text
 
@@ -311,6 +365,8 @@ class PDFViewer(QScrollArea):
 
         # Container widget for pages
         self._container = QWidget()
+        self._container.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self._layout = QVBoxLayout(self._container)
         self._layout.setSpacing(10)
         self._layout.setContentsMargins(20, 20, 20, 20)
@@ -384,9 +440,13 @@ class PDFViewer(QScrollArea):
             return
 
         for i in range(len(self._doc)):
-            page_widget = PageWidget(i, self._container)
+            page_widget = PageWidget(i, self._render_dpi, self._container)
             page_widget.clicked.connect(self._on_page_clicked)
             page_widget.annotation_created.connect(self._on_annotation_created)
+            page_widget.freehand_created.connect(self._on_freehand_created)
+            page_widget.hover_position.connect(self._on_hover_position)
+            page_widget.set_tool_mode(
+                self._tool_mode.value if self._tool_mode else "select")
 
             # Set initial placeholder size based on page dimensions
             page = self._doc[i]
@@ -405,13 +465,12 @@ class PDFViewer(QScrollArea):
             return QPixmap()
 
         # Check cache
-        cache_key = (page_num, self._zoom, self._rotation)
         if page_num in self._page_cache:
             return self._page_cache[page_num]
 
         page = self._doc[page_num]
         zoom_matrix = fitz.Matrix(self._zoom * self._render_dpi / 72,
-                                   self._zoom * self._render_dpi / 72)
+                                  self._zoom * self._render_dpi / 72)
         zoom_matrix = zoom_matrix.prerotate(self._rotation)
 
         pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
@@ -442,15 +501,16 @@ class PDFViewer(QScrollArea):
             widget_rect = page_widget.geometry()
             widget_rect.translate(0, -scroll_pos)
 
-            # Check if visible and needs rendering
+            # Check if visible
             if viewport.intersects(widget_rect):
-                # Check cache first
-                if i in self._page_cache:
+                # Check cache first (only if page is not marked for re-render)
+                if i in self._page_cache and not page_widget._is_loading:
                     page_widget.set_pixmap(self._page_cache[i], self._zoom)
-                elif page_widget._is_loading:
+                else:
                     # Request background render
                     # Priority based on distance from center
-                    center_dist = abs(widget_rect.center().y() - viewport.center().y())
+                    center_dist = abs(
+                        widget_rect.center().y() - viewport.center().y())
                     priority = int(1000 - center_dist)
                     self._render_worker.request_page(i, self._zoom, priority)
 
@@ -559,6 +619,128 @@ class PDFViewer(QScrollArea):
         self._current_page = page_num
         self.page_changed.emit(page_num)
 
+        # Check if clicked on a sticky note annotation
+        if self._doc and self._tool_mode in (ToolMode.SELECT, ToolMode.HAND):
+            self._check_annotation_click(page_num, position)
+
+    def _on_hover_position(self, page_num: int, position: QPointF):
+        """Handle mouse hover to show annotation tooltips"""
+        if not self._doc or page_num >= len(self._page_widgets):
+            return
+
+        page_widget = self._page_widgets[page_num]
+        tooltip_text = ""
+
+        try:
+            page = self._doc[page_num]
+            hover_point = fitz.Point(position.x(), position.y())
+
+            for annot in page.annots():
+                # Check if hovering over annotation bounds
+                if annot.rect.contains(hover_point):
+                    annot_type = annot.type[0]  # Get annotation type number
+
+                    # Type 0 = Text annotation (sticky note)
+                    if annot_type == 0:
+                        content = annot.info.get("content", "")
+                        if content:
+                            tooltip_text = content
+                            break
+        except Exception:
+            pass
+
+        # Set or clear tooltip on the page widget
+        if tooltip_text:
+            page_widget.setToolTip(tooltip_text)
+        else:
+            page_widget.setToolTip("")
+
+    def _check_annotation_click(self, page_num: int, position: QPointF):
+        """Check if user clicked on an annotation and handle it"""
+        try:
+            page = self._doc[page_num]
+            click_point = fitz.Point(position.x(), position.y())
+
+            for annot in page.annots():
+                # Check if click is within annotation bounds
+                if annot.rect.contains(click_point):
+                    annot_type = annot.type[0]  # Get annotation type number
+
+                    # Type 0 = Text annotation (sticky note)
+                    if annot_type == 0:
+                        self._edit_sticky_note(page_num, annot)
+                        return
+        except Exception as e:
+            print(f"Error checking annotation click: {e}")
+
+    def _edit_sticky_note(self, page_num: int, annot):
+        """Open dialog to view/edit sticky note content"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel
+
+        # Get current note content
+        current_text = annot.info.get("content", "")
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Sticky Note")
+        dialog.setMinimumSize(400, 250)
+
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Note content:")
+        layout.addWidget(label)
+
+        text_edit = QTextEdit()
+        text_edit.setPlainText(current_text)
+        text_edit.setPlaceholderText("Type your note here...")
+        layout.addWidget(text_edit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save |
+            QDialogButtonBox.StandardButton.Cancel |
+            QDialogButtonBox.StandardButton.Discard
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Discard).setText(
+            "Delete Note")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        # Handle delete button
+        delete_clicked = [False]  # Use list to modify in nested function
+
+        def on_delete():
+            delete_clicked[0] = True
+            dialog.reject()
+        buttons.button(
+            QDialogButtonBox.StandardButton.Discard).clicked.connect(on_delete)
+
+        layout.addWidget(buttons)
+
+        result = dialog.exec()
+
+        if delete_clicked[0]:
+            # Delete the annotation
+            page = self._doc[page_num]
+            page.delete_annot(annot)
+            self.document_modified.emit()
+            self.refresh()
+        elif result == QDialog.DialogCode.Accepted:
+            # Update the annotation text
+            new_text = text_edit.toPlainText().strip()
+            if new_text:
+                annot.set_info(content=new_text)
+                annot.update()
+                self.document_modified.emit()
+                self.refresh()
+
+    def _on_freehand_created(self, page_num: int, points: list):
+        """Handle freehand drawing with actual tracked points"""
+        if not self._doc or len(points) < 2:
+            return
+
+        # Emit signal instead of creating directly
+        self.annotation_create_requested.emit(
+            page_num, "ink", None, {"points": points})
+
     def _on_annotation_created(self, page_num: int, annot_type: str, rect: QRectF):
         """Handle annotation creation based on current tool mode"""
         if not self._doc or rect.width() < 5 or rect.height() < 5:
@@ -577,37 +759,52 @@ class PDFViewer(QScrollArea):
                 clipboard.setText(text)
 
         elif self._tool_mode == ToolMode.HIGHLIGHT:
-            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_HIGHLIGHT)
+            self.annotation_create_requested.emit(
+                page_num, "highlight", rect, {})
 
         elif self._tool_mode == ToolMode.UNDERLINE:
-            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_UNDERLINE)
+            self.annotation_create_requested.emit(
+                page_num, "underline", rect, {})
 
         elif self._tool_mode == ToolMode.STRIKETHROUGH:
-            self._create_text_markup_annotation(page_num, rect, fitz.PDF_ANNOT_STRIKEOUT)
+            self.annotation_create_requested.emit(
+                page_num, "strikethrough", rect, {})
 
         elif self._tool_mode == ToolMode.TEXT_BOX:
-            self._create_text_annotation(page_num, rect, free_text=True)
+            self.annotation_create_requested.emit(
+                page_num, "text_box", rect, {})
 
         elif self._tool_mode == ToolMode.STICKY_NOTE:
-            self._create_text_annotation(page_num, rect, free_text=False)
+            self.annotation_create_requested.emit(
+                page_num, "sticky_note", rect, {})
 
         elif self._tool_mode == ToolMode.RECTANGLE:
-            self._create_shape_annotation(page_num, rect, "rectangle")
+            self.annotation_create_requested.emit(
+                page_num, "rectangle", rect, {})
 
         elif self._tool_mode == ToolMode.CIRCLE:
-            self._create_shape_annotation(page_num, rect, "circle")
+            self.annotation_create_requested.emit(page_num, "circle", rect, {})
 
         elif self._tool_mode == ToolMode.LINE:
-            self._create_line_annotation(page_num, rect, arrow=False)
+            self.annotation_create_requested.emit(
+                page_num, "line", rect, {"arrow": False})
 
         elif self._tool_mode == ToolMode.ARROW:
-            self._create_line_annotation(page_num, rect, arrow=True)
+            self.annotation_create_requested.emit(
+                page_num, "line", rect, {"arrow": True})
 
         elif self._tool_mode == ToolMode.REDACT:
+            # Redaction might be complex, but let's try
+            # self.annotation_create_requested.emit(page_num, "redact", rect, {})
             self._create_redaction_annotation(page_num, rect)
 
         elif self._tool_mode == ToolMode.ERASER:
             self._erase_annotation_at(page_num, rect)
+
+        # Note: FREEHAND is handled via freehand_created signal with actual points
+
+        elif self._tool_mode == ToolMode.STAMP:
+            self.annotation_create_requested.emit(page_num, "stamp", rect, {})
 
     def _extract_text_from_rect(self, page_num: int, rect: QRectF) -> str:
         """Extract text from a rectangular area on a page"""
@@ -624,13 +821,13 @@ class PDFViewer(QScrollArea):
             print(f"Error extracting text: {e}")
             return ""
 
-    def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: int):
+    def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: str):
         """Create highlight, underline, or strikethrough annotation"""
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                   rect.x() + rect.width(),
-                                   rect.y() + rect.height())
+                                  rect.x() + rect.width(),
+                                  rect.y() + rect.height())
 
             # Get quads for text in the area
             text_dict = page.get_text("dict", clip=fitz_rect)
@@ -644,18 +841,14 @@ class PDFViewer(QScrollArea):
                             if fitz_rect.intersects(span_rect):
                                 quads.append(span_rect.quad)
 
-            if quads:
-                annot = page.add_highlight_annot(quads) if annot_type == fitz.PDF_ANNOT_HIGHLIGHT else \
-                        page.add_underline_annot(quads) if annot_type == fitz.PDF_ANNOT_UNDERLINE else \
-                        page.add_strikeout_annot(quads)
-            else:
-                # No text found, create annotation on the rect itself
-                if annot_type == fitz.PDF_ANNOT_HIGHLIGHT:
-                    annot = page.add_highlight_annot(fitz_rect)
-                elif annot_type == fitz.PDF_ANNOT_UNDERLINE:
-                    annot = page.add_underline_annot(fitz_rect)
-                else:
-                    annot = page.add_strikeout_annot(fitz_rect)
+            # Use the appropriate method based on annotation type
+            target = quads if quads else fitz_rect
+            if annot_type == "highlight":
+                annot = page.add_highlight_annot(target)
+            elif annot_type == "underline":
+                annot = page.add_underline_annot(target)
+            else:  # strikethrough
+                annot = page.add_strikeout_annot(target)
 
             # Set color
             color = (self._annotation_color.redF(),
@@ -674,46 +867,79 @@ class PDFViewer(QScrollArea):
 
     def _create_text_annotation(self, page_num: int, rect: QRectF, free_text: bool = False):
         """Create text box or sticky note annotation"""
-        from PyQt6.QtWidgets import QInputDialog
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel
 
-        text, ok = QInputDialog.getMultiLineText(
-            self, "Add Text",
-            "Enter text:" if free_text else "Enter note:",
-            ""
+        # Create a custom dialog with better text editing
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            "Add Text Box" if free_text else "Add Sticky Note")
+        dialog.setMinimumSize(400, 250)
+
+        layout = QVBoxLayout(dialog)
+
+        # Label
+        label = QLabel(
+            "Enter your text:" if free_text else "Enter note content:")
+        layout.addWidget(label)
+
+        # Text edit area
+        text_edit = QTextEdit()
+        text_edit.setPlaceholderText("Type your text here...")
+        layout.addWidget(text_edit)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        if not ok or not text:
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        text = text_edit.toPlainText().strip()
+        if not text:
             return
 
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                   rect.x() + rect.width(),
-                                   rect.y() + rect.height())
+                                  rect.x() + rect.width(),
+                                  rect.y() + rect.height())
+
+            # Get current annotation color
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
 
             if free_text:
-                # Free text annotation (text box)
+                # Free text annotation (text box) - use selected color for text
+                # Calculate appropriate font size based on rect height
+                auto_fontsize = max(
+                    8, min(self._font_size, int(rect.height() * 0.8)))
                 annot = page.add_freetext_annot(
                     fitz_rect, text,
-                    fontsize=self._font_size,
+                    fontsize=auto_fontsize,
                     fontname="helv",
-                    text_color=(0, 0, 0),
-                    fill_color=(1, 1, 0.8)
+                    text_color=color,  # Use annotation color for text
+                    fill_color=(1, 1, 1)  # White background
                 )
+                annot.set_opacity(self._annotation_opacity)
+                annot.update()
             else:
-                # Sticky note
+                # Sticky note - just an icon that shows text on hover/click
+                # This is the standard PDF sticky note behavior
                 point = fitz.Point(rect.x(), rect.y())
-                annot = page.add_text_annot(point, text)
-                color = (self._annotation_color.redF(),
-                         self._annotation_color.greenF(),
-                         self._annotation_color.blueF())
+                annot = page.add_text_annot(point, text, icon="Note")
                 annot.set_colors(stroke=color)
-
-            annot.set_opacity(self._annotation_opacity)
-            annot.update()
+                annot.set_opacity(self._annotation_opacity)
+                annot.update()
 
             self.document_modified.emit()
             self.refresh()
-            self.annotation_added.emit(page_num, "text", {"text": text, "rect": rect})
+            self.annotation_added.emit(
+                page_num, "text", {"text": text, "rect": rect})
 
         except Exception as e:
             print(f"Error creating text annotation: {e}")
@@ -723,8 +949,8 @@ class PDFViewer(QScrollArea):
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                   rect.x() + rect.width(),
-                                   rect.y() + rect.height())
+                                  rect.x() + rect.width(),
+                                  rect.y() + rect.height())
 
             color = (self._annotation_color.redF(),
                      self._annotation_color.greenF(),
@@ -752,7 +978,7 @@ class PDFViewer(QScrollArea):
         try:
             page = self._doc[page_num]
 
-            # Line from top-left to bottom-right of selection
+            # Line from start point to end point of selection
             p1 = fitz.Point(rect.x(), rect.y())
             p2 = fitz.Point(rect.x() + rect.width(), rect.y() + rect.height())
 
@@ -762,21 +988,181 @@ class PDFViewer(QScrollArea):
                      self._annotation_color.greenF(),
                      self._annotation_color.blueF())
             annot.set_colors(stroke=color)
-            annot.set_border(width=self._stroke_width)
+
+            # Use thicker line for better visibility
+            line_width = max(self._stroke_width, 2)
+            annot.set_border(width=line_width)
 
             if arrow:
-                # Set line ending to arrow
-                annot.set_line_ends(fitz.PDF_ANNOT_LE_NONE, fitz.PDF_ANNOT_LE_OPEN_ARROW)
+                # Set line ending to a closed arrow (more visible)
+                # Line ending styles: 0=None, 1=Square, 2=Circle, 3=Diamond,
+                # 4=OpenArrow, 5=ClosedArrow, 6=Butt, 7=ROpenArrow, 8=RClosedArrow, 9=Slash
+                annot.set_line_ends(0, 5)  # None at start, ClosedArrow at end
+
+                # Set interior color for filled arrow head
+                annot.set_colors(stroke=color, fill=color)
 
             annot.set_opacity(self._annotation_opacity)
             annot.update()
 
             self.document_modified.emit()
             self.refresh()
-            self.annotation_added.emit(page_num, "line" if not arrow else "arrow", {"rect": rect})
+            self.annotation_added.emit(
+                page_num, "line" if not arrow else "arrow", {"rect": rect})
 
         except Exception as e:
             print(f"Error creating line annotation: {e}")
+
+    def _create_freehand_annotation_from_points(self, page_num: int, points: list):
+        """Create a freehand/ink annotation from actual tracked points"""
+        try:
+            page = self._doc[page_num]
+
+            # Points are already in PDF coordinates as (x, y) tuples
+            # add_ink_annot expects list of strokes (each stroke is a list of point tuples)
+            annot = page.add_ink_annot([points])
+
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
+            annot.set_colors(stroke=color)
+            annot.set_border(width=self._stroke_width)
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(page_num, "freehand", {
+                                       "points": len(points)})
+
+        except Exception as e:
+            print(f"Error creating freehand annotation: {e}")
+
+    def _create_stamp_annotation(self, page_num: int, rect: QRectF):
+        """Create a stamp annotation"""
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QListWidget,
+                                     QLineEdit, QDialogButtonBox, QGroupBox)
+
+        # Create a custom stamp dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Stamp")
+        dialog.setMinimumSize(350, 400)
+
+        layout = QVBoxLayout(dialog)
+
+        # Stamp selection group
+        stamp_group = QGroupBox("Select Stamp Type")
+        stamp_layout = QVBoxLayout(stamp_group)
+
+        stamp_list = QListWidget()
+        stamp_list.setStyleSheet("QListWidget::item { padding: 5px; }")
+        stamps = [
+            "✓ APPROVED",
+            "🔒 CONFIDENTIAL",
+            "📝 DRAFT",
+            "✔ FINAL",
+            "✗ NOT APPROVED",
+            "👁 FOR REVIEW",
+            "⊘ VOID",
+            "📋 COPY",
+            "📄 ORIGINAL",
+            "⚠ URGENT",
+            "📊 SAMPLE",
+            "🔄 REVISED"
+        ]
+        for stamp in stamps:
+            stamp_list.addItem(stamp)
+        stamp_list.setCurrentRow(0)
+        stamp_layout.addWidget(stamp_list)
+        layout.addWidget(stamp_group)
+
+        # Custom text group
+        custom_group = QGroupBox("Or Enter Custom Text")
+        custom_layout = QVBoxLayout(custom_group)
+        custom_input = QLineEdit()
+        custom_input.setPlaceholderText("Type custom stamp text here...")
+        custom_layout.addWidget(custom_input)
+        layout.addWidget(custom_group)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        # Get stamp text (custom takes priority)
+        stamp_text = custom_input.text().strip()
+        if not stamp_text:
+            current_item = stamp_list.currentItem()
+            if current_item:
+                # Remove emoji prefix for cleaner stamp
+                stamp_text = current_item.text().split(
+                    " ", 1)[-1] if " " in current_item.text() else current_item.text()
+            else:
+                stamp_text = "STAMP"
+
+        try:
+            page = self._doc[page_num]
+
+            # Calculate stamp size based on text length
+            char_width = 8  # Approximate character width
+            text_width = len(stamp_text) * char_width + 20  # Add padding
+            min_width = max(rect.width(), text_width, 100)
+            min_height = max(rect.height(), 30)
+
+            fitz_rect = fitz.Rect(rect.x(), rect.y(),
+                                  rect.x() + min_width,
+                                  rect.y() + min_height)
+
+            # Use annotation color for stamp
+            color = (self._annotation_color.redF(),
+                     self._annotation_color.greenF(),
+                     self._annotation_color.blueF())
+
+            # Calculate font size based on stamp size
+            fontsize = max(12, min(20, int(min_height * 0.6)))
+
+            # Create outer rectangle border first (double border effect)
+            outer_rect = fitz.Rect(
+                fitz_rect.x0 - 2, fitz_rect.y0 - 2,
+                fitz_rect.x1 + 2, fitz_rect.y1 + 2
+            )
+            outer_border = page.add_rect_annot(outer_rect)
+            outer_border.set_colors(stroke=color)
+            outer_border.set_border(width=3)
+            outer_border.set_opacity(self._annotation_opacity)
+            outer_border.update()
+
+            # Create inner rectangle border
+            inner_border = page.add_rect_annot(fitz_rect)
+            inner_border.set_colors(stroke=color)
+            inner_border.set_border(width=1)
+            inner_border.set_opacity(self._annotation_opacity)
+            inner_border.update()
+
+            # Create stamp text - centered in the box
+            annot = page.add_freetext_annot(
+                fitz_rect, stamp_text,
+                fontsize=fontsize,
+                fontname="helv",
+                text_color=color,
+                fill_color=(1, 1, 1)  # White background
+            )
+            annot.set_opacity(self._annotation_opacity)
+            annot.update()
+
+            self.document_modified.emit()
+            self.refresh()
+            self.annotation_added.emit(
+                page_num, "stamp", {"text": stamp_text, "rect": rect})
+
+        except Exception as e:
+            print(f"Error creating stamp annotation: {e}")
 
     def _create_redaction_annotation(self, page_num: int, rect: QRectF):
         """Create redaction annotation"""
@@ -795,8 +1181,8 @@ class PDFViewer(QScrollArea):
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                   rect.x() + rect.width(),
-                                   rect.y() + rect.height())
+                                  rect.x() + rect.width(),
+                                  rect.y() + rect.height())
 
             annot = page.add_redact_annot(fitz_rect)
             annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
@@ -817,8 +1203,8 @@ class PDFViewer(QScrollArea):
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                   rect.x() + rect.width(),
-                                   rect.y() + rect.height())
+                                  rect.x() + rect.width(),
+                                  rect.y() + rect.height())
 
             deleted = False
             for annot in page.annots():
@@ -917,15 +1303,32 @@ class PDFViewer(QScrollArea):
         """Set the current tool mode"""
         self._tool_mode = mode
 
-        # Update cursor
+        # Update cursor for all tools
         cursor_map = {
             ToolMode.HAND: Qt.CursorShape.OpenHandCursor,
             ToolMode.SELECT: Qt.CursorShape.ArrowCursor,
             ToolMode.TEXT_SELECT: Qt.CursorShape.IBeamCursor,
             ToolMode.HIGHLIGHT: Qt.CursorShape.CrossCursor,
+            ToolMode.UNDERLINE: Qt.CursorShape.CrossCursor,
+            ToolMode.STRIKETHROUGH: Qt.CursorShape.CrossCursor,
+            ToolMode.TEXT_BOX: Qt.CursorShape.CrossCursor,
+            ToolMode.STICKY_NOTE: Qt.CursorShape.CrossCursor,
+            ToolMode.RECTANGLE: Qt.CursorShape.CrossCursor,
+            ToolMode.CIRCLE: Qt.CursorShape.CrossCursor,
+            ToolMode.LINE: Qt.CursorShape.CrossCursor,
+            ToolMode.ARROW: Qt.CursorShape.CrossCursor,
             ToolMode.FREEHAND: Qt.CursorShape.CrossCursor,
+            ToolMode.ERASER: Qt.CursorShape.CrossCursor,
+            ToolMode.REDACT: Qt.CursorShape.CrossCursor,
+            ToolMode.STAMP: Qt.CursorShape.CrossCursor,
         }
-        self.setCursor(cursor_map.get(mode, Qt.CursorShape.ArrowCursor))
+        cursor = cursor_map.get(mode, Qt.CursorShape.ArrowCursor)
+        self.setCursor(cursor)
+
+        # Set cursor and tool mode on all page widgets
+        for page_widget in self._page_widgets:
+            page_widget.setCursor(cursor)
+            page_widget.set_tool_mode(mode.value)
 
     def set_annotation_color(self, color: QColor):
         """Set annotation color"""
@@ -938,6 +1341,11 @@ class PDFViewer(QScrollArea):
     def set_stroke_width(self, width: int):
         """Set stroke width for drawing tools"""
         self._stroke_width = max(1, width)
+
+    def set_font(self, family: str, size: int):
+        """Set font family and size for text annotations"""
+        self._font_family = family
+        self._font_size = size
 
     def rotate_view(self, degrees: int):
         """Rotate the view"""
@@ -1019,27 +1427,67 @@ class PDFViewer(QScrollArea):
             page_widget = self._page_widgets[self._current_page]
             if page_widget._selection_rect:
                 rect = page_widget._selection_rect
-                page_rect = QRectF(
-                    rect.x() / page_widget._zoom,
-                    rect.y() / page_widget._zoom,
-                    rect.width() / page_widget._zoom,
-                    rect.height() / page_widget._zoom
-                )
-                fitz_rect = fitz.Rect(
-                    page_rect.x(), page_rect.y(),
-                    page_rect.x() + page_rect.width(),
-                    page_rect.y() + page_rect.height()
-                )
-                page = self._doc[self._current_page]
-                text = page.get_text("text", clip=fitz_rect)
-                return text.strip()
+                # Convert widget coordinates to PDF page coordinates (72 DPI)
+                scale = page_widget._zoom * page_widget._render_dpi / 72
+                if scale > 0:
+                    page_rect = QRectF(
+                        rect.x() / scale,
+                        rect.y() / scale,
+                        rect.width() / scale,
+                        rect.height() / scale
+                    )
+                    fitz_rect = fitz.Rect(
+                        page_rect.x(), page_rect.y(),
+                        page_rect.x() + page_rect.width(),
+                        page_rect.y() + page_rect.height()
+                    )
+                    page = self._doc[self._current_page]
+                    text = page.get_text("text", clip=fitz_rect)
+                    return text.strip()
         return ""
 
     def refresh(self):
-        """Refresh the view"""
+        """Refresh the view - re-render pages to show annotation changes"""
         self._page_cache.clear()
         self._render_worker.clear_tasks()
+
+        # Mark all page widgets as needing re-render
+        for page_widget in self._page_widgets:
+            page_widget._is_loading = True
+
+        # Request visible pages to be rendered with high priority
         self._request_visible_pages()
+
+        # Also do an immediate synchronous render of the current page for instant feedback
+        if self._doc and 0 <= self._current_page < len(self._page_widgets):
+            self._render_page_sync(self._current_page)
+
+    def _render_page_sync(self, page_num: int):
+        """Synchronously render a single page (for immediate feedback)"""
+        if not self._doc or page_num < 0 or page_num >= len(self._doc):
+            return
+
+        try:
+            page = self._doc[page_num]
+            zoom_matrix = fitz.Matrix(
+                self._zoom * self._render_dpi / 72,
+                self._zoom * self._render_dpi / 72
+            )
+            zoom_matrix = zoom_matrix.prerotate(self._rotation)
+
+            pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
+
+            # Convert to QPixmap
+            img = QImage(pixmap.samples, pixmap.width, pixmap.height,
+                         pixmap.stride, QImage.Format.Format_RGB888)
+            qpixmap = QPixmap.fromImage(img)
+
+            # Update cache and widget
+            self._page_cache[page_num] = qpixmap
+            if page_num < len(self._page_widgets):
+                self._page_widgets[page_num].set_pixmap(qpixmap, self._zoom)
+        except Exception as e:
+            print(f"Error in sync render: {e}")
 
     def cleanup(self):
         """Clean up resources (call before closing)"""
@@ -1151,6 +1599,7 @@ class PDFViewer(QScrollArea):
 
         # Rotation
         menu.addAction("Rotate Clockwise", lambda: self.rotate_view(90))
-        menu.addAction("Rotate Counter-Clockwise", lambda: self.rotate_view(-90))
+        menu.addAction("Rotate Counter-Clockwise",
+                       lambda: self.rotate_view(-90))
 
         menu.exec(event.globalPos())

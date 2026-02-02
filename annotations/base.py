@@ -311,7 +311,7 @@ class FreeTextAnnotation(Annotation):
             fill_color=self.fill_color.to_tuple() if self.fill_color else None,
             align=self.align,
         )
-        annot.set_border(width=self.border_width)
+        annot.set_border(width=int(self.border_width))
         annot.update()
         self._fitz_annot = annot
         return annot
@@ -372,7 +372,8 @@ class ShapeAnnotation(Annotation):
                     fitz.Point(self.end_point)
                 )
                 if self.type == AnnotationType.ARROW:
-                    annot.set_line_ends(fitz.PDF_ANNOT_LE_NONE, fitz.PDF_ANNOT_LE_OPEN_ARROW)
+                    # Line ending constants: 0=None, 4=OpenArrow, 5=ClosedArrow
+                    annot.set_line_ends(0, 4)
             else:
                 raise ValueError("Line annotation requires start and end points")
         else:
@@ -382,7 +383,7 @@ class ShapeAnnotation(Annotation):
             stroke=self.stroke_color.to_tuple(),
             fill=self.fill_color.to_tuple() if self.fill_color else None
         )
-        annot.set_border(width=self.stroke_width)
+        annot.set_border(width=int(self.stroke_width))
         annot.set_opacity(self.properties.opacity)
         annot.update()
 
@@ -431,7 +432,7 @@ class InkAnnotation(Annotation):
         ink_list = [[fitz.Point(p) for p in path] for path in self.paths]
         annot = page.add_ink_annot(ink_list)
         annot.set_colors(stroke=self.color.to_tuple())
-        annot.set_border(width=self.stroke_width)
+        annot.set_border(width=int(self.stroke_width))
         annot.set_opacity(self.properties.opacity)
         annot.update()
 
@@ -469,6 +470,25 @@ class InkAnnotation(Annotation):
         )
 
 
+# Stamp type constants for fitz.add_stamp_annot
+STAMP_TYPES = {
+    "Approved": 0,
+    "Experimental": 1,
+    "NotApproved": 2,
+    "AsIs": 3,
+    "Expired": 4,
+    "NotForPublicRelease": 5,
+    "Confidential": 6,
+    "Final": 7,
+    "Sold": 8,
+    "Departmental": 9,
+    "ForComment": 10,
+    "TopSecret": 11,
+    "Draft": 12,
+    "ForPublicRelease": 13,
+}
+
+
 @dataclass
 class StampAnnotation(Annotation):
     """Stamp annotation"""
@@ -482,7 +502,9 @@ class StampAnnotation(Annotation):
 
     def create_on_page(self, page: fitz.Page) -> fitz.Annot:
         """Create stamp annotation"""
-        annot = page.add_stamp_annot(self.rect.to_fitz(), stamp=self.stamp_name)
+        # Convert stamp name to integer constant
+        stamp_id = STAMP_TYPES.get(self.stamp_name, 0)
+        annot = page.add_stamp_annot(self.rect.to_fitz(), stamp=stamp_id)
         annot.set_opacity(self.properties.opacity)
         annot.update()
 

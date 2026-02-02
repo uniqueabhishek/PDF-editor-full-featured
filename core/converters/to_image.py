@@ -23,7 +23,7 @@ class ImageFormat(Enum):
 class PDFToImageConverter:
     """Converts PDF pages to images"""
 
-    def __init__(self, pdf_path: Union[str, Path] = None, document: fitz.Document = None):
+    def __init__(self, pdf_path: Optional[Union[str, Path]] = None, document: Optional[fitz.Document] = None):
         """
         Initialize converter with either a file path or an open document
 

@@ -2,19 +2,16 @@
 Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QScrollArea, QLabel,
     QListWidget, QListWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem,
-    QMenu, QInputDialog, QLineEdit, QSizePolicy, QFrame, QSplitter,
-    QAbstractItemView, QStyledItemDelegate, QStyle
+    QMenu, QInputDialog, QLineEdit, QFrame
 )
 from PyQt6.QtCore import (
-    Qt, QSize, pyqtSignal, QMimeData, QPoint, QTimer, QModelIndex
+    Qt, pyqtSignal, QPoint, QTimer
 )
-from PyQt6.QtGui import (
-    QPixmap, QImage, QIcon, QDrag, QPainter, QColor, QFont, QPen, QBrush
-)
+from PyQt6.QtGui import QPixmap, QImage
 import fitz
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from dataclasses import dataclass
 
 
@@ -335,7 +332,7 @@ class BookmarkPanel(QTreeWidget):
 
         try:
             self._toc = self._doc.get_toc()
-        except:
+        except Exception:
             self._toc = []
             return
 

@@ -7,6 +7,23 @@ from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import fitz
 
+# Widget type constants (PyMuPDF internal values)
+PDF_WIDGET_TYPE_TEXT = 1
+PDF_WIDGET_TYPE_BUTTON = 2
+PDF_WIDGET_TYPE_CHECKBOX = 2
+PDF_WIDGET_TYPE_RADIOBUTTON = 2
+PDF_WIDGET_TYPE_COMBOBOX = 3
+PDF_WIDGET_TYPE_LISTBOX = 3
+PDF_WIDGET_TYPE_SIGNATURE = 4
+
+# Field flag constants
+PDF_TX_FIELD_IS_MULTILINE = 1 << 12
+PDF_TX_FIELD_IS_PASSWORD = 1 << 13
+PDF_FIELD_IS_READ_ONLY = 1
+PDF_FIELD_IS_REQUIRED = 2
+PDF_CH_FIELD_IS_EDIT = 1 << 18
+PDF_CH_FIELD_IS_MULTI_SELECT = 1 << 21
+
 
 class FieldType(Enum):
     """Types of form fields"""
@@ -130,21 +147,21 @@ class TextField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create text field widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_TEXT
-        widget.rect = fitz.Rect(self.rect)
-        widget.field_value = str(self.value) if self.value else ""
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_TEXT  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
+        widget.field_value = str(self.value) if self.value else ""  # type: ignore[assignment]
 
         # Set flags
         flags = 0
         if self.multiline:
-            flags |= fitz.PDF_TX_FIELD_IS_MULTILINE
+            flags |= PDF_TX_FIELD_IS_MULTILINE
         if self.password:
-            flags |= fitz.PDF_TX_FIELD_IS_PASSWORD
+            flags |= PDF_TX_FIELD_IS_PASSWORD
         if self.readonly:
-            flags |= fitz.PDF_FIELD_IS_READ_ONLY
+            flags |= PDF_FIELD_IS_READ_ONLY
         if self.required:
-            flags |= fitz.PDF_FIELD_IS_REQUIRED
+            flags |= PDF_FIELD_IS_REQUIRED
 
         widget.field_flags = flags
 
@@ -153,10 +170,10 @@ class TextField(FormField):
 
         # Appearance
         widget.text_fontsize = self.appearance.font_size
-        widget.text_color = self.appearance.text_color
-        widget.fill_color = self.appearance.fill_color
-        widget.border_color = self.appearance.border_color
-        widget.border_width = self.appearance.border_width
+        widget.text_color = list(self.appearance.text_color)  # type: ignore[assignment]
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
+        widget.border_color = list(self.appearance.border_color)  # type: ignore[assignment]
+        widget.border_width = int(self.appearance.border_width)
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -202,20 +219,20 @@ class CheckboxField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create checkbox widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
-        widget.rect = fitz.Rect(self.rect)
-        widget.field_value = self.export_value if self.checked else "Off"
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_CHECKBOX  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
+        widget.field_value = self.export_value if self.checked else "Off"  # type: ignore[assignment]
 
         flags = 0
         if self.readonly:
-            flags |= fitz.PDF_FIELD_IS_READ_ONLY
+            flags |= PDF_FIELD_IS_READ_ONLY
         if self.required:
-            flags |= fitz.PDF_FIELD_IS_REQUIRED
+            flags |= PDF_FIELD_IS_REQUIRED
         widget.field_flags = flags
 
-        widget.fill_color = self.appearance.fill_color
-        widget.border_color = self.appearance.border_color
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
+        widget.border_color = list(self.appearance.border_color)  # type: ignore[assignment]
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -267,22 +284,22 @@ class RadioField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create radio button widget"""
         widget = fitz.Widget()
-        widget.field_name = self.group_name or self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_RADIOBUTTON
-        widget.rect = fitz.Rect(self.rect)
+        widget.field_name = self.group_name or self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_RADIOBUTTON  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
 
         if self.selected:
-            widget.field_value = self.export_value
+            widget.field_value = self.export_value  # type: ignore[assignment]
 
         flags = 0
         if self.readonly:
-            flags |= fitz.PDF_FIELD_IS_READ_ONLY
+            flags |= PDF_FIELD_IS_READ_ONLY
         if self.required:
-            flags |= fitz.PDF_FIELD_IS_REQUIRED
+            flags |= PDF_FIELD_IS_REQUIRED
         widget.field_flags = flags
 
-        widget.fill_color = self.appearance.fill_color
-        widget.border_color = self.appearance.border_color
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
+        widget.border_color = list(self.appearance.border_color)  # type: ignore[assignment]
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -325,28 +342,28 @@ class DropdownField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create dropdown widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_COMBOBOX
-        widget.rect = fitz.Rect(self.rect)
-        widget.choice_values = self.options
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_COMBOBOX  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
+        widget.choice_values = self.options  # type: ignore[assignment]
 
         if 0 <= self.selected_index < len(self.options):
-            widget.field_value = self.options[self.selected_index]
+            widget.field_value = self.options[self.selected_index]  # type: ignore[assignment]
         elif self.value:
-            widget.field_value = str(self.value)
+            widget.field_value = str(self.value)  # type: ignore[assignment]
 
         flags = 0
         if self.readonly:
-            flags |= fitz.PDF_FIELD_IS_READ_ONLY
+            flags |= PDF_FIELD_IS_READ_ONLY
         if self.required:
-            flags |= fitz.PDF_FIELD_IS_REQUIRED
+            flags |= PDF_FIELD_IS_REQUIRED
         if self.editable:
-            flags |= fitz.PDF_CH_FIELD_IS_EDIT
+            flags |= PDF_CH_FIELD_IS_EDIT
         widget.field_flags = flags
 
         widget.text_fontsize = self.appearance.font_size
-        widget.text_color = self.appearance.text_color
-        widget.fill_color = self.appearance.fill_color
+        widget.text_color = list(self.appearance.text_color)  # type: ignore[assignment]
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -390,22 +407,22 @@ class ListboxField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create listbox widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_LISTBOX
-        widget.rect = fitz.Rect(self.rect)
-        widget.choice_values = self.options
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_LISTBOX  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
+        widget.choice_values = self.options  # type: ignore[assignment]
 
         flags = 0
         if self.readonly:
-            flags |= fitz.PDF_FIELD_IS_READ_ONLY
+            flags |= PDF_FIELD_IS_READ_ONLY
         if self.required:
-            flags |= fitz.PDF_FIELD_IS_REQUIRED
+            flags |= PDF_FIELD_IS_REQUIRED
         if self.multi_select:
-            flags |= fitz.PDF_CH_FIELD_IS_MULTI_SELECT
+            flags |= PDF_CH_FIELD_IS_MULTI_SELECT
         widget.field_flags = flags
 
         widget.text_fontsize = self.appearance.font_size
-        widget.fill_color = self.appearance.fill_color
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -447,13 +464,13 @@ class ButtonField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create button widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_BUTTON
-        widget.rect = fitz.Rect(self.rect)
-        widget.button_caption = self.label
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_BUTTON  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
+        widget.button_caption = self.label  # type: ignore[assignment]
 
-        widget.fill_color = self.appearance.fill_color
-        widget.border_color = self.appearance.border_color
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
+        widget.border_color = list(self.appearance.border_color)  # type: ignore[assignment]
         widget.text_fontsize = self.appearance.font_size
 
         self._widget = page.add_widget(widget)
@@ -492,12 +509,12 @@ class SignatureField(FormField):
     def create_on_page(self, page: fitz.Page) -> fitz.Widget:
         """Create signature field widget"""
         widget = fitz.Widget()
-        widget.field_name = self.name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_SIGNATURE
-        widget.rect = fitz.Rect(self.rect)
+        widget.field_name = self.name  # type: ignore[assignment]
+        widget.field_type = PDF_WIDGET_TYPE_SIGNATURE  # type: ignore[assignment]
+        widget.rect = fitz.Rect(self.rect)  # type: ignore[assignment]
 
-        widget.fill_color = self.appearance.fill_color
-        widget.border_color = self.appearance.border_color
+        widget.fill_color = list(self.appearance.fill_color) if self.appearance.fill_color else None  # type: ignore[assignment]
+        widget.border_color = list(self.appearance.border_color)  # type: ignore[assignment]
 
         self._widget = page.add_widget(widget)
         return self._widget
@@ -549,10 +566,10 @@ class FormManager:
     def _widget_to_field(self, widget: fitz.Widget, page_num: int) -> Optional[FormField]:
         """Convert fitz widget to FormField"""
         field_type = widget.field_type
-        name = widget.field_name
-        rect = tuple(widget.rect)
+        name = widget.field_name or ""
+        rect = tuple(widget.rect) if widget.rect else (0, 0, 0, 0)
 
-        if field_type == fitz.PDF_WIDGET_TYPE_TEXT:
+        if field_type == PDF_WIDGET_TYPE_TEXT:
             return TextField(
                 name=name,
                 field_type=FieldType.TEXT,
@@ -561,7 +578,7 @@ class FormManager:
                 value=widget.field_value,
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_CHECKBOX:
+        elif field_type == PDF_WIDGET_TYPE_CHECKBOX:
             return CheckboxField(
                 name=name,
                 field_type=FieldType.CHECKBOX,
@@ -570,7 +587,7 @@ class FormManager:
                 checked=widget.field_value != "Off",
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_RADIOBUTTON:
+        elif field_type == PDF_WIDGET_TYPE_RADIOBUTTON:
             return RadioField(
                 name=name,
                 field_type=FieldType.RADIO,
@@ -578,7 +595,7 @@ class FormManager:
                 rect=rect,
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_COMBOBOX:
+        elif field_type == PDF_WIDGET_TYPE_COMBOBOX:
             return DropdownField(
                 name=name,
                 field_type=FieldType.DROPDOWN,
@@ -588,7 +605,7 @@ class FormManager:
                 options=list(widget.choice_values) if widget.choice_values else [],
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_LISTBOX:
+        elif field_type == PDF_WIDGET_TYPE_LISTBOX:
             return ListboxField(
                 name=name,
                 field_type=FieldType.LISTBOX,
@@ -597,7 +614,7 @@ class FormManager:
                 options=list(widget.choice_values) if widget.choice_values else [],
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_BUTTON:
+        elif field_type == PDF_WIDGET_TYPE_BUTTON:
             return ButtonField(
                 name=name,
                 field_type=FieldType.BUTTON,
@@ -606,7 +623,7 @@ class FormManager:
                 label=widget.button_caption or "",
                 _widget=widget,
             )
-        elif field_type == fitz.PDF_WIDGET_TYPE_SIGNATURE:
+        elif field_type == PDF_WIDGET_TYPE_SIGNATURE:
             return SignatureField(
                 name=name,
                 field_type=FieldType.SIGNATURE,
@@ -641,9 +658,9 @@ class FormManager:
         if name in self._fields:
             field = self._fields[name]
             if field._widget:
-                page = self._document._doc[field.page]
                 # Note: fitz doesn't have a direct widget removal method
                 # Would need to rebuild the page or use lower-level operations
+                _ = self._document._doc[field.page]  # Page reference for future use
             del self._fields[name]
             self._document._is_modified = True
 

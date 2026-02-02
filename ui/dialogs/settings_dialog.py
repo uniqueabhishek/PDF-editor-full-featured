@@ -3,14 +3,13 @@ Ultra PDF Editor - Settings Dialog
 Application preferences and settings
 """
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QTabWidget, QWidget, QFormLayout, QComboBox, QSpinBox,
-    QCheckBox, QLineEdit, QGroupBox, QColorDialog, QFontComboBox,
-    QSlider, QFileDialog
+    QCheckBox, QGroupBox, QColorDialog, QFontComboBox,
+    QSlider
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
-from pathlib import Path
+from PyQt6.QtGui import QFont
 from typing import Dict, Any
 
 from config import UserSettings, config

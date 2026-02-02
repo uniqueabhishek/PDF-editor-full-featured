@@ -5,10 +5,9 @@ Dialog for splitting a PDF into multiple files
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QProgressBar, QMessageBox, QGroupBox, QRadioButton,
-    QSpinBox, QLineEdit, QFileDialog, QButtonGroup, QFormLayout,
-    QCheckBox, QTextEdit
+    QSpinBox, QLineEdit, QFileDialog, QButtonGroup, QFormLayout
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 from pathlib import Path
 from typing import List, Optional, Tuple
 import fitz
@@ -133,7 +132,7 @@ class SplitWorker(QThread):
 class SplitDialog(QDialog):
     """Dialog for splitting PDF files"""
 
-    def __init__(self, filepath: str = None, page_count: int = 0, parent=None):
+    def __init__(self, filepath: Optional[str] = None, page_count: int = 0, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Split PDF")
         self.setMinimumSize(500, 450)
@@ -295,6 +294,10 @@ class SplitDialog(QDialog):
 
     def _start_split(self):
         """Start the split operation"""
+        if not self._filepath:
+            QMessageBox.warning(self, "Error", "No file selected.")
+            return
+
         if not self._output_dir.text():
             QMessageBox.warning(self, "Error", "Please select an output directory.")
             return

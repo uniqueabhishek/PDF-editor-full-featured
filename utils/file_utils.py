@@ -131,7 +131,7 @@ def is_pdf_encrypted(filepath: Path) -> bool:
         encrypted = doc.is_encrypted
         doc.close()
         return encrypted
-    except:
+    except Exception:
         return False
 
 
@@ -143,7 +143,7 @@ def get_pdf_page_count(filepath: Path) -> int:
         count = len(doc)
         doc.close()
         return count
-    except:
+    except Exception:
         return 0
 
 
@@ -198,7 +198,7 @@ def clean_temp_files(max_age_hours: int = 24):
                     filepath.unlink()
                 elif filepath.is_dir():
                     shutil.rmtree(filepath)
-        except:
+        except Exception:
             pass
 
 

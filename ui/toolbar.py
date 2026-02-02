@@ -2,14 +2,14 @@
 Ultra PDF Editor - Toolbar with all tools and actions
 """
 from PyQt6.QtWidgets import (
-    QToolBar, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel,
-    QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QMenu, QWidgetAction,
-    QColorDialog, QSlider, QFrame, QToolButton, QButtonGroup, QSizePolicy,
+    QToolBar, QWidget, QHBoxLayout, QLabel,
+    QSpinBox, QComboBox, QLineEdit,
+    QColorDialog, QSlider, QFrame, QToolButton,
     QFontComboBox
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QIcon, QAction, QColor, QFont, QPixmap, QPainter
-from typing import Optional, Dict, Callable
+from PyQt6.QtGui import QIcon, QColor, QFont, QPixmap, QPainter
+from typing import Dict
 from enum import Enum
 
 
@@ -461,55 +461,105 @@ class AnnotationToolbar(QToolBar):
 
         self.addSeparator()
 
-        # === Color Picker ===
+        # === Style Controls Group ===
+        # Create a container widget for style controls with proper layout
+        style_container = QWidget()
+        style_layout = QHBoxLayout(style_container)
+        style_layout.setContentsMargins(4, 0, 4, 0)
+        style_layout.setSpacing(8)
+
+        # Color picker with label
+        color_label = QLabel("Color:")
+        color_label.setStyleSheet("font-size: 11px;")
+        style_layout.addWidget(color_label)
+
         self.color_btn = ColorButton(QColor(255, 255, 0))
         self.color_btn.setToolTip("Annotation color")
+        self.color_btn.setFixedSize(24, 24)
         self.color_btn.color_changed.connect(self.color_changed)
-        self.addWidget(self.color_btn)
+        style_layout.addWidget(self.color_btn)
 
-        # === Opacity ===
-        opacity_label = QLabel(" Opacity:")
-        self.addWidget(opacity_label)
+        # Separator
+        style_layout.addWidget(self._create_separator_line())
+
+        # Opacity with label
+        opacity_label = QLabel("Opacity:")
+        opacity_label.setStyleSheet("font-size: 11px;")
+        style_layout.addWidget(opacity_label)
 
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setMinimum(10)
         self.opacity_slider.setMaximum(100)
         self.opacity_slider.setValue(50)
-        self.opacity_slider.setMaximumWidth(80)
+        self.opacity_slider.setFixedWidth(60)
         self.opacity_slider.setToolTip("Annotation opacity")
         self.opacity_slider.valueChanged.connect(lambda v: self.opacity_changed.emit(v / 100))
-        self.addWidget(self.opacity_slider)
+        style_layout.addWidget(self.opacity_slider)
 
-        # === Stroke Width ===
-        stroke_label = QLabel(" Width:")
-        self.addWidget(stroke_label)
+        # Separator
+        style_layout.addWidget(self._create_separator_line())
+
+        # Stroke width with label
+        stroke_label = QLabel("Width:")
+        stroke_label.setStyleSheet("font-size: 11px;")
+        style_layout.addWidget(stroke_label)
 
         self.stroke_spin = QSpinBox()
         self.stroke_spin.setMinimum(1)
         self.stroke_spin.setMaximum(20)
         self.stroke_spin.setValue(2)
-        self.stroke_spin.setToolTip("Stroke width")
+        self.stroke_spin.setFixedWidth(50)
+        self.stroke_spin.setToolTip("Stroke width for lines and shapes")
         self.stroke_spin.valueChanged.connect(self.stroke_width_changed)
-        self.addWidget(self.stroke_spin)
+        style_layout.addWidget(self.stroke_spin)
 
-        # === Font (for text boxes) ===
+        self.addWidget(style_container)
+
         self.addSeparator()
+
+        # === Font Controls Group ===
+        font_container = QWidget()
+        font_layout = QHBoxLayout(font_container)
+        font_layout.setContentsMargins(4, 0, 4, 0)
+        font_layout.setSpacing(8)
+
+        font_label = QLabel("Font:")
+        font_label.setStyleSheet("font-size: 11px;")
+        font_layout.addWidget(font_label)
 
         self.font_combo = QFontComboBox()
         self.font_combo.setCurrentFont(QFont("Arial"))
-        self.font_combo.setMaximumWidth(150)
-        self.font_combo.setToolTip("Font family")
-        self.addWidget(self.font_combo)
+        self.font_combo.setFixedWidth(120)
+        self.font_combo.setToolTip("Font family for text annotations")
+        self.font_combo.currentFontChanged.connect(
+            lambda: self.font_changed.emit(self.font_combo.currentFont().family(), self.font_size_spin.value())
+        )
+        font_layout.addWidget(self.font_combo)
+
+        size_label = QLabel("Size:")
+        size_label.setStyleSheet("font-size: 11px;")
+        font_layout.addWidget(size_label)
 
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setMinimum(6)
         self.font_size_spin.setMaximum(72)
         self.font_size_spin.setValue(12)
-        self.font_size_spin.setToolTip("Font size")
+        self.font_size_spin.setFixedWidth(50)
+        self.font_size_spin.setToolTip("Font size for text annotations")
         self.font_size_spin.valueChanged.connect(
             lambda: self.font_changed.emit(self.font_combo.currentFont().family(), self.font_size_spin.value())
         )
-        self.addWidget(self.font_size_spin)
+        font_layout.addWidget(self.font_size_spin)
+
+        self.addWidget(font_container)
+
+    def _create_separator_line(self) -> QFrame:
+        """Create a vertical separator line"""
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.VLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        line.setStyleSheet("color: #ccc;")
+        return line
 
     def _add_tool_button(self, name: str, icon_text: str, mode: ToolMode, tooltip: str):
         """Add a tool button"""
@@ -535,7 +585,7 @@ class AnnotationToolbar(QToolBar):
             }
         """)
 
-        btn.clicked.connect(lambda: self._on_tool_selected(mode))
+        btn.clicked.connect(lambda checked, m=mode: self._on_tool_selected(m))
         self.addWidget(btn)
         self._tool_buttons[mode.value] = btn
 
