@@ -82,11 +82,12 @@ def get_file_hash(filepath: Path) -> str:
 
 def format_file_size(size_bytes: int) -> str:
     """Format file size for display"""
+    size: float = float(size_bytes)
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f} PB"
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"
 
 
 def get_file_info(filepath: Path) -> dict:

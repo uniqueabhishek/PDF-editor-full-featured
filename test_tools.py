@@ -1,10 +1,10 @@
 """Test script for debugging toolbar tools"""
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel
 from PyQt6.QtCore import Qt
 
 # Import our modules
-from ui.toolbar import AnnotationToolbar, ToolMode
+from ui.toolbar import AnnotationToolbar
 from ui.pdf_viewer import PDFViewer, ToolMode as ViewerToolMode
 
 class TestWindow(QMainWindow):

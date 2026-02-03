@@ -93,7 +93,7 @@ class PageDeleteCommand(Command):
     """Command for deleting a page"""
     document: Any
     page_index: int
-    page_data: bytes = None
+    page_data: Optional[bytes] = None
 
     def __init__(self, document, page_index: int):
         super().__init__(CommandType.PAGE_DELETE,
