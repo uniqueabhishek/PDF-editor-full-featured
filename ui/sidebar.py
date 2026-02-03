@@ -157,7 +157,9 @@ class ThumbnailPanel(QScrollArea):
             }
         """)
 
-        self.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        v_scrollbar = self.verticalScrollBar()
+        if v_scrollbar:
+            v_scrollbar.valueChanged.connect(self._on_scroll)
 
     def set_document(self, doc: Optional[fitz.Document]):
         """Set the document for thumbnail generation"""
@@ -194,8 +196,12 @@ class ThumbnailPanel(QScrollArea):
         if not self._doc or not self._thumbnails:
             return
 
-        viewport = self.viewport().rect()
-        scroll_pos = self.verticalScrollBar().value()
+        viewport_widget = self.viewport()
+        v_scrollbar = self.verticalScrollBar()
+        if not viewport_widget or not v_scrollbar:
+            return
+        viewport = viewport_widget.rect()
+        scroll_pos = v_scrollbar.value()
 
         for thumb in self._thumbnails:
             widget_rect = thumb.geometry()
@@ -248,9 +254,10 @@ class ThumbnailPanel(QScrollArea):
 
         # Rotation submenu
         rotate_menu = menu.addMenu("Rotate")
-        rotate_menu.addAction("90° Clockwise", lambda: self.page_rotate_requested.emit(page_num, 90))
-        rotate_menu.addAction("90° Counter-Clockwise", lambda: self.page_rotate_requested.emit(page_num, -90))
-        rotate_menu.addAction("180°", lambda: self.page_rotate_requested.emit(page_num, 180))
+        if rotate_menu:
+            rotate_menu.addAction("90° Clockwise", lambda: self.page_rotate_requested.emit(page_num, 90))
+            rotate_menu.addAction("90° Counter-Clockwise", lambda: self.page_rotate_requested.emit(page_num, -90))
+            rotate_menu.addAction("180°", lambda: self.page_rotate_requested.emit(page_num, 180))
 
         menu.addSeparator()
         menu.addAction("Extract Page", lambda: self.page_extract_requested.emit([page_num]))
@@ -345,7 +352,10 @@ class BookmarkPanel(QTreeWidget):
 
         # Build tree from TOC
         # TOC format: [level, title, page, dest]
-        item_stack = [(0, self.invisibleRootItem())]
+        root_item = self.invisibleRootItem()
+        if not root_item:
+            return
+        item_stack: list[tuple[int, QTreeWidgetItem]] = [(0, root_item)]
 
         for entry in self._toc:
             level = entry[0]
@@ -406,9 +416,12 @@ class BookmarkPanel(QTreeWidget):
 
     def _delete_bookmark(self, item: QTreeWidgetItem):
         """Delete a bookmark"""
-        parent = item.parent() or self.invisibleRootItem()
-        index = parent.indexOfChild(item)
-        parent.takeChild(index)
+        parent = item.parent()
+        if not parent:
+            parent = self.invisibleRootItem()
+        if parent:
+            index = parent.indexOfChild(item)
+            parent.takeChild(index)
         # Would need to update document TOC
 
     def _add_bookmark_dialog(self):
