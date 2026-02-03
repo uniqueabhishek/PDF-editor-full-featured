@@ -223,7 +223,7 @@ class PageWidget(QLabel):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if self._selection_start:
+        if self._selection_start is not None:
             current = event.position()
             # Update selection rectangle
             rect = QRectF(self._selection_start, current).normalized()
@@ -250,7 +250,7 @@ class PageWidget(QLabel):
                 for pt in self._freehand_points:
                     pdf_points.append((pt.x() / scale, pt.y() / scale))
                 self.freehand_created.emit(self.page_num, pdf_points)
-            elif self._selection_rect and scale > 0:
+            elif self._selection_rect is not None and scale > 0:
                 # Convert widget coordinates to PDF page coordinates (72 DPI)
                 page_rect = QRectF(
                     self._selection_rect.x() / scale,
@@ -281,7 +281,7 @@ class PageWidget(QLabel):
                 p2 = self._freehand_points[i]
                 painter.drawLine(int(p1.x()), int(p1.y()),
                                  int(p2.x()), int(p2.y()))
-        elif self._selection_rect:
+        elif self._selection_rect is not None:
             # Draw selection rectangle for other tools
             painter.setPen(QPen(QColor(0, 120, 215), 1))
             painter.setBrush(QBrush(QColor(0, 120, 215, 50)))
@@ -720,8 +720,9 @@ class PDFViewer(QScrollArea):
             QDialogButtonBox.StandardButton.Cancel |
             QDialogButtonBox.StandardButton.Discard
         )
-        buttons.button(QDialogButtonBox.StandardButton.Discard).setText(
-            "Delete Note")
+        discard_btn = buttons.button(QDialogButtonBox.StandardButton.Discard)
+        if discard_btn:
+            discard_btn.setText("Delete Note")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
 
@@ -731,8 +732,9 @@ class PDFViewer(QScrollArea):
         def on_delete():
             delete_clicked[0] = True
             dialog.reject()
-        buttons.button(
-            QDialogButtonBox.StandardButton.Discard).clicked.connect(on_delete)
+
+        if discard_btn:
+            discard_btn.clicked.connect(on_delete)
 
         layout.addWidget(buttons)
 
@@ -839,7 +841,7 @@ class PDFViewer(QScrollArea):
                 rect.x() + rect.width(),
                 rect.y() + rect.height()
             )
-            text = page.get_text("text", clip=fitz_rect)
+            text: str = page.get_text("text", clip=fitz_rect)
             return text.strip()
         except Exception as e:
             print(f"Error extracting text: {e}")
@@ -856,7 +858,7 @@ class PDFViewer(QScrollArea):
                                   rect.y() + rect.height())
 
             # Get quads for text in the area
-            text_dict = page.get_text("dict", clip=fitz_rect)
+            text_dict: dict = page.get_text("dict", clip=fitz_rect)
             quads = []
 
             for block in text_dict.get("blocks", []):
@@ -1413,14 +1415,21 @@ class PDFViewer(QScrollArea):
         # Clear current layout
         while self._layout.count():
             item = self._layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
-            elif item.layout():
-                # Clear nested layout
-                while item.layout().count():
-                    sub_item = item.layout().takeAt(0)
-                    if sub_item.widget():
-                        sub_item.widget().setParent(None)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+            else:
+                nested_layout = item.layout()
+                if nested_layout:
+                    # Clear nested layout
+                    while nested_layout.count():
+                        sub_item = nested_layout.takeAt(0)
+                        if sub_item:
+                            sub_widget = sub_item.widget()
+                            if sub_widget:
+                                sub_widget.setParent(None)
 
         if self._view_mode == ViewMode.CONTINUOUS:
             # All pages in vertical layout
@@ -1468,7 +1477,7 @@ class PDFViewer(QScrollArea):
         # Get text from current page widget's selection
         if self._current_page < len(self._page_widgets):
             page_widget = self._page_widgets[self._current_page]
-            if page_widget._selection_rect:
+            if page_widget._selection_rect is not None:
                 rect = page_widget._selection_rect
                 # Convert widget coordinates to PDF page coordinates (72 DPI)
                 scale = page_widget._zoom * page_widget._render_dpi / 72
@@ -1485,7 +1494,7 @@ class PDFViewer(QScrollArea):
                         page_rect.y() + page_rect.height()
                     )
                     page = self._doc[self._current_page]
-                    text = page.get_text("text", clip=fitz_rect)
+                    text: str = page.get_text("text", clip=fitz_rect)
                     return text.strip()
         return ""
 
@@ -1622,21 +1631,23 @@ class PDFViewer(QScrollArea):
 
         # Zoom options
         zoom_menu = menu.addMenu("Zoom")
-        zoom_menu.addAction("Zoom In", self.zoom_in)
-        zoom_menu.addAction("Zoom Out", self.zoom_out)
-        zoom_menu.addSeparator()
-        zoom_menu.addAction("Fit Width", self.fit_width)
-        zoom_menu.addAction("Fit Page", self.fit_page)
-        zoom_menu.addAction("100%", lambda: self.set_zoom(100))
+        if zoom_menu:
+            zoom_menu.addAction("Zoom In", self.zoom_in)
+            zoom_menu.addAction("Zoom Out", self.zoom_out)
+            zoom_menu.addSeparator()
+            zoom_menu.addAction("Fit Width", self.fit_width)
+            zoom_menu.addAction("Fit Page", self.fit_page)
+            zoom_menu.addAction("100%", lambda: self.set_zoom(100))
 
         menu.addSeparator()
 
         # Navigation
         nav_menu = menu.addMenu("Go To")
-        nav_menu.addAction("First Page", self.first_page)
-        nav_menu.addAction("Previous Page", self.previous_page)
-        nav_menu.addAction("Next Page", self.next_page)
-        nav_menu.addAction("Last Page", self.last_page)
+        if nav_menu:
+            nav_menu.addAction("First Page", self.first_page)
+            nav_menu.addAction("Previous Page", self.previous_page)
+            nav_menu.addAction("Next Page", self.next_page)
+            nav_menu.addAction("Last Page", self.last_page)
 
         menu.addSeparator()
 
