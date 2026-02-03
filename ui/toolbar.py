@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QColor, QFont, QPixmap, QPainter
-from typing import Dict
+from typing import Dict, Any
 from enum import Enum
 
 
@@ -367,7 +367,7 @@ class MainToolbar(QToolBar):
         # === Print ===
         self._add_action("Print", "🖨", "Print (Ctrl+P)", self.print_requested)
 
-    def _add_action(self, name: str, icon_text: str, tooltip: str, signal: pyqtSignal):
+    def _add_action(self, name: str, icon_text: str, tooltip: str, signal: Any):
         """Add an action button to the toolbar"""
         btn = QToolButton()
         btn.setText(icon_text)
