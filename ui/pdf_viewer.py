@@ -14,7 +14,7 @@ from PyQt6.QtGui import (
     QWheelEvent, QMouseEvent, QKeyEvent
 )
 import fitz
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, cast, Any
 from enum import Enum
 from dataclasses import dataclass
 
@@ -841,7 +841,7 @@ class PDFViewer(QScrollArea):
                 rect.x() + rect.width(),
                 rect.y() + rect.height()
             )
-            text: str = page.get_text("text", clip=fitz_rect)
+            text = cast(str, page.get_text("text", clip=fitz_rect))
             return text.strip()
         except Exception as e:
             print(f"Error extracting text: {e}")
@@ -858,7 +858,7 @@ class PDFViewer(QScrollArea):
                                   rect.y() + rect.height())
 
             # Get quads for text in the area
-            text_dict: dict = page.get_text("dict", clip=fitz_rect)
+            text_dict = cast(Dict[str, Any], page.get_text("dict", clip=fitz_rect))
             quads = []
 
             for block in text_dict.get("blocks", []):
@@ -1494,7 +1494,7 @@ class PDFViewer(QScrollArea):
                         page_rect.y() + page_rect.height()
                     )
                     page = self._doc[self._current_page]
-                    text: str = page.get_text("text", clip=fitz_rect)
+                    text = cast(str, page.get_text("text", clip=fitz_rect))
                     return text.strip()
         return ""
 
