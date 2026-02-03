@@ -401,7 +401,9 @@ class PDFViewer(QScrollArea):
         """)
 
         # Connect scroll for page tracking
-        self.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        v_scrollbar = self.verticalScrollBar()
+        if v_scrollbar:
+            v_scrollbar.valueChanged.connect(self._on_scroll)
 
     def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None):
         """Set the document to display"""
@@ -494,8 +496,13 @@ class PDFViewer(QScrollArea):
         if not self._doc or not self._page_widgets:
             return
 
-        viewport = self.viewport().rect()
-        scroll_pos = self.verticalScrollBar().value()
+        viewport_widget = self.viewport()
+        v_scrollbar = self.verticalScrollBar()
+        if not viewport_widget or not v_scrollbar:
+            return
+
+        viewport = viewport_widget.rect()
+        scroll_pos = v_scrollbar.value()
 
         for i, page_widget in enumerate(self._page_widgets):
             widget_rect = page_widget.geometry()
@@ -571,8 +578,13 @@ class PDFViewer(QScrollArea):
         if not self._page_widgets:
             return
 
-        viewport_center = self.viewport().height() / 2
-        scroll_pos = self.verticalScrollBar().value()
+        viewport_widget = self.viewport()
+        v_scrollbar = self.verticalScrollBar()
+        if not viewport_widget or not v_scrollbar:
+            return
+
+        viewport_center = viewport_widget.height() / 2
+        scroll_pos = v_scrollbar.value()
 
         for i, page_widget in enumerate(self._page_widgets):
             widget_rect = page_widget.geometry()
@@ -589,27 +601,34 @@ class PDFViewer(QScrollArea):
         if not self._doc or not self._page_widgets:
             return
 
+        viewport_widget = self.viewport()
+        if not viewport_widget:
+            return
+
         if self._zoom_mode == ZoomMode.FIT_WIDTH:
-            viewport_width = self.viewport().width() - 60  # Account for margins
+            viewport_width = viewport_widget.width() - 60  # Account for margins
             page = self._doc[0]
             page_width = page.rect.width * self._render_dpi / 72
-            self._zoom = viewport_width / page_width
+            if page_width > 0:
+                self._zoom = viewport_width / page_width
 
         elif self._zoom_mode == ZoomMode.FIT_PAGE:
-            viewport = self.viewport().rect()
+            viewport = viewport_widget.rect()
             page = self._doc[0]
             page_width = page.rect.width * self._render_dpi / 72
             page_height = page.rect.height * self._render_dpi / 72
 
-            zoom_w = (viewport.width() - 60) / page_width
-            zoom_h = (viewport.height() - 60) / page_height
-            self._zoom = min(zoom_w, zoom_h)
+            if page_width > 0 and page_height > 0:
+                zoom_w = (viewport.width() - 60) / page_width
+                zoom_h = (viewport.height() - 60) / page_height
+                self._zoom = min(zoom_w, zoom_h)
 
         elif self._zoom_mode == ZoomMode.FIT_HEIGHT:
-            viewport_height = self.viewport().height() - 60
+            viewport_height = viewport_widget.height() - 60
             page = self._doc[0]
             page_height = page.rect.height * self._render_dpi / 72
-            self._zoom = viewport_height / page_height
+            if page_height > 0:
+                self._zoom = viewport_height / page_height
 
         self._page_cache.clear()  # Clear cache on zoom change
         self.zoom_changed.emit(self._zoom * 100)
@@ -657,6 +676,8 @@ class PDFViewer(QScrollArea):
 
     def _check_annotation_click(self, page_num: int, position: QPointF):
         """Check if user clicked on an annotation and handle it"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
             click_point = fitz.Point(position.x(), position.y())
@@ -717,7 +738,7 @@ class PDFViewer(QScrollArea):
 
         result = dialog.exec()
 
-        if delete_clicked[0]:
+        if delete_clicked[0] and self._doc:
             # Delete the annotation
             page = self._doc[page_num]
             page.delete_annot(annot)
@@ -756,7 +777,8 @@ class PDFViewer(QScrollArea):
                 self.text_selected.emit(text)
                 # Copy to clipboard
                 clipboard = QApplication.clipboard()
-                clipboard.setText(text)
+                if clipboard:
+                    clipboard.setText(text)
 
         elif self._tool_mode == ToolMode.HIGHLIGHT:
             self.annotation_create_requested.emit(
@@ -808,6 +830,8 @@ class PDFViewer(QScrollArea):
 
     def _extract_text_from_rect(self, page_num: int, rect: QRectF) -> str:
         """Extract text from a rectangular area on a page"""
+        if not self._doc:
+            return ""
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(
@@ -823,6 +847,8 @@ class PDFViewer(QScrollArea):
 
     def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: str):
         """Create highlight, underline, or strikethrough annotation"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
@@ -902,6 +928,9 @@ class PDFViewer(QScrollArea):
         if not text:
             return
 
+        if not self._doc:
+            return
+
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
@@ -946,6 +975,8 @@ class PDFViewer(QScrollArea):
 
     def _create_shape_annotation(self, page_num: int, rect: QRectF, shape: str):
         """Create rectangle or circle annotation"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
@@ -975,6 +1006,8 @@ class PDFViewer(QScrollArea):
 
     def _create_line_annotation(self, page_num: int, rect: QRectF, arrow: bool = False):
         """Create line or arrow annotation"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
 
@@ -1015,6 +1048,8 @@ class PDFViewer(QScrollArea):
 
     def _create_freehand_annotation_from_points(self, page_num: int, points: list):
         """Create a freehand/ink annotation from actual tracked points"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
 
@@ -1106,6 +1141,9 @@ class PDFViewer(QScrollArea):
             else:
                 stamp_text = "STAMP"
 
+        if not self._doc:
+            return
+
         try:
             page = self._doc[page_num]
 
@@ -1178,6 +1216,9 @@ class PDFViewer(QScrollArea):
         if result != QMessageBox.StandardButton.Yes:
             return
 
+        if not self._doc:
+            return
+
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
@@ -1200,6 +1241,8 @@ class PDFViewer(QScrollArea):
 
     def _erase_annotation_at(self, page_num: int, rect: QRectF):
         """Erase annotations that intersect with the given rect"""
+        if not self._doc:
+            return
         try:
             page = self._doc[page_num]
             fitz_rect = fitz.Rect(rect.x(), rect.y(),
@@ -1415,7 +1458,7 @@ class PDFViewer(QScrollArea):
 
                 self._layout.addLayout(row_layout)
 
-        self._render_visible_pages()
+        self._request_visible_pages()
 
     def get_selected_text(self) -> str:
         """Get currently selected text from selection rectangle"""
@@ -1526,12 +1569,12 @@ class PDFViewer(QScrollArea):
             delta = event.pos() - self._last_pan_pos
             self._last_pan_pos = event.pos()
 
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta.x()
-            )
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta.y()
-            )
+            h_scrollbar = self.horizontalScrollBar()
+            v_scrollbar = self.verticalScrollBar()
+            if h_scrollbar:
+                h_scrollbar.setValue(h_scrollbar.value() - delta.x())
+            if v_scrollbar:
+                v_scrollbar.setValue(v_scrollbar.value() - delta.y())
             event.accept()
         else:
             super().mouseMoveEvent(event)
