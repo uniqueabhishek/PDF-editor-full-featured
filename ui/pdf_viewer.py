@@ -795,12 +795,10 @@ class PDFViewer(QScrollArea):
                 page_num, "strikethrough", rect, {})
 
         elif self._tool_mode == ToolMode.TEXT_BOX:
-            self.annotation_create_requested.emit(
-                page_num, "text_box", rect, {})
+            self._create_text_annotation(page_num, rect, free_text=True)
 
         elif self._tool_mode == ToolMode.STICKY_NOTE:
-            self.annotation_create_requested.emit(
-                page_num, "sticky_note", rect, {})
+            self._create_text_annotation(page_num, rect, free_text=False)
 
         elif self._tool_mode == ToolMode.RECTANGLE:
             self.annotation_create_requested.emit(
@@ -828,7 +826,7 @@ class PDFViewer(QScrollArea):
         # Note: FREEHAND is handled via freehand_created signal with actual points
 
         elif self._tool_mode == ToolMode.STAMP:
-            self.annotation_create_requested.emit(page_num, "stamp", rect, {})
+            self._create_stamp_annotation(page_num, rect)
 
     def _extract_text_from_rect(self, page_num: int, rect: QRectF) -> str:
         """Extract text from a rectangular area on a page"""
@@ -933,47 +931,64 @@ class PDFViewer(QScrollArea):
         if not self._doc:
             return
 
-        try:
-            page = self._doc[page_num]
-            fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                  rect.x() + rect.width(),
-                                  rect.y() + rect.height())
+        # Emit signal to create annotation through history manager (enables undo)
+        annot_type = "text_box" if free_text else "sticky_note"
+        self.annotation_create_requested.emit(
+            page_num, annot_type, rect, {"text": text})
 
-            # Get current annotation color
-            color = (self._annotation_color.redF(),
-                     self._annotation_color.greenF(),
-                     self._annotation_color.blueF())
+    def _create_stamp_annotation(self, page_num: int, rect: QRectF):
+        """Create a stamp annotation with user-selected stamp type"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QDialogButtonBox, QLabel
 
-            if free_text:
-                # Free text annotation (text box) - use selected color for text
-                # Calculate appropriate font size based on rect height
-                auto_fontsize = max(
-                    8, min(self._font_size, int(rect.height() * 0.8)))
-                annot = page.add_freetext_annot(
-                    fitz_rect, text,
-                    fontsize=auto_fontsize,
-                    fontname="helv",
-                    text_color=color,  # Use annotation color for text
-                    fill_color=(1, 1, 1)  # White background
-                )
-                annot.set_opacity(self._annotation_opacity)
-                annot.update()
-            else:
-                # Sticky note - just an icon that shows text on hover/click
-                # This is the standard PDF sticky note behavior
-                point = fitz.Point(rect.x(), rect.y())
-                annot = page.add_text_annot(point, text, icon="Note")
-                annot.set_colors(stroke=color)
-                annot.set_opacity(self._annotation_opacity)
-                annot.update()
+        # Available stamp types
+        stamp_types = [
+            (0, "Approved"),
+            (1, "As Is"),
+            (2, "Confidential"),
+            (3, "Departmental"),
+            (4, "Draft"),
+            (5, "Experimental"),
+            (6, "Expired"),
+            (7, "Final"),
+            (8, "For Comment"),
+            (9, "For Public Release"),
+            (10, "Not Approved"),
+            (11, "Not For Public Release"),
+            (12, "Sold"),
+            (13, "Top Secret"),
+        ]
 
-            self.document_modified.emit()
-            self.refresh()
-            self.annotation_added.emit(
-                page_num, "text", {"text": text, "rect": rect})
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Stamp Type")
+        dialog.setMinimumWidth(300)
 
-        except Exception as e:
-            print(f"Error creating text annotation: {e}")
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Choose a stamp type:")
+        layout.addWidget(label)
+
+        combo = QComboBox()
+        for stamp_id, stamp_name in stamp_types:
+            combo.addItem(stamp_name, userData=stamp_id)
+        layout.addWidget(combo)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        stamp_id = combo.currentData()
+        if stamp_id is None:
+            stamp_id = combo.currentIndex()  # Fallback to index if userData not retrieved
+
+        # Emit signal to create stamp through history manager (enables undo)
+        self.annotation_create_requested.emit(
+            page_num, "stamp", rect, {"stamp_id": stamp_id})
 
     def _create_shape_annotation(self, page_num: int, rect: QRectF, shape: str):
         """Create rectangle or circle annotation"""
@@ -1074,135 +1089,6 @@ class PDFViewer(QScrollArea):
 
         except Exception as e:
             print(f"Error creating freehand annotation: {e}")
-
-    def _create_stamp_annotation(self, page_num: int, rect: QRectF):
-        """Create a stamp annotation"""
-        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QListWidget,
-                                     QLineEdit, QDialogButtonBox, QGroupBox)
-
-        # Create a custom stamp dialog
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Add Stamp")
-        dialog.setMinimumSize(350, 400)
-
-        layout = QVBoxLayout(dialog)
-
-        # Stamp selection group
-        stamp_group = QGroupBox("Select Stamp Type")
-        stamp_layout = QVBoxLayout(stamp_group)
-
-        stamp_list = QListWidget()
-        stamp_list.setStyleSheet("QListWidget::item { padding: 5px; }")
-        stamps = [
-            "✓ APPROVED",
-            "🔒 CONFIDENTIAL",
-            "📝 DRAFT",
-            "✔ FINAL",
-            "✗ NOT APPROVED",
-            "👁 FOR REVIEW",
-            "⊘ VOID",
-            "📋 COPY",
-            "📄 ORIGINAL",
-            "⚠ URGENT",
-            "📊 SAMPLE",
-            "🔄 REVISED"
-        ]
-        for stamp in stamps:
-            stamp_list.addItem(stamp)
-        stamp_list.setCurrentRow(0)
-        stamp_layout.addWidget(stamp_list)
-        layout.addWidget(stamp_group)
-
-        # Custom text group
-        custom_group = QGroupBox("Or Enter Custom Text")
-        custom_layout = QVBoxLayout(custom_group)
-        custom_input = QLineEdit()
-        custom_input.setPlaceholderText("Type custom stamp text here...")
-        custom_layout.addWidget(custom_input)
-        layout.addWidget(custom_group)
-
-        # Buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        # Get stamp text (custom takes priority)
-        stamp_text = custom_input.text().strip()
-        if not stamp_text:
-            current_item = stamp_list.currentItem()
-            if current_item:
-                # Remove emoji prefix for cleaner stamp
-                stamp_text = current_item.text().split(
-                    " ", 1)[-1] if " " in current_item.text() else current_item.text()
-            else:
-                stamp_text = "STAMP"
-
-        if not self._doc:
-            return
-
-        try:
-            page = self._doc[page_num]
-
-            # Calculate stamp size based on text length
-            char_width = 8  # Approximate character width
-            text_width = len(stamp_text) * char_width + 20  # Add padding
-            min_width = max(rect.width(), text_width, 100)
-            min_height = max(rect.height(), 30)
-
-            fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                  rect.x() + min_width,
-                                  rect.y() + min_height)
-
-            # Use annotation color for stamp
-            color = (self._annotation_color.redF(),
-                     self._annotation_color.greenF(),
-                     self._annotation_color.blueF())
-
-            # Calculate font size based on stamp size
-            fontsize = max(12, min(20, int(min_height * 0.6)))
-
-            # Create outer rectangle border first (double border effect)
-            outer_rect = fitz.Rect(
-                fitz_rect.x0 - 2, fitz_rect.y0 - 2,
-                fitz_rect.x1 + 2, fitz_rect.y1 + 2
-            )
-            outer_border = page.add_rect_annot(outer_rect)
-            outer_border.set_colors(stroke=color)
-            outer_border.set_border(width=3)
-            outer_border.set_opacity(self._annotation_opacity)
-            outer_border.update()
-
-            # Create inner rectangle border
-            inner_border = page.add_rect_annot(fitz_rect)
-            inner_border.set_colors(stroke=color)
-            inner_border.set_border(width=1)
-            inner_border.set_opacity(self._annotation_opacity)
-            inner_border.update()
-
-            # Create stamp text - centered in the box
-            annot = page.add_freetext_annot(
-                fitz_rect, stamp_text,
-                fontsize=fontsize,
-                fontname="helv",
-                text_color=color,
-                fill_color=(1, 1, 1)  # White background
-            )
-            annot.set_opacity(self._annotation_opacity)
-            annot.update()
-
-            self.document_modified.emit()
-            self.refresh()
-            self.annotation_added.emit(
-                page_num, "stamp", {"text": stamp_text, "rect": rect})
-
-        except Exception as e:
-            print(f"Error creating stamp annotation: {e}")
 
     def _create_redaction_annotation(self, page_num: int, rect: QRectF):
         """Create redaction annotation"""

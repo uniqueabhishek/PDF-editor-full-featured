@@ -16,7 +16,17 @@
       "Bash(dir:*)",
       "Bash(python:*)",
       "Bash(cmd /c dir /b)",
-      "Bash(\".\\\\.venv\\\\Scripts\\\\python.exe\" main.py)"
+      "Bash(\".\\\\.venv\\\\Scripts\\\\python.exe\" main.py)",
+      "Bash(\".\\\\.venv\\\\Scripts\\\\python.exe\" -m py_compile ui/pdf_viewer.py ui/main_window.py)",
+      "Bash(\".\\\\.venv\\\\Scripts\\\\python.exe\" -m py_compile ui/pdf_viewer.py)",
+      "Bash(for f in ui/dialogs/*.py)",
+      "Bash(do echo \"Checking $f\")",
+      "Bash(done)",
+      "Bash(for f in core/operations/*.py)",
+      "Bash(git -C \"d:\\\\D Desktop\\\\PDF editor full featured\" status)",
+      "Bash(git -C \"d:\\\\D Desktop\\\\PDF editor full featured\" diff)",
+      "Bash(git -C \"d:\\\\D Desktop\\\\PDF editor full featured\" log --oneline -10)",
+      "Bash(git -C \"d:\\\\D Desktop\\\\PDF editor full featured\" add core/pdf_document.py ui/main_window.py ui/pdf_viewer.py utils/history.py .claude/settings.local.json)"
     ]
   }
 }

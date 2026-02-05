@@ -2,7 +2,7 @@
 Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -203,57 +203,125 @@ class AnnotationAddCommand(Command):
         self.annot_data = annot_data or {}
         self._annot_xref = 0
 
+    def _rect_to_tuple(self, rect: Any) -> Tuple[float, float, float, float]:
+        """Convert QRectF or similar to tuple (x0, y0, x1, y1)"""
+        if rect is None:
+            return (0, 0, 0, 0)
+        # Check if it's a QRectF (has x(), y(), width(), height() methods)
+        if hasattr(rect, 'x') and callable(rect.x):
+            return (rect.x(), rect.y(), rect.x() + rect.width(), rect.y() + rect.height())
+        # Already a tuple or list
+        if isinstance(rect, (tuple, list)) and len(rect) >= 4:
+            return (rect[0], rect[1], rect[2], rect[3])
+        return (0, 0, 0, 0)
+
+    def _create_stamp_annotation(self, rect: Tuple[float, float, float, float]) -> Any:
+        """Create a stamp annotation"""
+        try:
+            import fitz
+            page = self.document.get_page(self.page_index)
+            # PyMuPDF stamp constants use fitz.STAMP_* constants
+            stamp_id = self.annot_data.get("stamp_id", 0)  # Default to "Approved"
+            # Map our IDs to fitz stamp constants
+            stamp_map = {
+                0: fitz.STAMP_Approved,
+                1: fitz.STAMP_AsIs,
+                2: fitz.STAMP_Confidential,
+                3: fitz.STAMP_Departmental,
+                4: fitz.STAMP_Draft,
+                5: fitz.STAMP_Experimental,
+                6: fitz.STAMP_Expired,
+                7: fitz.STAMP_Final,
+                8: fitz.STAMP_ForComment,
+                9: fitz.STAMP_ForPublicRelease,
+                10: fitz.STAMP_NotApproved,
+                11: fitz.STAMP_NotForPublicRelease,
+                12: fitz.STAMP_Sold,
+                13: fitz.STAMP_TopSecret,
+            }
+            fitz_stamp = stamp_map.get(stamp_id, fitz.STAMP_Approved)
+            annot = page.add_stamp_annot(fitz.Rect(rect), stamp=fitz_stamp)
+            annot.update()
+            # Mark document as modified
+            self.document._is_modified = True
+            return annot
+        except Exception as e:
+            print(f"Stamp error: {e}")
+            return None
+
     def execute(self) -> bool:
         try:
             annot = None
+            rect_tuple = self._rect_to_tuple(self.rect)
             if self.annot_type == "highlight":
-                annot = self.document.add_highlight(self.page_index, self.rect)
+                annot = self.document.add_highlight(self.page_index, rect_tuple)
             elif self.annot_type == "underline":
-                annot = self.document.add_underline(self.page_index, self.rect)
+                annot = self.document.add_underline(self.page_index, rect_tuple)
             elif self.annot_type == "strikethrough":
                 annot = self.document.add_strikethrough(
-                    self.page_index, self.rect)
+                    self.page_index, rect_tuple)
             elif self.annot_type == "rectangle":
                 annot = self.document.add_rect_annotation(
-                    self.page_index, self.rect)
+                    self.page_index, rect_tuple)
             elif self.annot_type == "circle":
                 annot = self.document.add_circle_annotation(
-                    self.page_index, self.rect)
+                    self.page_index, rect_tuple)
             elif self.annot_type == "line":
-                # Expecting 'end' in annot_data or rect as start/end
-                pass
+                # Use rect corners as start/end points for line
+                start = (rect_tuple[0], rect_tuple[1])
+                end = (rect_tuple[2], rect_tuple[3])
+                arrow = self.annot_data.get("arrow", False)
+                annot = self.document.add_line_annotation(
+                    self.page_index, start, end)
+                if arrow and annot:
+                    # Add arrow head to the end
+                    annot.set_line_ends(0, 5)  # 0=none, 5=closed arrow
+                    annot.update()
             elif self.annot_type == "ink":
-                # Expecting 'points' in annot_data
+                # Expecting 'points' in annot_data as list of (x, y) tuples
                 if self.annot_data and "points" in self.annot_data:
-                    annot = self.document.add_ink_annotation(
-                        self.page_index, self.annot_data["points"])
+                    points = self.annot_data["points"]
+                    # Points should be a flat list like [(x1,y1), (x2,y2), ...]
+                    # Convert to list of tuples if needed and wrap as single stroke
+                    if points and len(points) > 0:
+                        # Ensure each point is a tuple of floats
+                        stroke = [(float(p[0]), float(p[1])) for p in points]
+                        strokes = [stroke]
+                        annot = self.document.add_ink_annotation(
+                            self.page_index, strokes)
+            elif self.annot_type == "stamp":
+                # Create a stamp annotation using the rect
+                annot = self._create_stamp_annotation(rect_tuple)
 
             # Text annotations
             elif self.annot_type == "text_box":
+                text = self.annot_data.get("text", "Text")
                 annot = self.document.add_freetext(
-                    self.page_index, self.rect, "Text")
+                    self.page_index, rect_tuple, text)
             elif self.annot_type == "sticky_note":
                 # Rect to point
-                point = (self.rect[0], self.rect[1])
+                point = (rect_tuple[0], rect_tuple[1])
+                text = self.annot_data.get("text", "")
                 annot = self.document.add_text_annotation(
-                    self.page_index, point, "")
+                    self.page_index, point, text)
 
             if annot:
                 self._annot_xref = annot.xref
                 return True
             return False
-        except Exception as e:
-            print(f"Execute error: {e}")
+        except Exception:
             return False
 
     def undo(self) -> bool:
         try:
             if self._annot_xref:
                 page = self.document.get_page(self.page_index)
-                for annot in page.annots():
-                    if annot.xref == self._annot_xref:
-                        page.delete_annot(annot)
-                        return True
+                annots = page.annots()
+                if annots:
+                    for annot in list(annots):
+                        if annot.xref == self._annot_xref:
+                            page.delete_annot(annot)
+                            return True
             return False
         except Exception:
             return False

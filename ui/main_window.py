@@ -738,10 +738,14 @@ Encrypted: {metadata.encryption}
         if self._history_manager.can_undo():
             desc = self._history_manager.get_undo_description()
             if self._history_manager.undo():
-                self._load_document_to_viewer()
+                # Clear page cache to force re-render
+                self._viewer._page_cache.clear()
+                self._viewer.refresh()
                 self._is_modified = True
                 self._update_title()
                 self._statusbar.showMessage(f"Undo: {desc}", 2000)
+            else:
+                self._statusbar.showMessage("Undo failed", 2000)
         else:
             self._statusbar.showMessage("Nothing to undo", 2000)
 
@@ -750,10 +754,14 @@ Encrypted: {metadata.encryption}
         if self._history_manager.can_redo():
             desc = self._history_manager.get_redo_description()
             if self._history_manager.redo():
-                self._load_document_to_viewer()
+                # Clear page cache to force re-render
+                self._viewer._page_cache.clear()
+                self._viewer.refresh()
                 self._is_modified = True
                 self._update_title()
                 self._statusbar.showMessage(f"Redo: {desc}", 2000)
+            else:
+                self._statusbar.showMessage("Redo failed", 2000)
         else:
             self._statusbar.showMessage("Nothing to redo", 2000)
 
@@ -1654,6 +1662,8 @@ Encrypted: {metadata.encryption}
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage(f"Added {annot_type} annotation", 2000)
+        else:
+            self._statusbar.showMessage(f"Failed to add {annot_type} annotation", 2000)
 
     # ==================== Helpers ====================
 

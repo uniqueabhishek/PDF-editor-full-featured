@@ -796,9 +796,9 @@ class PDFDocument:
                            width: float = 2) -> fitz.Annot:
         """Add a freehand drawing (ink) annotation"""
         page = self.get_page(page_num)
-        annot = page.add_ink_annot([
-            [fitz.Point(p) for p in stroke] for stroke in points
-        ])
+        # PyMuPDF expects list of lists of point sequences
+        # Each point can be a tuple (x, y) or fitz.Point
+        annot = page.add_ink_annot(points)
         annot.set_colors(stroke=color)
         annot.set_border(width=int(width))
         annot.update()
