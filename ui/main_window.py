@@ -1801,7 +1801,6 @@ Encrypted: {metadata.encryption}
         if not self._document.is_open:
             QMessageBox.information(self, "No Document", "Please open a PDF first.")
             return
-        from ui.toolbar import ToolMode
         self._viewer.set_tool_mode(ToolMode.REDACT)
         self._statusbar.showMessage(
             "Erase Selection: draw a rectangle on the page to permanently erase that area.", 0
