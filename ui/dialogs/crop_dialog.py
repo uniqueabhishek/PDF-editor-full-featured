@@ -3,205 +3,323 @@ Ultra PDF Editor - Crop Page Dialog
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSpinBox, QGroupBox, QCheckBox
+    QSpinBox, QGroupBox, QRadioButton, QButtonGroup, QFrame,
 )
-from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor
+from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QCursor
 from typing import Tuple, Optional
 
 
 class CropPreview(QLabel):
-    """Widget for showing crop preview"""
+    """Page preview widget with interactive drag-to-crop.
+
+    Drag on the preview to define a crop area. The signal ``crop_dragged``
+    fires on mouse-release with the resulting margins (normalised 0-1) from
+    each edge: (left, top, right, bottom).
+    """
+
+    crop_dragged = pyqtSignal(float, float, float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
-        self._crop_rect = QRectF(0, 0, 1, 1)  # Normalized (0-1)
+        # Normalised crop rect (fraction of page), default = full page
+        self._crop_rect = QRectF(0.0, 0.0, 1.0, 1.0)
+        # Widget-space rectangle where the scaled page image is drawn
         self._page_rect = QRectF()
 
-        self.setMinimumSize(300, 400)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setStyleSheet("background-color: #404040; border: 1px solid #666;")
+        self._dragging = False
+        self._drag_start: Optional[QPointF] = None
+        self._drag_current: Optional[QPointF] = None
 
-    def set_pixmap(self, pixmap: QPixmap):
-        """Set the page preview pixmap"""
+        self.setMinimumSize(320, 420)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet("background-color: #3a3a3a; border: 1px solid #666;")
+        self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        self.setMouseTracking(True)
+
+    # ------------------------------------------------------------------ setters
+
+    def set_pixmap(self, pixmap: QPixmap) -> None:
         self._pixmap = pixmap
         self.update()
 
-    def set_crop_margins(self, left: float, top: float, right: float, bottom: float):
-        """Set crop margins (0-1 normalized)"""
-        self._crop_rect = QRectF(left, top, 1 - left - right, 1 - top - bottom)
+    def set_crop_margins(
+        self, left: float, top: float, right: float, bottom: float
+    ) -> None:
+        """Set crop rect from per-edge margins (each 0-1 fraction of page size)."""
+        w = max(0.0, 1.0 - left - right)
+        h = max(0.0, 1.0 - top - bottom)
+        self._crop_rect = QRectF(left, top, w, h)
         self.update()
 
-    def paintEvent(self, event):
-        super().paintEvent(event)
+    # ------------------------------------------------------------------ mouse
 
+    def mousePressEvent(self, event) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._pixmap
+            and not self._page_rect.isEmpty()
+        ):
+            self._dragging = True
+            self._drag_start = self._clamp(event.position())
+            self._drag_current = self._drag_start
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._dragging:
+            self._drag_current = self._clamp(event.position())
+            self._rebuild_crop_rect()
+            self.update()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            self._drag_current = self._clamp(event.position())
+            self._rebuild_crop_rect()
+            self._emit_margins()
+            self.update()
+
+    def _clamp(self, pos: QPointF) -> QPointF:
+        """Clamp a widget-space point to the page rectangle."""
+        if self._page_rect.isEmpty():
+            return pos
+        x = max(self._page_rect.left(), min(self._page_rect.right(), pos.x()))
+        y = max(self._page_rect.top(), min(self._page_rect.bottom(), pos.y()))
+        return QPointF(x, y)
+
+    def _rebuild_crop_rect(self) -> None:
+        if not self._drag_start or not self._drag_current or self._page_rect.isEmpty():
+            return
+        pr = self._page_rect
+        x0n = (min(self._drag_start.x(), self._drag_current.x()) - pr.x()) / pr.width()
+        y0n = (min(self._drag_start.y(), self._drag_current.y()) - pr.y()) / pr.height()
+        x1n = (max(self._drag_start.x(), self._drag_current.x()) - pr.x()) / pr.width()
+        y1n = (max(self._drag_start.y(), self._drag_current.y()) - pr.y()) / pr.height()
+        x0n, y0n = max(0.0, x0n), max(0.0, y0n)
+        x1n, y1n = min(1.0, x1n), min(1.0, y1n)
+        self._crop_rect = QRectF(x0n, y0n, x1n - x0n, y1n - y0n)
+
+    def _emit_margins(self) -> None:
+        r = self._crop_rect
+        self.crop_dragged.emit(
+            r.left(),          # left margin (fraction from left edge)
+            r.top(),           # top margin (fraction from top edge)
+            1.0 - r.right(),   # right margin (fraction from right edge)
+            1.0 - r.bottom(),  # bottom margin (fraction from bottom edge)
+        )
+
+    # ------------------------------------------------------------------ paint
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
         if not self._pixmap:
             return
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Calculate scaled pixmap size to fit widget
-        widget_rect = self.rect()
+        wr = self.rect()
         scaled = self._pixmap.scaled(
-            widget_rect.size(),
+            wr.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
+        ox = (wr.width()  - scaled.width())  // 2
+        oy = (wr.height() - scaled.height()) // 2
+        self._page_rect = QRectF(ox, oy, scaled.width(), scaled.height())
+        painter.drawPixmap(ox, oy, scaled)
 
-        # Center the pixmap
-        x = (widget_rect.width() - scaled.width()) // 2
-        y = (widget_rect.height() - scaled.height()) // 2
-        self._page_rect = QRectF(x, y, scaled.width(), scaled.height())
+        cr = self._crop_rect
+        if cr.width() > 0.001 and cr.height() > 0.001:
+            cx = ox + cr.x() * scaled.width()
+            cy = oy + cr.y() * scaled.height()
+            cw = cr.width()  * scaled.width()
+            ch = cr.height() * scaled.height()
 
-        # Draw the pixmap
-        painter.drawPixmap(int(x), int(y), scaled)
+            # Darken everything outside the crop area
+            dark = QColor(0, 0, 0, 145)
+            painter.fillRect(ox,           oy,      scaled.width(), int(cy - oy),                     dark)
+            painter.fillRect(ox,           int(cy + ch), scaled.width(), int(oy + scaled.height() - cy - ch), dark)
+            painter.fillRect(ox,           int(cy), int(cx - ox),              int(ch), dark)
+            painter.fillRect(int(cx + cw), int(cy), int(ox + scaled.width() - cx - cw), int(ch), dark)
 
-        # Draw crop overlay (darken outside crop area)
-        crop_x = x + self._crop_rect.x() * scaled.width()
-        crop_y = y + self._crop_rect.y() * scaled.height()
-        crop_w = self._crop_rect.width() * scaled.width()
-        crop_h = self._crop_rect.height() * scaled.height()
+            # Crop border
+            painter.setPen(QPen(QColor(255, 80, 80), 2))
+            painter.drawRect(int(cx), int(cy), int(cw), int(ch))
 
-        # Draw darkened areas
-        dark = QColor(0, 0, 0, 128)
-
-        # Top
-        painter.fillRect(int(x), int(y), int(scaled.width()), int(crop_y - y), dark)
-        # Bottom
-        painter.fillRect(int(x), int(crop_y + crop_h), int(scaled.width()),
-                        int(scaled.height() - crop_y - crop_h + y), dark)
-        # Left
-        painter.fillRect(int(x), int(crop_y), int(crop_x - x), int(crop_h), dark)
-        # Right
-        painter.fillRect(int(crop_x + crop_w), int(crop_y),
-                        int(scaled.width() - crop_x - crop_w + x), int(crop_h), dark)
-
-        # Draw crop rectangle
-        pen = QPen(QColor(255, 100, 100), 2)
-        painter.setPen(pen)
-        painter.drawRect(int(crop_x), int(crop_y), int(crop_w), int(crop_h))
+            # Corner handles
+            hs = 8
+            painter.setBrush(QColor(255, 80, 80))
+            painter.setPen(Qt.PenStyle.NoPen)
+            for hx, hy in [
+                (cx,            cy),
+                (cx + cw - hs,  cy),
+                (cx,            cy + ch - hs),
+                (cx + cw - hs,  cy + ch - hs),
+            ]:
+                painter.drawRect(int(hx), int(hy), hs, hs)
 
         painter.end()
 
 
 class CropDialog(QDialog):
-    """Dialog for cropping PDF pages"""
+    """Dialog for cropping PDF pages with live drag-to-crop preview."""
 
-    def __init__(self, pixmap: QPixmap, page_width: float, page_height: float, parent=None):
+    def __init__(
+        self,
+        pixmap: QPixmap,
+        page_width: float,
+        page_height: float,
+        parent=None,
+    ):
         super().__init__(parent)
-        self._page_width = page_width
+        self._page_width  = page_width
         self._page_height = page_height
 
         self.setWindowTitle("Crop Page")
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
-        self.setMinimumSize(500, 600)
-
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
+        self.setMinimumSize(540, 650)
         self._setup_ui()
         self._preview.set_pixmap(pixmap)
         self._update_preview()
 
-    def _setup_ui(self):
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        hint = QLabel("Drag on the preview to set the crop area, or enter values below.")
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
 
         # Preview
         self._preview = CropPreview()
+        self._preview.crop_dragged.connect(self._on_crop_dragged)
         layout.addWidget(self._preview, 1)
 
-        # Margin controls
-        margins_group = QGroupBox("Crop Margins (in points)")
-        margins_layout = QHBoxLayout(margins_group)
+        # Dimensions readout
+        self._dims_label = QLabel()
+        self._dims_label.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self._dims_label)
+        self._update_dims_label(0.0, 0.0, self._page_width, self._page_height)
 
-        # Left margin
-        left_layout = QVBoxLayout()
-        left_layout.addWidget(QLabel("Left:"))
-        self._left_spin = QSpinBox()
-        self._left_spin.setRange(0, int(self._page_width / 2))
-        self._left_spin.setValue(0)
-        self._left_spin.valueChanged.connect(self._update_preview)
-        left_layout.addWidget(self._left_spin)
-        margins_layout.addLayout(left_layout)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(sep)
 
-        # Top margin
-        top_layout = QVBoxLayout()
-        top_layout.addWidget(QLabel("Top:"))
-        self._top_spin = QSpinBox()
-        self._top_spin.setRange(0, int(self._page_height / 2))
-        self._top_spin.setValue(0)
-        self._top_spin.valueChanged.connect(self._update_preview)
-        top_layout.addWidget(self._top_spin)
-        margins_layout.addLayout(top_layout)
-
-        # Right margin
-        right_layout = QVBoxLayout()
-        right_layout.addWidget(QLabel("Right:"))
-        self._right_spin = QSpinBox()
-        self._right_spin.setRange(0, int(self._page_width / 2))
-        self._right_spin.setValue(0)
-        self._right_spin.valueChanged.connect(self._update_preview)
-        right_layout.addWidget(self._right_spin)
-        margins_layout.addLayout(right_layout)
-
-        # Bottom margin
-        bottom_layout = QVBoxLayout()
-        bottom_layout.addWidget(QLabel("Bottom:"))
-        self._bottom_spin = QSpinBox()
-        self._bottom_spin.setRange(0, int(self._page_height / 2))
-        self._bottom_spin.setValue(0)
-        self._bottom_spin.valueChanged.connect(self._update_preview)
-        bottom_layout.addWidget(self._bottom_spin)
-        margins_layout.addLayout(bottom_layout)
-
+        # Margin spinboxes
+        margins_group = QGroupBox("Crop Margins (points)")
+        margins_row = QHBoxLayout(margins_group)
+        for attr, label, max_val in [
+            ("_left_spin",   "Left:",   int(self._page_width  / 2)),
+            ("_top_spin",    "Top:",    int(self._page_height / 2)),
+            ("_right_spin",  "Right:",  int(self._page_width  / 2)),
+            ("_bottom_spin", "Bottom:", int(self._page_height / 2)),
+        ]:
+            margins_row.addWidget(QLabel(label))
+            spin = QSpinBox()
+            spin.setRange(0, max_val)
+            spin.setValue(0)
+            spin.setFixedWidth(72)
+            spin.valueChanged.connect(self._update_preview)
+            setattr(self, attr, spin)
+            margins_row.addWidget(spin)
         layout.addWidget(margins_group)
 
-        # Apply to all pages option
-        self._apply_all = QCheckBox("Apply to all pages")
-        layout.addWidget(self._apply_all)
+        # Apply-to radio buttons
+        apply_group = QGroupBox("Apply To")
+        apply_row = QHBoxLayout(apply_group)
+        self._rb_group = QButtonGroup(self)
+        self._rb_current = QRadioButton("Current page only")
+        self._rb_all     = QRadioButton("All pages")
+        self._rb_current.setChecked(True)
+        self._rb_group.addButton(self._rb_current, 0)
+        self._rb_group.addButton(self._rb_all,     1)
+        apply_row.addWidget(self._rb_current)
+        apply_row.addWidget(self._rb_all)
+        apply_row.addStretch()
+        layout.addWidget(apply_group)
 
         # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
         reset_btn = QPushButton("Reset")
         reset_btn.clicked.connect(self._reset)
-        button_layout.addWidget(reset_btn)
-
+        btn_row.addWidget(reset_btn)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
+        btn_row.addWidget(cancel_btn)
         crop_btn = QPushButton("Crop")
-        crop_btn.clicked.connect(self.accept)
         crop_btn.setDefault(True)
-        button_layout.addWidget(crop_btn)
+        crop_btn.clicked.connect(self.accept)
+        btn_row.addWidget(crop_btn)
+        layout.addLayout(btn_row)
 
-        layout.addLayout(button_layout)
+    # ------------------------------------------------------------------
 
-    def _update_preview(self):
-        """Update crop preview"""
-        left = self._left_spin.value() / self._page_width
-        top = self._top_spin.value() / self._page_height
-        right = self._right_spin.value() / self._page_width
+    def _update_dims_label(
+        self, x0: float, y0: float, x1: float, y1: float
+    ) -> None:
+        w_pt = max(0.0, x1 - x0)
+        h_pt = max(0.0, y1 - y0)
+        self._dims_label.setText(
+            f"Crop area: {w_pt:.0f} × {h_pt:.0f} pt"
+            f"  ({w_pt / 72:.2f}\" × {h_pt / 72:.2f}\")"
+        )
+
+    def _on_crop_dragged(
+        self, left_n: float, top_n: float, right_n: float, bottom_n: float
+    ) -> None:
+        """Callback from preview drag — block spinbox signals to avoid recursion."""
+        for spin in (
+            self._left_spin, self._top_spin,
+            self._right_spin, self._bottom_spin,
+        ):
+            spin.blockSignals(True)
+
+        self._left_spin.setValue(int(left_n  * self._page_width))
+        self._top_spin.setValue(int(top_n    * self._page_height))
+        self._right_spin.setValue(int(right_n  * self._page_width))
+        self._bottom_spin.setValue(int(bottom_n * self._page_height))
+
+        for spin in (
+            self._left_spin, self._top_spin,
+            self._right_spin, self._bottom_spin,
+        ):
+            spin.blockSignals(False)
+
+        x0, y0, x1, y1 = self.get_crop_rect()
+        self._update_dims_label(x0, y0, x1, y1)
+
+    def _update_preview(self) -> None:
+        left   = self._left_spin.value()   / self._page_width
+        top    = self._top_spin.value()    / self._page_height
+        right  = self._right_spin.value()  / self._page_width
         bottom = self._bottom_spin.value() / self._page_height
-
         self._preview.set_crop_margins(left, top, right, bottom)
+        x0, y0, x1, y1 = self.get_crop_rect()
+        self._update_dims_label(x0, y0, x1, y1)
 
-    def _reset(self):
-        """Reset all margins to zero"""
-        self._left_spin.setValue(0)
-        self._top_spin.setValue(0)
-        self._right_spin.setValue(0)
-        self._bottom_spin.setValue(0)
+    def _reset(self) -> None:
+        for spin in (
+            self._left_spin, self._top_spin,
+            self._right_spin, self._bottom_spin,
+        ):
+            spin.setValue(0)
+
+    # ------------------------------------------------------------------ Public API
 
     def get_crop_rect(self) -> Tuple[float, float, float, float]:
-        """Get crop rectangle (x0, y0, x1, y1) in page coordinates"""
-        x0 = self._left_spin.value()
-        y0 = self._top_spin.value()
-        x1 = self._page_width - self._right_spin.value()
+        """Return (x0, y0, x1, y1) in page points."""
+        x0 = float(self._left_spin.value())
+        y0 = float(self._top_spin.value())
+        x1 = self._page_width  - self._right_spin.value()
         y1 = self._page_height - self._bottom_spin.value()
         return (x0, y0, x1, y1)
 
     def apply_to_all_pages(self) -> bool:
-        """Check if crop should be applied to all pages"""
-        return self._apply_all.isChecked()
+        return self._rb_all.isChecked()

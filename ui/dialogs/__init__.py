@@ -7,7 +7,9 @@ from .find_dialog import FindDialog, FindReplaceDialog
 from .extract_pages_dialog import ExtractPagesDialog
 from .crop_dialog import CropDialog
 from .header_footer_dialog import HeaderFooterDialog
+from .remove_header_footer_dialog import RemoveHeaderFooterDialog
 from .batch_dialog import BatchDialog
+from .clean_pdf_dialog import CleanPDFDialog
 
 __all__ = [
     'MergeDialog',
@@ -18,5 +20,7 @@ __all__ = [
     'ExtractPagesDialog',
     'CropDialog',
     'HeaderFooterDialog',
+    'RemoveHeaderFooterDialog',
     'BatchDialog',
+    'CleanPDFDialog',
 ]

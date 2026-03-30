@@ -305,6 +305,10 @@ class MainToolbar(QToolBar):
     search_next = pyqtSignal()
     search_prev = pyqtSignal()
 
+    # Cleanup signals
+    clean_pdf_requested            = pyqtSignal()
+    remove_header_footer_requested = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__("Main Toolbar", parent)
         self.setMovable(False)
@@ -367,6 +371,9 @@ class MainToolbar(QToolBar):
         # === Print ===
         self._add_action("Print", "🖨", "Print (Ctrl+P)", self.print_requested)
 
+        self.addSeparator()
+
+
     def _add_action(self, name: str, icon_text: str, tooltip: str, signal: Any):
         """Add an action button to the toolbar"""
         btn = QToolButton()
@@ -391,6 +398,33 @@ class MainToolbar(QToolBar):
             }
         """)
 
+        self.addWidget(btn)
+        return btn
+
+    def _add_text_action(self, name: str, label: str, tooltip: str, signal: Any):
+        """Add a text-label button (used for cleanup actions)."""
+        btn = QToolButton()
+        btn.setText(label)
+        btn.setToolTip(tooltip)
+        btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        btn.clicked.connect(signal.emit)
+        btn.setStyleSheet("""
+            QToolButton {
+                font-size: 11px;
+                font-weight: bold;
+                padding: 4px 8px;
+                border: 1px solid #bbb;
+                border-radius: 4px;
+                color: #c0392b;
+            }
+            QToolButton:hover {
+                background-color: #fdecea;
+                border-color: #c0392b;
+            }
+            QToolButton:pressed {
+                background-color: #f5b7b1;
+            }
+        """)
         self.addWidget(btn)
         return btn
 
@@ -456,7 +490,7 @@ class AnnotationToolbar(QToolBar):
         self.addSeparator()
 
         # === Redact & Stamp ===
-        self._add_tool_button("Redact", "█", ToolMode.REDACT, "Redact content")
+        self._add_tool_button("Erase Selection", "Erase Selection", ToolMode.REDACT, "Draw a rectangle to permanently erase that area")
         self._add_tool_button("Stamp", "🔖", ToolMode.STAMP, "Add stamp")
 
         self.addSeparator()

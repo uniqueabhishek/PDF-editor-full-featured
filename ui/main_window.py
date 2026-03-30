@@ -19,7 +19,7 @@ from .sidebar import Sidebar
 from .toolbar import MainToolbar, AnnotationToolbar
 from .dialogs import (
     FindDialog, FindReplaceDialog, ExtractPagesDialog, CropDialog,
-    HeaderFooterDialog, BatchDialog
+    HeaderFooterDialog, RemoveHeaderFooterDialog, BatchDialog
 )
 from core.pdf_document import PDFDocument
 from config import config, UserSettings
@@ -349,6 +349,20 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._create_action(
             "Batch Process...", self._batch_process))
 
+        # === Trim Header/Footer Menu ===
+        hf_menu = menubar.addMenu("&Trim Header/Footer")
+        assert hf_menu is not None
+        _manual_act = self._create_action("Manual Trim", self._remove_header_footer)
+        _manual_act.setStatusTip("Permanently erase a fixed-height strip from the top and/or bottom of selected pages")
+        hf_menu.addAction(_manual_act)
+        _smart_act = self._create_action("Smart Detection && Trim", self._clean_pdf)
+        _smart_act.setStatusTip("Scan all pages for repeating text in margins, review findings, and remove what you select")
+        hf_menu.addAction(_smart_act)
+        hf_menu.addSeparator()
+        _erase_act = self._create_action("Erase Selection", self._activate_erase_selection)
+        _erase_act.setStatusTip("Draw a rectangle on the page to permanently erase that area")
+        hf_menu.addAction(_erase_act)
+
         # === Help Menu ===
         help_menu = menubar.addMenu("&Help")
         assert help_menu is not None
@@ -394,6 +408,8 @@ class MainWindow(QMainWindow):
         self._main_toolbar.next_page_requested.connect(self._viewer.next_page)
         self._main_toolbar.last_page_requested.connect(self._viewer.last_page)
         self._main_toolbar.search_requested.connect(self._search)
+        self._main_toolbar.clean_pdf_requested.connect(self._clean_pdf)
+        self._main_toolbar.remove_header_footer_requested.connect(self._remove_header_footer)
 
         # Annotation toolbar signals
         self._annotation_toolbar.tool_changed.connect(self._on_tool_changed)
@@ -1322,73 +1338,66 @@ Encrypted: {metadata.encryption}
                 page_range = dialog.get_page_range()
                 margins = dialog.get_margins()
 
-                fontsize = font_settings['size']
-                margin_top = margins['top']
+                fontsize      = font_settings['size']
+                fontname      = font_settings['fitz_font']
+                font_color    = font_settings['color']
+                margin_top    = margins['top']
                 margin_bottom = margins['bottom']
-                margin_side = margins['side']
+                margin_side   = margins['side']
+                filename_str  = self._current_file.name if self._current_file else ""
+                today_str     = datetime.datetime.now().strftime("%Y-%m-%d")
 
                 for i in range(page_range[0], page_range[1] + 1):
                     page = doc[i]
                     rect = page.rect
 
-                    # Process variables in text
-                    def process_text(text: str) -> str:
-                        text = text.replace("{page}", str(i + 1))
-                        text = text.replace("{total}", str(
-                            self._document.page_count))
-                        text = text.replace(
-                            "{date}", datetime.datetime.now().strftime("%Y-%m-%d"))
-                        return text
+                    def process_text(raw: str) -> str:
+                        return (
+                            raw
+                            .replace("{page}",     str(i + 1))
+                            .replace("{total}",    str(self._document.page_count))
+                            .replace("{date}",     today_str)
+                            .replace("{filename}", filename_str)
+                        )
+
+                    def insert(pt: "fitz.Point", raw: str) -> None:
+                        page.insert_text(
+                            pt, process_text(raw),
+                            fontsize=fontsize,
+                            fontname=fontname,
+                            color=font_color,
+                        )
+
+                    def text_w(raw: str) -> float:
+                        return fitz.get_text_length(
+                            process_text(raw),
+                            fontname=fontname,
+                            fontsize=fontsize,
+                        )
 
                     # Add header
-                    if header_texts['left'] or header_texts['center'] or header_texts['right']:
-                        y_pos = margin_top
-
+                    if any(header_texts.values()):
+                        y = margin_top
                         if header_texts['left']:
-                            text = process_text(header_texts['left'])
-                            page.insert_text(
-                                fitz.Point(margin_side, y_pos),
-                                text, fontsize=fontsize
-                            )
+                            insert(fitz.Point(margin_side, y), header_texts['left'])
                         if header_texts['center']:
-                            text = process_text(header_texts['center'])
-                            text_width = fitz.get_text_length(
-                                text, fontsize=fontsize)
-                            x_pos = (rect.width - text_width) / 2
-                            page.insert_text(fitz.Point(
-                                x_pos, y_pos), text, fontsize=fontsize)
+                            insert(fitz.Point((rect.width - text_w(header_texts['center'])) / 2, y),
+                                   header_texts['center'])
                         if header_texts['right']:
-                            text = process_text(header_texts['right'])
-                            text_width = fitz.get_text_length(
-                                text, fontsize=fontsize)
-                            x_pos = rect.width - margin_side - text_width
-                            page.insert_text(fitz.Point(
-                                x_pos, y_pos), text, fontsize=fontsize)
+                            insert(fitz.Point(rect.width - margin_side - text_w(header_texts['right']), y),
+                                   header_texts['right'])
 
                     # Add footer
-                    if footer_texts['left'] or footer_texts['center'] or footer_texts['right']:
-                        y_pos = rect.height - margin_bottom
-
+                    if any(footer_texts.values()):
+                        y = rect.height - margin_bottom
                         if footer_texts['left']:
-                            text = process_text(footer_texts['left'])
-                            page.insert_text(
-                                fitz.Point(margin_side, y_pos),
-                                text, fontsize=fontsize
-                            )
+                            insert(fitz.Point(margin_side, y), footer_texts['left'])
                         if footer_texts['center']:
-                            text = process_text(footer_texts['center'])
-                            text_width = fitz.get_text_length(
-                                text, fontsize=fontsize)
-                            x_pos = (rect.width - text_width) / 2
-                            page.insert_text(fitz.Point(
-                                x_pos, y_pos), text, fontsize=fontsize)
+                            insert(fitz.Point((rect.width - text_w(footer_texts['center'])) / 2, y),
+                                   footer_texts['center'])
                         if footer_texts['right']:
-                            text = process_text(footer_texts['right'])
-                            text_width = fitz.get_text_length(
-                                text, fontsize=fontsize)
-                            x_pos = rect.width - margin_side - text_width
-                            page.insert_text(fitz.Point(
-                                x_pos, y_pos), text, fontsize=fontsize)
+                            insert(fitz.Point(rect.width - margin_side - text_w(footer_texts['right']), y),
+                                   footer_texts['right'])
 
                 self._load_document_to_viewer()
                 self._is_modified = True
@@ -1398,6 +1407,124 @@ Encrypted: {metadata.encryption}
             except Exception as e:
                 QMessageBox.critical(
                     self, "Error", f"Failed to add header/footer:\n{e}")
+
+    def _remove_header_footer(self):
+        """Remove header/footer strips via redaction"""
+        if not self._document.is_open or not self._document._doc:
+            return
+
+        doc = self._document._doc
+        page_num = self._viewer.get_current_page()
+        page = doc[page_num]
+        rect = page.rect
+
+        # Render a small preview of the current page
+        pix = page.get_pixmap(matrix=fitz.Matrix(0.4, 0.4))
+        img = QImage(pix.samples, pix.width, pix.height,
+                     pix.stride, QImage.Format.Format_RGB888)
+        preview_pixmap = QPixmap.fromImage(img)
+
+        dialog = RemoveHeaderFooterDialog(
+            preview_pixmap, rect.height, self._document.page_count, self
+        )
+        if not dialog.exec():
+            return
+
+        header_h = dialog.get_header_height()
+        footer_h = dialog.get_footer_height()
+        start, end = dialog.get_page_range()
+
+        try:
+            for i in range(start, end + 1):
+                pg = doc[i]
+                pr = pg.rect
+
+                if header_h > 0:
+                    pg.add_redact_annot(
+                        fitz.Rect(pr.x0, pr.y0, pr.x1, pr.y0 + header_h),
+                        fill=(1, 1, 1),
+                    )
+                if footer_h > 0:
+                    pg.add_redact_annot(
+                        fitz.Rect(pr.x0, pr.y1 - footer_h, pr.x1, pr.y1),
+                        fill=(1, 1, 1),
+                    )
+                pg.apply_redactions()
+
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+            pages_label = f"{end - start + 1} page(s)"
+            self._statusbar.showMessage(
+                f"Header/Footer removed from {pages_label}", 3000
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error", f"Failed to remove header/footer:\n{e}"
+            )
+
+    def _clean_pdf(self):
+        """Scan for repeating margin text, show non-modal dialog, then redact on accept."""
+        if not self._document.is_open:
+            QMessageBox.information(self, "No Document", "Please open a PDF first.")
+            return
+
+        # Close any previously open Clean PDF dialog
+        if hasattr(self, "_clean_pdf_dlg") and self._clean_pdf_dlg is not None:
+            self._clean_pdf_dlg.close()
+            self._clean_pdf_dlg = None
+
+        try:
+            self._statusbar.showMessage("Scanning pages for repeating text…")
+            findings = self._document.scan_margin_text()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Scan failed:\n{e}")
+            self._statusbar.clearMessage()
+            return
+
+        if not findings:
+            self._statusbar.clearMessage()
+            QMessageBox.information(
+                self,
+                "Nothing Found",
+                "No repeating text was detected in the page margins.\n\n"
+                "Detection requires text that appears on at least 30 % of pages "
+                "in the top or bottom 15 % of the page.",
+            )
+            return
+
+        self._statusbar.showMessage(
+            f"Found {len(findings)} repeating item(s) — review and click Remove Selected.", 0
+        )
+
+        from ui.dialogs import CleanPDFDialog
+        dlg = CleanPDFDialog(findings, parent=self)
+        dlg.setModal(False)          # non-modal: user can scroll the PDF freely
+        self._clean_pdf_dlg = dlg    # keep reference so it isn't garbage-collected
+        dlg.accepted.connect(self._apply_clean_pdf)
+        dlg.rejected.connect(lambda: self._statusbar.clearMessage())
+        dlg.finished.connect(lambda _: setattr(self, "_clean_pdf_dlg", None))
+        dlg.show()
+
+    def _apply_clean_pdf(self):
+        """Called when the user clicks Remove Selected in the Clean PDF dialog."""
+        dlg = getattr(self, "_clean_pdf_dlg", None)
+        if dlg is None:
+            return
+        selected = dlg.get_selected_findings()
+        if not selected:
+            self._statusbar.clearMessage()
+            return
+        try:
+            total_rects, pages = self._document.redact_findings(selected)
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+            self._statusbar.showMessage(
+                f"Removed {total_rects} item(s) across {pages} page(s).", 5000
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Redaction failed:\n{e}")
 
     def _encrypt_pdf(self):
         """Encrypt PDF with password"""
@@ -1650,6 +1777,10 @@ Encrypted: {metadata.encryption}
         if not self._document.is_open:
             return
 
+        if annot_type == "redact":
+            self._apply_area_redaction(page_num, rect)
+            return
+
         command = AnnotationAddCommand(
             self._document, page_num, annot_type, rect, data)
         if self._history_manager.execute(command):
@@ -1664,6 +1795,43 @@ Encrypted: {metadata.encryption}
             self._statusbar.showMessage(f"Added {annot_type} annotation", 2000)
         else:
             self._statusbar.showMessage(f"Failed to add {annot_type} annotation", 2000)
+
+    def _activate_erase_selection(self) -> None:
+        """Switch to Erase Selection tool so the user can draw a rectangle to erase."""
+        if not self._document.is_open:
+            QMessageBox.information(self, "No Document", "Please open a PDF first.")
+            return
+        from ui.toolbar import ToolMode
+        self._viewer.set_tool_mode(ToolMode.REDACT)
+        self._statusbar.showMessage(
+            "Erase Selection: draw a rectangle on the page to permanently erase that area.", 0
+        )
+
+    def _apply_area_redaction(self, page_num: int, rect) -> None:
+        """Show confirmation dialog then permanently erase the selected rectangle."""
+        result = QMessageBox.question(
+            self,
+            "Erase Area",
+            "Permanently erase the selected area?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            import fitz
+            fitz_rect = fitz.Rect(
+                rect.x(), rect.y(),
+                rect.x() + rect.width(),
+                rect.y() + rect.height(),
+            )
+            self._document.redact_area(page_num, fitz_rect)
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+            self._statusbar.showMessage("Area erased.", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to erase area:\n{e}")
 
     # ==================== Helpers ====================
 

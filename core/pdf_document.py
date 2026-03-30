@@ -8,6 +8,9 @@ from typing import List, Optional, Tuple, Dict, Any, Union, Sequence
 from dataclasses import dataclass
 from enum import Enum
 import os
+import re
+import statistics
+from collections import defaultdict
 
 
 class PageRotation(Enum):
@@ -935,6 +938,255 @@ class PDFDocument:
             deflate_images=deflate_images,
             deflate_fonts=deflate_fonts
         )
+
+    # ==================== Clean PDF — Scan & Redact ====================
+    #
+    # scan_margin_text()  — scan pages, return repeating items for user review
+    # redact_findings()   — redact user-selected items
+    # ------------------------------------------------------------------
+
+    _MARGIN_FRAC   = 0.10   # top / bottom 10 % of page height (percentage cap)
+    _MARGIN_MAX_PT = 80.0   # hard cap: never more than 80 pt (~1.1 in) from edge
+    _MAX_HF_LEN    = 120    # lines longer than this are body text
+
+    # ---- margin line extraction ----
+
+    @staticmethod
+    def _margin_lines(page: fitz.Page, margin_frac: float) -> List[Dict[str, Any]]:
+        """Return text lines sitting in the top or bottom margin zone.
+
+        The zone depth is min(margin_frac * page_height, _MARGIN_MAX_PT) so
+        that on tall pages we don't reach into the content area.
+        """
+        pr = page.rect
+        depth = min(pr.height * margin_frac, PDFDocument._MARGIN_MAX_PT)
+        top_lim = pr.y0 + depth
+        bot_lim = pr.y1 - depth
+
+        out: List[Dict[str, Any]] = []
+        for blk in page.get_text("dict").get("blocks", []):
+            if blk.get("type") != 0:
+                continue
+            for line in blk.get("lines", []):
+                bbox = line["bbox"]
+                cy = (bbox[1] + bbox[3]) / 2.0
+                if cy < top_lim:
+                    zone = "top"
+                elif cy > bot_lim:
+                    zone = "bottom"
+                else:
+                    continue
+                spans = line.get("spans", [])
+                if not spans:
+                    continue
+                text = "".join(s.get("text", "") for s in spans).strip()
+                if not text:
+                    continue
+                out.append({
+                    "zone":  zone,
+                    "bbox":  bbox,
+                    "text":  text,
+                    "spans": spans,
+                })
+        return out
+
+    # ---- header / footer detection ----
+
+    _NUM_RE  = re.compile(r"\d+")
+    _DATE_RE = re.compile(
+        r"\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}"
+        r"|\d{4}[/\-.]\d{1,2}[/\-.]\d{1,2}"
+        r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s*\d{4}",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _templatize(text: str) -> str:
+        """Replace dates and numbers with '#' for template matching."""
+        t = PDFDocument._DATE_RE.sub("#", text)
+        t = PDFDocument._NUM_RE.sub("#", t)
+        return " ".join(t.lower().split())
+
+    # ---- page-number detection ----
+
+    _PN_ARABIC_RE = re.compile(
+        r"^[\s\-–—|\[\](){}/.*·©®]*"
+        r"(?:page|pg\.?|p\.?)?\s*"
+        r"(\d{1,5})"
+        r"(?:\s*(?:of|/)\s*\d{1,5})?"
+        r"[\s\-–—|\[\](){}/.*·©®]*$",
+        re.IGNORECASE,
+    )
+    _PN_ROMAN_RE = re.compile(
+        r"^[\s\-–—|\[\](){}/.*·]*"
+        r"(?:page\s+)?"
+        r"((?=[IVXLCDM])"
+        r"M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))"
+        r"[\s\-–—|\[\](){}/.*·]*$",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _extract_page_number(text: str) -> Optional[int]:
+        t = text.strip()
+        if not t or len(t) > 30:
+            return None
+        m = PDFDocument._PN_ARABIC_RE.match(t)
+        if m:
+            return int(m.group(1))
+        m = PDFDocument._PN_ROMAN_RE.match(t)
+        if m and m.group(1):
+            val = PDFDocument._roman_to_int(m.group(1))
+            if 0 < val < 5000:
+                return val
+        return None
+
+    @staticmethod
+    def _roman_to_int(s: str) -> int:
+        _map = {"I": 1, "V": 5, "X": 10, "L": 50,
+                "C": 100, "D": 500, "M": 1000}
+        s = s.upper()
+        total = prev = 0
+        for ch in reversed(s):
+            v = _map.get(ch, 0)
+            total += -v if v < prev else v
+            prev = v
+        return total
+
+    # ---- public scan & redact methods ----
+
+    def scan_margin_text(self) -> List[Dict[str, Any]]:
+        """
+        Scan all pages for repeating text in the top/bottom margin zones.
+
+        Returns a list of finding dicts for the user to review:
+          {
+            "id":          str,                 # unique group key
+            "zone":        "Header" | "Footer",
+            "sample_text": str,                 # representative text
+            "page_count":  int,                 # pages this appears on
+            "total_pages": int,
+            "category":    "Page Number" | "Text",
+            "rects":       [(page_idx, fitz.Rect), ...],
+          }
+
+        Only groups appearing on ≥ 30 % of pages (min 2) are returned.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+
+        doc = self._doc
+        page_count = len(doc)
+        if page_count < 2:
+            return []
+
+        mf = PDFDocument._MARGIN_FRAC
+        ml = PDFDocument._MAX_HF_LEN
+
+        # ---- pass 1: collect all margin lines and count lines-per-zone-per-page ----
+        # key = (zone, tmpl) → {pages: set, lines: [(page_idx, bbox, text)], sample: str}
+        groups: Dict[Tuple[str, str], Dict[str, Any]] = defaultdict(
+            lambda: {"pages": set(), "lines": [], "sample": ""}
+        )
+        # (page_idx, zone) → count of distinct lines on that page in that zone
+        page_zone_count: Dict[Tuple[int, str], int] = defaultdict(int)
+
+        for page_idx in range(page_count):
+            page = doc[page_idx]
+            for ln in PDFDocument._margin_lines(page, mf):
+                text = ln["text"]
+                if len(text) > ml:
+                    continue
+                tmpl = PDFDocument._templatize(text)
+                if len(tmpl) < 1:
+                    continue
+                zone = ln["zone"]
+                page_zone_count[(page_idx, zone)] += 1
+                key = (zone, tmpl)
+                g = groups[key]
+                g["pages"].add(page_idx)
+                g["lines"].append((page_idx, ln["bbox"], text))
+                if not g["sample"]:
+                    g["sample"] = text
+
+        # ---- determine which zones are "content-heavy" (likely tables) ----
+        # If the median lines-per-page in a zone exceeds 3, that zone is table content.
+        zone_line_counts: Dict[str, List[int]] = defaultdict(list)
+        for (page_idx, zone), cnt in page_zone_count.items():
+            zone_line_counts[zone].append(cnt)
+
+        crowded_zones: set = set()
+        for zone, counts in zone_line_counts.items():
+            counts_sorted = sorted(counts)
+            median = counts_sorted[len(counts_sorted) // 2]
+            if median > 6:
+                crowded_zones.add(zone)
+
+        threshold = max(2, int(page_count * 0.30))
+        findings: List[Dict[str, Any]] = []
+
+        for (zone, tmpl), g in groups.items():
+            if zone in crowded_zones:
+                continue  # zone is table content, not a header/footer
+            if len(g["pages"]) < threshold:
+                continue
+
+            sample = g["sample"]
+            is_page_num = PDFDocument._extract_page_number(sample) is not None
+
+            rects: List[Tuple[int, fitz.Rect]] = []
+            for page_idx, bbox, _text in g["lines"]:
+                bx0, by0, bx1, by1 = bbox
+                rects.append((page_idx, fitz.Rect(bx0 - 2, by0 - 2, bx1 + 2, by1 + 2)))
+
+            findings.append({
+                "id":          f"{zone}::{tmpl}",
+                "zone":        "Header" if zone == "top" else "Footer",
+                "sample_text": sample,
+                "page_count":  len(g["pages"]),
+                "total_pages": page_count,
+                "category":    "Page Number" if is_page_num else "Text",
+                "rects":       rects,
+            })
+
+        findings.sort(key=lambda f: (0 if f["zone"] == "Header" else 1, -f["page_count"]))
+        return findings
+
+    def redact_findings(self, findings: List[Dict[str, Any]]) -> Tuple[int, int]:
+        """
+        Apply redactions for user-selected findings.
+
+        Returns (items_removed, pages_modified).
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        if not findings:
+            return 0, 0
+
+        by_page: Dict[int, List[fitz.Rect]] = defaultdict(list)
+        total_rects = 0
+        for finding in findings:
+            for page_idx, rect in finding["rects"]:
+                by_page[page_idx].append(rect)
+                total_rects += 1
+
+        for page_idx, rects in by_page.items():
+            page = self._doc[page_idx]
+            for r in rects:
+                page.add_redact_annot(r, fill=(1, 1, 1))
+            page.apply_redactions()
+
+        self._is_modified = True
+        return total_rects, len(by_page)
+
+    def redact_area(self, page_idx: int, rect: fitz.Rect) -> None:
+        """Permanently erase the given rectangle on a single page (white fill)."""
+        if self._doc is None:
+            raise ValueError("No document is open")
+        page = self._doc[page_idx]
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.apply_redactions()
+        self._is_modified = True
 
     def __del__(self):
         """Cleanup on deletion"""

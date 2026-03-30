@@ -816,9 +816,7 @@ class PDFViewer(QScrollArea):
                 page_num, "line", rect, {"arrow": True})
 
         elif self._tool_mode == ToolMode.REDACT:
-            # Redaction might be complex, but let's try
-            # self.annotation_create_requested.emit(page_num, "redact", rect, {})
-            self._create_redaction_annotation(page_num, rect)
+            self.annotation_create_requested.emit(page_num, "redact", rect, {})
 
         elif self._tool_mode == ToolMode.ERASER:
             self._erase_annotation_at(page_num, rect)
@@ -1089,43 +1087,6 @@ class PDFViewer(QScrollArea):
 
         except Exception as e:
             print(f"Error creating freehand annotation: {e}")
-
-    def _create_redaction_annotation(self, page_num: int, rect: QRectF):
-        """Create redaction annotation"""
-        from PyQt6.QtWidgets import QMessageBox
-
-        result = QMessageBox.question(
-            self, "Apply Redaction",
-            "This will permanently remove content in the selected area.\n"
-            "The redaction will be applied when you save the document.\n\n"
-            "Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if result != QMessageBox.StandardButton.Yes:
-            return
-
-        if not self._doc:
-            return
-
-        try:
-            page = self._doc[page_num]
-            fitz_rect = fitz.Rect(rect.x(), rect.y(),
-                                  rect.x() + rect.width(),
-                                  rect.y() + rect.height())
-
-            annot = page.add_redact_annot(fitz_rect)
-            annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
-            annot.update()
-
-            # Apply the redaction
-            page.apply_redactions()
-
-            self.document_modified.emit()
-            self.refresh()
-            self.annotation_added.emit(page_num, "redaction", {"rect": rect})
-
-        except Exception as e:
-            print(f"Error creating redaction: {e}")
 
     def _erase_annotation_at(self, page_num: int, rect: QRectF):
         """Erase annotations that intersect with the given rect"""
