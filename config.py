@@ -73,11 +73,11 @@ class AppConfig:
     THUMBNAIL_QUALITY: int = 2  # DPI multiplier for thumbnails
 
     # Rendering Settings
-    RENDER_DPI: int = 150
-    HIGH_QUALITY_DPI: int = 300
+    RENDER_DPI: int = field(default_factory=lambda: int(os.environ.get("RENDER_DPI", 150)))
+    HIGH_QUALITY_DPI: int = field(default_factory=lambda: int(os.environ.get("HIGH_QUALITY_DPI", 300)))
 
     # OCR Settings
-    OCR_LANGUAGE: str = "eng"
+    OCR_LANGUAGE: str = field(default_factory=lambda: os.environ.get("OCR_LANGUAGE", "eng"))
     OCR_DPI: int = 300
 
     # Compression Settings

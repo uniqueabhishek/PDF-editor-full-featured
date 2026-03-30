@@ -2,6 +2,7 @@
 Ultra PDF Editor - OCR Module
 Optical Character Recognition for scanned PDFs
 """
+import os
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any
 import fitz
@@ -25,6 +26,9 @@ class OCRProcessor:
         """Check if Tesseract OCR is available"""
         try:
             import pytesseract
+            tesseract_cmd = os.environ.get("TESSERACT_CMD")
+            if tesseract_cmd:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
             pytesseract.get_tesseract_version()
             return True
         except Exception:
