@@ -39,11 +39,19 @@ uv.lock
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
 
 # Project specific
 *.log
 *.tmp
+*.bak
+*.orig
 .claude/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Third-party utilities
 PyMuPDF-Utilities-master/
