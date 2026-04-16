@@ -570,10 +570,29 @@ class MainWindow(QMainWindow):
 
         if self._current_file:
             try:
-                self._document.save()
+                # Detach doc from viewer/sidebar so their render workers release
+                # any file handles (mmap) before we try to overwrite the file.
+                self._viewer.set_document(None, None)
+                self._sidebar.set_document(None)
+                try:
+                    self._document.save()
+                finally:
+                    # save() may have redirected to a new path (e.g. *.edited.pdf)
+                    # when the original was locked — sync _current_file.
+                    if self._document._filepath:
+                        self._current_file = Path(str(self._document._filepath))
+                    # Reattach whatever doc is currently open (save() may have
+                    # reopened it from disk after a full rewrite).
+                    if self._document.is_open and self._document._doc:
+                        self._viewer.set_document(
+                            self._document._doc,
+                            str(self._current_file) if self._current_file else "",
+                        )
+                        self._sidebar.set_document(self._document._doc)
                 self._is_modified = False
                 self._update_title()
-                self._statusbar.showMessage("Document saved", 3000)
+                saved_name = self._current_file.name if self._current_file else "document"
+                self._statusbar.showMessage(f"Saved as {saved_name}", 4000)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
         else:

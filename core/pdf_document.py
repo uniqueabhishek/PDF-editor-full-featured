@@ -204,10 +204,77 @@ class PDFDocument:
                 if "permissions" in encryption:
                     save_options["permissions"] = encryption["permissions"]
 
-            # If saving to same file, use incremental save or temp file
+            # If saving to same file, try incremental save; fall back to full save via temp file
             if save_path == self._filepath:
-                # PDF_ENCRYPT_KEEP = 1
-                self._doc.save(str(save_path), incremental=True, encryption=1)
+                try:
+                    # PDF_ENCRYPT_KEEP = 1
+                    self._doc.save(str(save_path), incremental=True, encryption=1)
+                except Exception:
+                    # Incremental save not possible (e.g. encryption change); do full save via temp
+                    import tempfile
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
+                    os.close(tmp_fd)
+                    try:
+                        self._doc.save(tmp_path, **save_options)
+                        # Close the doc so Windows releases the file lock, then replace
+                        self._doc.close()
+                        self._doc = None
+                        import gc, time
+                        gc.collect()
+                        # Retry replace — the file may be briefly locked by AV scanner or
+                        # an external viewer (Adobe/Edge). Surface a clear error if still locked.
+                        last_err = None
+                        for attempt in range(8):
+                            try:
+                                os.replace(tmp_path, str(save_path))
+                                last_err = None
+                                break
+                            except PermissionError as e:
+                                last_err = e
+                                time.sleep(0.25)
+                        if last_err is not None:
+                            # Target is locked — save alongside with ".edited" suffix instead.
+                            edited_path = save_path.with_name(save_path.stem + ".edited.pdf")
+                            try:
+                                os.replace(tmp_path, str(edited_path))
+                            except Exception:
+                                try:
+                                    if os.path.exists(tmp_path):
+                                        os.remove(tmp_path)
+                                except OSError:
+                                    pass
+                                # Reopen original and bail
+                                try:
+                                    self._doc = fitz.open(str(save_path))
+                                    if self._doc.needs_pass and self._password:
+                                        self._doc.authenticate(self._password)
+                                except Exception:
+                                    pass
+                                raise
+                            # Switch the open document to the new file
+                            self._doc = fitz.open(str(edited_path))
+                            if self._doc.needs_pass and self._password:
+                                self._doc.authenticate(self._password)
+                            save_path = edited_path
+                        # Reopen the saved file
+                        self._doc = fitz.open(str(save_path))
+                        if self._doc.needs_pass and self._password:
+                            self._doc.authenticate(self._password)
+                    except Exception:
+                        try:
+                            if os.path.exists(tmp_path):
+                                os.remove(tmp_path)
+                        except OSError:
+                            pass
+                        # If we closed the doc but failed to replace, try to reopen the original
+                        if self._doc is None and save_path.exists():
+                            try:
+                                self._doc = fitz.open(str(save_path))
+                                if self._doc.needs_pass and self._password:
+                                    self._doc.authenticate(self._password)
+                            except Exception:
+                                pass
+                        raise
             else:
                 self._doc.save(str(save_path), **save_options)
 
