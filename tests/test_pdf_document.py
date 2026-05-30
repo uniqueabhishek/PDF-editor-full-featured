@@ -256,6 +256,33 @@ def test_snapshot_requires_open_document():
         doc.snapshot()
 
 
+# ==================== Bookmarks / TOC ====================
+
+def test_add_bookmark_persists_in_toc(opened):
+    assert opened.get_toc() == []
+    opened.add_bookmark("Chapter 1", page_num=0)
+    opened.add_bookmark("Chapter 2", page_num=2)
+    toc = opened.get_toc()
+    titles = [entry[1] for entry in toc]
+    assert titles == ["Chapter 1", "Chapter 2"]
+    # TOC pages are 1-indexed.
+    assert toc[1][2] == 3
+
+
+def test_set_toc_round_trips_through_save(opened, tmp_path):
+    opened.set_toc([[1, "Intro", 1], [1, "Body", 2]])
+    out = tmp_path / "with_toc.pdf"
+    opened.save(out)
+
+    reopened = PDFDocument()
+    reopened.open(out)
+    try:
+        titles = [e[1] for e in reopened.get_toc()]
+        assert titles == ["Intro", "Body"]
+    finally:
+        reopened.close()
+
+
 def test_render_worker_copy_opens_and_renders_without_password(make_pdf, tmp_path):
     """The viewer hands the render thread a decrypted, in-memory copy.
 

@@ -287,9 +287,8 @@ class BookmarkPanel(QTreeWidget):
     """Panel showing document bookmarks/outline"""
 
     bookmark_clicked = pyqtSignal(int)  # page number
-    bookmark_added = pyqtSignal(str, int)  # title, page
-    bookmark_deleted = pyqtSignal(int)  # bookmark index
-    bookmark_renamed = pyqtSignal(int, str)  # index, new title
+    toc_changed = pyqtSignal(list)  # full new table of contents (after rename/delete)
+    bookmark_add_requested = pyqtSignal(str)  # title (added at the current page)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -404,40 +403,51 @@ class BookmarkPanel(QTreeWidget):
 
         menu.exec(self.mapToGlobal(pos))
 
+    def _build_toc_from_tree(self) -> List:
+        """Rebuild a PyMuPDF TOC ([level, title, page], 1-indexed) from the tree."""
+        toc: List = []
+
+        def walk(parent: QTreeWidgetItem, level: int):
+            for i in range(parent.childCount()):
+                child = parent.child(i)
+                page = child.data(0, Qt.ItemDataRole.UserRole)
+                if page is None:
+                    continue  # skip the "No bookmarks" placeholder
+                toc.append([level, child.text(0), int(page) + 1])
+                walk(child, level + 1)
+
+        root = self.invisibleRootItem()
+        if root:
+            walk(root, 1)
+        return toc
+
     def _rename_bookmark(self, item: QTreeWidgetItem):
-        """Rename a bookmark"""
+        """Rename a bookmark and persist the change to the document TOC."""
         current = item.text(0)
         text, ok = QInputDialog.getText(
             self, "Rename Bookmark", "New name:", QLineEdit.EchoMode.Normal, current
         )
         if ok and text:
             item.setText(0, text)
-            # Would need to update document TOC
+            self.toc_changed.emit(self._build_toc_from_tree())
 
     def _delete_bookmark(self, item: QTreeWidgetItem):
-        """Delete a bookmark"""
+        """Delete a bookmark (and its children) and persist the change."""
         parent = item.parent()
         if not parent:
             parent = self.invisibleRootItem()
         if parent:
             index = parent.indexOfChild(item)
             parent.takeChild(index)
-        # Would need to update document TOC
+        self.toc_changed.emit(self._build_toc_from_tree())
 
     def _add_bookmark_dialog(self):
-        """Show dialog to add bookmark"""
+        """Ask for a title and request a bookmark at the current page."""
         text, ok = QInputDialog.getText(
             self, "Add Bookmark", "Bookmark title:"
         )
         if ok and text:
-            # Would emit signal with title and current page
-            pass
-
-    def add_bookmark(self, title: str, page: int):
-        """Add a new bookmark"""
-        item = QTreeWidgetItem([title])
-        item.setData(0, Qt.ItemDataRole.UserRole, page)
-        self.addTopLevelItem(item)
+            self.bookmark_add_requested.emit(text)
 
 
 class AnnotationPanel(QListWidget):
@@ -561,6 +571,8 @@ class Sidebar(QTabWidget):
     page_rotate_requested = pyqtSignal(int, int)
     page_delete_requested = pyqtSignal(int)
     page_extract_requested = pyqtSignal(list)
+    toc_changed = pyqtSignal(list)  # full new table of contents
+    bookmark_add_requested = pyqtSignal(str)  # title (added at current page)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -589,6 +601,8 @@ class Sidebar(QTabWidget):
         self.thumbnail_panel.page_extract_requested.connect(self.page_extract_requested)
 
         self.bookmark_panel.bookmark_clicked.connect(self.bookmark_clicked)
+        self.bookmark_panel.toc_changed.connect(self.toc_changed)
+        self.bookmark_panel.bookmark_add_requested.connect(self.bookmark_add_requested)
         self.annotation_panel.annotation_clicked.connect(self.annotation_clicked)
 
         # Styling

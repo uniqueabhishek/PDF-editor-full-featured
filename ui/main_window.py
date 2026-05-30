@@ -476,6 +476,8 @@ class MainWindow(
         self._sidebar.page_delete_requested.connect(self._delete_page)
         self._sidebar.page_extract_requested.connect(
             self._extract_specific_pages)
+        self._sidebar.toc_changed.connect(self._apply_toc)
+        self._sidebar.bookmark_add_requested.connect(self._add_bookmark)
 
     def _apply_settings(self):
         """Apply saved settings"""
@@ -589,6 +591,37 @@ class MainWindow(
             self._update_title()
             return command
         return None
+
+    # ==================== Bookmarks ====================
+
+    def _apply_toc(self, toc: list):
+        """Persist a bookmark rename/delete from the sidebar to the document."""
+        if not self._document.is_open:
+            return
+        try:
+            self._document.set_toc(toc)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not update bookmarks:\n{e}")
+            return
+        # Reload the panel so it matches the stored outline exactly.
+        self._sidebar.bookmark_panel.set_document(self._document.doc)
+        self._is_modified = True
+        self._update_title()
+
+    def _add_bookmark(self, title: str):
+        """Add a bookmark for the current page (from the sidebar)."""
+        if not self._document.is_open:
+            return
+        page = self._viewer.get_current_page()
+        try:
+            self._document.add_bookmark(title, page)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not add bookmark:\n{e}")
+            return
+        self._sidebar.bookmark_panel.set_document(self._document.doc)
+        self._is_modified = True
+        self._update_title()
+        self._statusbar.showMessage(f"Bookmark added on page {page + 1}", 2000)
 
     def _update_actions_state(self):
         """Update enabled state of actions"""
