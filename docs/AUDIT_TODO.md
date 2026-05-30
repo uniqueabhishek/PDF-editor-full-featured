@@ -51,14 +51,19 @@ contradict each other and the code (see item #10).
 
 ## 🟡 Medium — dead code & documentation drift
 
-- [ ] **#8 — ~3,350 LOC of dead code advertised as features.** Decide per module:
-  wire it up or delete it.
-  - [forms/form_field.py](../forms/form_field.py) (686) — full form system, never imported
-  - [annotations/base.py](../annotations/base.py) (591) — parallel annotation system, unused
-  - [core/converters/to_word.py](../core/converters/to_word.py) (321), [to_image.py](../core/converters/to_image.py) (296) — unused; Word export reimplemented inline
-  - [core/operations/ocr.py](../core/operations/ocr.py) (367) — unused; OCR reimplemented inline
-  - [ui/dialogs/merge_dialog.py](../ui/dialogs/merge_dialog.py) (294), [split_dialog.py](../ui/dialogs/split_dialog.py) (374), [settings_dialog.py](../ui/dialogs/settings_dialog.py) (419) — unused (no Settings menu)
-  - Also dead: `TransactionManager`/`CompoundCommand` and `PDFDocument._temp_files`
+- [ ] **#8 — Dead code advertised as features.** Tackled in steps; decide per
+  module: wire it up or delete it.
+  - [x] **Pure duplicates removed** — `core/converters/to_word.py`, `to_image.py`
+    and `core/operations/ocr.py` (plus their package `__init__.py`). These
+    reimplemented functionality the app already runs inline (Word export in
+    `file_handler`, OCR in `tools_handler`, image render via
+    `PDFDocument.render_page_to_image`). ~985 LOC removed; no behavior change.
+    (Stale doc references to these now feed into #10.)
+  - [ ] [forms/form_field.py](../forms/form_field.py) (686) — full form system, never imported (no UI). Build the feature or delete + fix README.
+  - [ ] [annotations/base.py](../annotations/base.py) (591) — parallel annotation system, unused (annotations run via `PDFDocument` + `AnnotationAddCommand`).
+  - [ ] [ui/dialogs/merge_dialog.py](../ui/dialogs/merge_dialog.py) (294), [split_dialog.py](../ui/dialogs/split_dialog.py) (374) — built but bypassed by inline `QFileDialog`; cheap to wire up.
+  - [ ] [ui/dialogs/settings_dialog.py](../ui/dialogs/settings_dialog.py) (419) — unused (no Settings menu); wiring it also unlocks #9.
+  - [ ] Also dead: `TransactionManager`/`CompoundCommand` in [utils/history.py](../utils/history.py) and `PDFDocument._temp_files`.
 - [ ] **#9 — Autosave / crash recovery advertised but absent.** Config/README/SettingsDialog
   describe it ([config.py:44](../config.py#L44), [config.py:163](../config.py#L163)) but no
   timer performs it and `SettingsDialog` is never shown. Implement it or drop the claims.
