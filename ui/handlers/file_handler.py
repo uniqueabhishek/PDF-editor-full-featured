@@ -33,6 +33,7 @@ class FileHandlerMixin:
             self._current_file = None
             self._load_document_to_viewer()
             self._is_modified = True
+            self._clear_autosave()  # discard any prior document's recovery copy
             self._update_title()
         except Exception as e:
             QMessageBox.critical(
@@ -78,6 +79,7 @@ class FileHandlerMixin:
             self._load_document_to_viewer()
             self._current_file = path
             self._is_modified = False
+            self._clear_autosave()  # newly opened doc has no pending recovery
             self._update_title()
 
             # Add to recent files
@@ -127,6 +129,7 @@ class FileHandlerMixin:
                         )
                         self._sidebar.set_document(self._document.doc)
                 self._is_modified = False
+                self._clear_autosave()  # saved — no unsaved changes to recover
                 self._update_title()
                 saved_name = self._current_file.name if self._current_file else "document"
                 self._statusbar.showMessage(f"Saved as {saved_name}", 4000)
@@ -157,6 +160,7 @@ class FileHandlerMixin:
                 self._document.save(path)
                 self._current_file = path
                 self._is_modified = False
+                self._clear_autosave()  # saved — no unsaved changes to recover
                 self._update_title()
                 self._statusbar.showMessage("Document saved", 3000)
             except Exception as e:
@@ -172,12 +176,17 @@ class FileHandlerMixin:
         self._sidebar.set_document(None)
         self._current_file = None
         self._is_modified = False
+        self._clear_autosave()
         self._update_title()
         self._update_actions_state()
 
     def _confirm_close(self) -> bool:
         """Confirm closing with unsaved changes"""
         if not self._is_modified:
+            return True
+
+        # Respect the preference to skip the unsaved-changes prompt.
+        if not self._settings.confirm_close_unsaved:
             return True
 
         result = QMessageBox.question(

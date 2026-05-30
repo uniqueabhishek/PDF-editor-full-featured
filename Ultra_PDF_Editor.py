@@ -53,9 +53,9 @@ def setup_application():
     # Import here after path setup and dependency check
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QFont
-    import darkdetect
 
     from config import config, UserSettings
+    from ui.theme import apply_theme
 
     # Enable high DPI scaling
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
@@ -72,41 +72,11 @@ def setup_application():
     font = QFont("Segoe UI", 10)
     app.setFont(font)
 
-    # Apply theme based on system preference
+    # Apply the saved theme (also re-applied at runtime from Preferences)
     settings = UserSettings.load(config.SETTINGS_PATH)
-
-    if settings.theme == "dark" or (settings.theme == "system" and darkdetect.isDark()):
-        apply_dark_theme(app)
-    else:
-        apply_light_theme(app)
+    apply_theme(app, settings.theme)
 
     return app
-
-
-STYLES_DIR = Path(__file__).parent / "resources" / "styles"
-
-
-def _load_stylesheet(filename: str) -> str:
-    """Load a Qt stylesheet from resources/styles.
-
-    Returns an empty string (falls back to the Fusion default) if the file is
-    missing or unreadable, so a missing resource never crashes startup.
-    """
-    try:
-        return (STYLES_DIR / filename).read_text(encoding="utf-8")
-    except OSError as e:
-        print(f"Warning: could not load stylesheet '{filename}': {e}")
-        return ""
-
-
-def apply_dark_theme(app):
-    """Apply dark theme to application"""
-    app.setStyleSheet(_load_stylesheet("dark_theme.qss"))
-
-
-def apply_light_theme(app):
-    """Apply light theme to application"""
-    app.setStyleSheet(_load_stylesheet("light_theme.qss"))
 
 
 def main():

@@ -94,6 +94,14 @@ class PDFDocument:
         """Mark the document as having unsaved changes (or clear the flag)."""
         self._is_modified = modified
 
+    def set_filepath(self, filepath: Optional[Union[str, Path]]) -> None:
+        """Retarget the document's path without saving.
+
+        Used by crash recovery: the content is loaded from a recovery copy, but
+        a subsequent Save should write back to the original file.
+        """
+        self._filepath = Path(filepath) if filepath else None
+
     @property
     def page_count(self) -> int:
         """Get total number of pages"""

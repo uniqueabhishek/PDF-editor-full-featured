@@ -67,11 +67,18 @@ contradict each other and the code (see item #10).
     document. Adds real features: merge reordering + per-file bookmarks, and split
     by every-N-pages / custom ranges / bookmarks (previously only 1-page-per-file).
     `merge_pdfs` gained `add_bookmarks`/`compress`; added `split_by_bookmarks`.
-  - [ ] [ui/dialogs/settings_dialog.py](../ui/dialogs/settings_dialog.py) (419) — unused (no Settings menu); wiring it also unlocks #9.
+  - [x] **SettingsDialog wired up** — added **Edit → Preferences…** (Ctrl+,). The
+    dialog was trimmed to only settings that take effect (theme, sidebar width,
+    confirm-close, auto-save), removing the decorative tabs/controls. Theme and
+    sidebar width apply live; theme application is shared via new `ui/theme.py`
+    (also used at startup). Done together with #9.
   - [ ] Also dead: `TransactionManager`/`CompoundCommand` in [utils/history.py](../utils/history.py) and `PDFDocument._temp_files`.
-- [ ] **#9 — Autosave / crash recovery advertised but absent.** Config/README/SettingsDialog
-  describe it ([config.py:44](../config.py#L44), [config.py:163](../config.py#L163)) but no
-  timer performs it and `SettingsDialog` is never shown. Implement it or drop the claims.
+- [x] **#9 — Autosave / crash recovery implemented.** A `QTimer` writes a recovery
+  copy (`AUTOSAVE_DIR/recovery.pdf` + `recovery.json`) of the open document while
+  it has unsaved changes, at the configured interval. On startup the app offers to
+  restore a leftover recovery (i.e. after a crash) and retargets Save to the
+  original file via `PDFDocument.set_filepath`. Recovery is cleared on clean
+  save/close/open/new and on clean exit. Driven by the Preferences auto-save toggle.
 - [ ] **#10 — Docs overstate capabilities; 3 stale, contradictory reports.** README
   claims Excel/PowerPoint/HTML conversion, digital signatures, multi-tab — none
   implemented. Reconcile README and replace/delete `CODE_QUALITY_REPORT.md`,

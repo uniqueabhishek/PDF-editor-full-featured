@@ -145,6 +145,14 @@ def test_mark_modified_toggles_flag():
     doc.close()
 
 
+def test_set_filepath_retargets(opened, tmp_path):
+    new = tmp_path / "other.pdf"
+    opened.set_filepath(new)
+    assert opened.filepath == new
+    opened.set_filepath(None)
+    assert opened.filepath is None
+
+
 def test_merge_pdfs(make_pdf, tmp_path):
     a = make_pdf("a.pdf", pages=2)
     b = make_pdf("b.pdf", pages=3)

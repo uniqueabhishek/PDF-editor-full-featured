@@ -10,10 +10,13 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter,
     QStatusBar, QMessageBox, QLabel
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, List, Dict
+from datetime import datetime
+import json
+import logging
 import os
 
 from .pdf_viewer import PDFViewer, ViewMode
@@ -29,6 +32,8 @@ from utils.history import HistoryManager
 
 if TYPE_CHECKING:
     from .dialogs import FindDialog, FindReplaceDialog
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(
@@ -70,6 +75,10 @@ class MainWindow(
         # Undo/Redo history manager
         self._history_manager = HistoryManager(config.UNDO_HISTORY_SIZE)
 
+        # Auto-save / crash-recovery timer (configured from settings below)
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave)
+
         # Search state
         self._search_results: List[Dict] = []
         self._current_search_index = 0
@@ -87,6 +96,11 @@ class MainWindow(
         # Set initial state
         self._update_title()
         self._update_actions_state()
+
+        # Start auto-save and, once the window is up, offer to recover any
+        # unsaved changes left behind by a previous (crashed) session.
+        self._configure_autosave()
+        QTimer.singleShot(0, self._check_crash_recovery)
 
     def _setup_ui(self):
         """Setup the main UI layout"""
@@ -234,6 +248,13 @@ class MainWindow(
             "Find && &Replace...", self._show_replace)
         assert self._replace_action is not None
         self._replace_action.setShortcut(QKeySequence("Ctrl+H"))
+
+        edit_menu.addSeparator()
+
+        self._preferences_action = edit_menu.addAction(
+            "&Preferences...", self._show_settings)
+        assert self._preferences_action is not None
+        self._preferences_action.setShortcut(QKeySequence("Ctrl+,"))
 
         # === View Menu ===
         view_menu = menubar.addMenu("&View")
@@ -491,10 +512,11 @@ class MainWindow(
             except Exception:
                 pass
 
-        # Restore sidebar visibility
+        # Restore sidebar visibility and width
         self._sidebar.setVisible(self._settings.sidebar_visible)
         if self._sidebar_action:
             self._sidebar_action.setChecked(self._settings.sidebar_visible)
+        self._apply_sidebar_width(self._settings.sidebar_width)
 
     def _save_settings(self):
         """Save current settings"""
@@ -503,6 +525,110 @@ class MainWindow(
         self._settings.window_geometry = base64.b64encode(geometry_data).decode('utf-8')  # type: ignore[assignment]
         self._settings.sidebar_visible = self._sidebar.isVisible()
         self._settings.save(config.SETTINGS_PATH)
+
+    # ==================== Preferences ====================
+
+    def _show_settings(self):
+        """Open the Preferences dialog."""
+        from .dialogs import SettingsDialog
+        dialog = SettingsDialog(self._settings, self)
+        dialog.settings_changed.connect(self._on_settings_changed)
+        dialog.exec()
+
+    def _on_settings_changed(self, changes: dict):
+        """Apply settings that take effect immediately."""
+        if "theme" in changes:
+            from PyQt6.QtWidgets import QApplication
+            from ui.theme import apply_theme
+            app = QApplication.instance()
+            if app is not None:
+                apply_theme(app, changes["theme"])
+        if "sidebar_width" in changes:
+            self._apply_sidebar_width(changes["sidebar_width"])
+        if "autosave_enabled" in changes or "autosave_interval" in changes:
+            self._configure_autosave()
+
+    def _apply_sidebar_width(self, width: int):
+        """Resize the splitter so the sidebar gets the requested width."""
+        total = self._splitter.size().width() or config.WINDOW_WIDTH
+        self._splitter.setSizes([width, max(200, total - width)])
+
+    # ==================== Auto-save & crash recovery ====================
+
+    def _configure_autosave(self):
+        """Start/stop the auto-save timer per the current settings."""
+        self._autosave_timer.stop()
+        if self._settings.autosave_enabled:
+            interval_ms = max(30, self._settings.autosave_interval) * 1000
+            self._autosave_timer.start(interval_ms)
+
+    def _autosave(self):
+        """Write a recovery copy of the current document if it has unsaved edits."""
+        if not self._document.is_open or not self._is_modified:
+            return
+        try:
+            self._document.save_copy(config.AUTOSAVE_DIR / "recovery.pdf")
+            meta = {
+                "original": str(self._current_file) if self._current_file else None,
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            (config.AUTOSAVE_DIR / "recovery.json").write_text(
+                json.dumps(meta), encoding="utf-8")
+            self._statusbar.showMessage("Auto-saved a recovery copy", 1500)
+        except Exception:
+            logger.warning("Auto-save failed", exc_info=True)
+
+    def _clear_autosave(self):
+        """Remove any recovery files (after a clean save/close)."""
+        for name in ("recovery.pdf", "recovery.json"):
+            path = config.AUTOSAVE_DIR / name
+            try:
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                logger.debug("Could not remove %s", path, exc_info=True)
+
+    def _check_crash_recovery(self):
+        """On startup, offer to restore unsaved changes from a previous session."""
+        meta_path = config.AUTOSAVE_DIR / "recovery.json"
+        recovery_pdf = config.AUTOSAVE_DIR / "recovery.pdf"
+        if not (meta_path.exists() and recovery_pdf.exists()):
+            return
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._clear_autosave()
+            return
+
+        original = meta.get("original")
+        saved_at = meta.get("saved_at", "an earlier session")
+        name = Path(original).name if original else "an untitled document"
+        if QMessageBox.question(
+            self, "Recover Unsaved Changes",
+            f"Unsaved changes to {name} (from {saved_at}) were found.\n\n"
+            "Restore them? Choose No to discard.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            self._clear_autosave()
+            return
+
+        try:
+            if not self._document.open(recovery_pdf):
+                raise ValueError("The recovery file is password protected")
+            # Point the document back at the original so Save targets the right file.
+            self._document.set_filepath(original)
+            self._current_file = Path(original) if original else None
+            self._document.mark_modified(True)
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+            self._statusbar.showMessage(
+                "Recovered unsaved changes — use Save to keep them", 5000)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Recovery Failed",
+                f"Could not restore the recovery file:\n{e}")
+            self._clear_autosave()
 
     # ==================== Event Handlers ====================
 
@@ -678,6 +804,8 @@ class MainWindow(
     def closeEvent(self, event: QCloseEvent):
         """Handle window close"""
         if self._confirm_close():
+            self._autosave_timer.stop()
+            self._clear_autosave()  # clean exit — no recovery needed
             self._save_settings()
             self._viewer.cleanup()  # Stop background render thread
             self._document.close()
