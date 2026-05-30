@@ -21,15 +21,8 @@ class EditHandlerMixin:
         """Undo last action"""
         if self._history_manager.can_undo():
             desc = self._history_manager.get_undo_description()
-            if self._history_manager.undo():
-                # Clear page cache to force re-render
-                self._viewer._page_cache.clear()
-                self._viewer.refresh()
-                self._is_modified = True
-                self._update_title()
-                self._statusbar.showMessage(f"Undo: {desc}", 2000)
-            else:
-                self._statusbar.showMessage("Undo failed", 2000)
+            command = self._history_manager.peek_undo()
+            self._apply_history_step(self._history_manager.undo, command, f"Undo: {desc}")
         else:
             self._statusbar.showMessage("Nothing to undo", 2000)
 
@@ -37,17 +30,42 @@ class EditHandlerMixin:
         """Redo last undone action"""
         if self._history_manager.can_redo():
             desc = self._history_manager.get_redo_description()
-            if self._history_manager.redo():
-                # Clear page cache to force re-render
-                self._viewer._page_cache.clear()
-                self._viewer.refresh()
-                self._is_modified = True
-                self._update_title()
-                self._statusbar.showMessage(f"Redo: {desc}", 2000)
-            else:
-                self._statusbar.showMessage("Redo failed", 2000)
+            command = self._history_manager.peek_redo()
+            self._apply_history_step(self._history_manager.redo, command, f"Redo: {desc}")
         else:
             self._statusbar.showMessage("Nothing to redo", 2000)
+
+    def _apply_history_step(self, action, command, success_message: str):
+        """Run an undo/redo step and refresh the view to match the result.
+
+        Commands that swap the underlying document (snapshot restore) need the
+        viewer detached first so the background render worker releases the old
+        document, then a full reload. Commands that change page structure need a
+        reload too; lighter in-place edits only need a refresh.
+        """
+        swaps_document = getattr(command, "swaps_document", False)
+        requires_reload = getattr(command, "requires_reload", False)
+
+        if swaps_document:
+            # Release the old document from the viewer/sidebar (and its render
+            # worker) before it is closed and replaced by the snapshot.
+            self._viewer.set_document(None, None)
+            self._sidebar.set_document(None)
+
+        if action():
+            if requires_reload:
+                self._load_document_to_viewer()
+            else:
+                self._viewer._page_cache.clear()
+                self._viewer.refresh()
+            self._is_modified = True
+            self._update_title()
+            self._statusbar.showMessage(success_message, 2000)
+        else:
+            # Re-attach whatever document is still open so the view isn't blank.
+            if swaps_document:
+                self._load_document_to_viewer()
+            self._statusbar.showMessage("Action failed", 2000)
 
     def _cut(self):
         """Cut selection"""

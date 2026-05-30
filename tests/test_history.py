@@ -43,6 +43,28 @@ def test_undo_page_delete_restores_count(doc):
     assert doc.page_count == 3
 
 
+def test_undo_page_delete_restores_content(doc):
+    """Undoing a delete must bring back the real page, not a blank one."""
+    hm = HistoryManager()
+    assert "page 2" in doc.get_page_text(1)
+    hm.execute(PageDeleteCommand(doc, 1))
+    assert doc.page_count == 2
+    assert "page 2" not in doc.get_page_text(1)
+
+    assert hm.undo() is True
+    assert doc.page_count == 3
+    assert "page 2" in doc.get_page_text(1)
+
+
+def test_undo_page_delete_then_redo(doc):
+    hm = HistoryManager()
+    hm.execute(PageDeleteCommand(doc, 1))
+    hm.undo()
+    assert hm.redo() is True
+    assert doc.page_count == 2
+    assert "page 2" not in doc.get_page_text(1)
+
+
 def test_rotate_command_undo(doc):
     hm = HistoryManager()
     hm.execute(PageRotateCommand(doc, 0, 90))
@@ -98,3 +120,23 @@ def test_clear_history(doc):
     hm.clear()
     assert hm.can_undo() is False
     assert hm.can_redo() is False
+
+
+# ==================== View-refresh flags & peek ====================
+
+def test_page_structure_commands_require_reload(doc):
+    assert PageDeleteCommand(doc, 0).requires_reload is True
+    assert PageAddCommand(doc, 0).requires_reload is True
+    # In-place edits don't need a full viewer reload.
+    assert PageRotateCommand(doc, 0, 90).requires_reload is False
+
+
+def test_peek_returns_next_commands(doc):
+    hm = HistoryManager()
+    cmd = PageAddCommand(doc, 1)
+    hm.execute(cmd)
+    assert hm.peek_undo() is cmd
+    assert hm.peek_redo() is None
+    hm.undo()
+    assert hm.peek_undo() is None
+    assert hm.peek_redo() is cmd

@@ -2,10 +2,15 @@
 Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
+import logging
 from typing import List, Optional, Any, Dict, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
+
+import fitz
+
+logger = logging.getLogger(__name__)
 
 
 class CommandType(Enum):
@@ -36,6 +41,13 @@ class CommandType(Enum):
 class Command(ABC):
     """Abstract base class for undoable commands"""
 
+    # Undo/redo replaces the underlying fitz.Document object (snapshot restore),
+    # so the UI must detach the viewer/sidebar before and re-attach afterwards.
+    swaps_document: bool = False
+    # Undo/redo changes page structure (count/order) or swaps the document, so
+    # the viewer needs a full reload rather than a light in-place refresh.
+    requires_reload: bool = False
+
     def __init__(self, command_type: CommandType, description: str = ""):
         self.command_type = command_type
         self.description = description
@@ -58,6 +70,8 @@ class Command(ABC):
 @dataclass
 class PageAddCommand(Command):
     """Command for adding a page"""
+    requires_reload = True  # page count changes — rebuild the viewer's pages
+
     document: Any
     page_index: int
     page_data: Optional[bytes] = None
@@ -91,6 +105,8 @@ class PageAddCommand(Command):
 @dataclass
 class PageDeleteCommand(Command):
     """Command for deleting a page"""
+    requires_reload = True  # page count changes — rebuild the viewer's pages
+
     document: Any
     page_index: int
     page_data: Optional[bytes] = None
@@ -100,24 +116,40 @@ class PageDeleteCommand(Command):
                          f"Delete page {page_index + 1}")
         self.document = document
         self.page_index = page_index
-        self.page_data = None
+        # The deleted page's content, captured as a single-page PDF so undo can
+        # restore the real page rather than fabricating a blank one.
+        self._page_pdf: Optional[bytes] = None
 
     def execute(self) -> bool:
         try:
-            # Store page data for undo
-            # Note: In real implementation, we'd save the page content
+            doc = self.document.doc
+            if doc is None:
+                return False
+            # Snapshot the page about to be deleted so undo restores its content.
+            holder = fitz.open()
+            holder.insert_pdf(doc, from_page=self.page_index, to_page=self.page_index)
+            self._page_pdf = holder.tobytes()
+            holder.close()
             self.document.delete_page(self.page_index)
             return True
         except Exception:
+            logger.exception("PageDeleteCommand.execute failed")
             return False
 
     def undo(self) -> bool:
         try:
-            # Restore the page
-            # Note: In real implementation, we'd restore from saved data
-            self.document.add_blank_page(index=self.page_index)
+            if self._page_pdf is None:
+                return False
+            doc = self.document.doc
+            if doc is None:
+                return False
+            holder = fitz.open(stream=self._page_pdf, filetype="pdf")
+            doc.insert_pdf(holder, start_at=self.page_index)
+            holder.close()
+            self.document.mark_modified()
             return True
         except Exception:
+            logger.exception("PageDeleteCommand.undo failed")
             return False
 
 
@@ -419,6 +451,14 @@ class HistoryManager:
     def can_redo(self) -> bool:
         """Check if redo is available"""
         return len(self._redo_stack) > 0
+
+    def peek_undo(self) -> Optional[Command]:
+        """The command that the next undo() will reverse, or None."""
+        return self._undo_stack[-1] if self._undo_stack else None
+
+    def peek_redo(self) -> Optional[Command]:
+        """The command that the next redo() will re-apply, or None."""
+        return self._redo_stack[-1] if self._redo_stack else None
 
     def get_undo_description(self) -> str:
         """Get description of the next undo action"""
