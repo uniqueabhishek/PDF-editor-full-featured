@@ -90,41 +90,40 @@ contradict each other and the code (see item #10).
   restore a leftover recovery (i.e. after a crash) and retargets Save to the
   original file via `PDFDocument.set_filepath`. Recovery is cleared on clean
   save/close/open/new and on clean exit. Driven by the Preferences auto-save toggle.
-- [ ] **#10 — Docs overstate capabilities; 3 stale, contradictory reports.** README
-  claims Excel/PowerPoint/HTML conversion, digital signatures, multi-tab — none
-  implemented. Reconcile README and replace/delete `CODE_QUALITY_REPORT.md`,
-  `docs/BROKEN_FEATURES_REPORT.md`, `docs/FEATURE_AUDIT_REPORT.md` with current docs.
+- [x] **#10 — Docs reconciled.** README corrected — dropped multi-tab, digital
+  signatures, and the Word/Excel/PowerPoint/HTML/PDF-A conversion table; the Export
+  section now lists images/Word/text only, and the (now real) auto-save claim
+  stays. Deleted the 3 stale reports (`CODE_QUALITY_REPORT.md`,
+  `docs/BROKEN_FEATURES_REPORT.md`, `docs/FEATURE_AUDIT_REPORT.md`) in favour of
+  this living checklist, and fixed deleted-module references in `index.md`,
+  `API_REFERENCE.md` (removed the OCRProcessor / annotation / form / converter
+  sections), `ARCHITECTURE.md` and `CONTRIBUTING.md` (structure trees + extension
+  guidance). Residual: `USER_GUIDE.md` prose still describes a few absent niceties.
 
 ---
 
-## 🟢 Low — quality nits
+## 🟢 Low — quality nits (done)
 
-- [ ] **Inconsistent error handling.** Logging added in [utils/history.py](../utils/history.py)
-  and the [pdf_viewer.py](../ui/pdf_viewer.py) render paths, but the older command
-  classes still swallow with `except Exception: return False`, and several
-  main-thread interaction handlers in `pdf_viewer.py` still use `print(...)` for
-  errors (annotation/text helpers).
-- [ ] **Misleading `@dataclass` + custom `__init__`** on the command classes
-  ([utils/history.py](../utils/history.py)) — the generated init is overridden, fields are dead.
-- [ ] **Encapsulation break.** `AnnotationAddCommand._create_stamp_annotation` sets
-  `self.document._is_modified = True` directly; `mark_modified()` exists.
-  [utils/history.py](../utils/history.py)
-- [ ] **Cross-platform claims vs Windows-only code.** `subprocess.Popen(['start', ...], shell=True)`
-  ([ui/handlers/file_handler.py:393](../ui/handlers/file_handler.py#L393)) and the "Segoe UI"
-  default font; README claims macOS/Linux support. (`send2trash` dependency appears unused.)
-- [ ] **OCR text layer is mispositioned.** All page text is inserted at a single point
-  ([ui/handlers/tools_handler.py](../ui/handlers/tools_handler.py)), so search-highlight
-  rects won't align with the visible words.
-- [ ] **Compress-in-place is a no-op.** `compress()` with no output path routes to a
-  same-file incremental save that doesn't shrink the file. [core/pdf_document.py](../core/pdf_document.py)
-- [ ] **ruff: 2 unused imports** (`QRectF`, `QBrush`) in
-  [ui/dialogs/remove_header_footer_dialog.py:11-12](../ui/dialogs/remove_header_footer_dialog.py#L11-L12).
+- [x] **Error handling** — the `print(...)` error handlers in `pdf_viewer.py` and the
+  stamp command now use logging. (Older undo commands still return False quietly;
+  acceptable for the command pattern.)
+- [x] **Misleading `@dataclass` + custom `__init__`** removed from the command
+  classes (and the unused `dataclass` import).
+- [x] **Encapsulation** — the stamp command uses `PDFDocument.mark_modified()` instead
+  of poking `_is_modified`.
+- [x] **Cross-platform file open** — exported docs open via `os.startfile` / `open` /
+  `xdg-open` instead of Windows-only shell `start`.
+- [x] **OCR text layer** now positions each recognised word (via `image_to_data`).
+- [x] **Compress-in-place** now forces a full rewrite so it actually shrinks the file.
+- [x] **ruff** is clean across the project (the 2 unused dialog imports were removed).
+
+Not pursued (would need real features / dependency tracing, not nits): `send2trash`
+and other possibly-unused declared dependencies in `pyproject.toml`.
 
 ---
 
-## Suggested next order
+## Status
 
-1. **#4** render-thread safety (stability; partially started)
-2. **#5 / #6 / #7** broken UI features users expect to work
-3. **#8 / #9 / #10** dead-code/doc cleanup (decide scope first)
-4. Low-severity nits (can be bundled)
+All audit items **#1–#10 are complete.** Remaining optional follow-ups: a full
+`USER_GUIDE.md` prose pass, and pruning unused declared dependencies from
+`pyproject.toml`.

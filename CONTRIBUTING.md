@@ -100,27 +100,18 @@ ultra-pdf-editor/
 ├── pyproject.toml          # Dependencies and project metadata
 │
 ├── core/                   # Core business logic (no UI)
-│   ├── pdf_document.py     # PDFDocument class - main document model
-│   ├── operations/         # Stateless PDF operations
-│   │   ├── merge.py        # Merge operations
-│   │   ├── split.py        # Split operations
-│   │   ├── ocr.py          # OCR processing
-│   │   └── ...
-│   └── converters/         # Format conversion modules
-│       ├── to_word.py
-│       ├── to_image.py
-│       └── ...
+│   └── pdf_document.py     # PDFDocument - main document model & all PDF ops
 │
 ├── ui/                     # User interface (PyQt6)
 │   ├── main_window.py      # Main application window
 │   ├── pdf_viewer.py       # PDF rendering widget
 │   ├── sidebar.py          # Side panel widgets
 │   ├── toolbar.py          # Toolbar widgets
+│   ├── theme.py            # Light/dark theme application
+│   ├── handlers/           # MainWindow action handler mixins
 │   └── dialogs/            # Dialog windows
 │
-├── annotations/            # Annotation handling
-├── forms/                  # Form field handling
-├── utils/                  # Shared utilities
+├── utils/                  # Shared utilities (history/undo, file utils)
 └── tests/                  # Test suite
 ```
 

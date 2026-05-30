@@ -46,7 +46,6 @@ Welcome to the Ultra PDF Editor documentation. This guide covers everything from
 
 ### API Documentation
 - [PDFDocument Class](API_REFERENCE.md#pdfdocument-class)
-- [OCRProcessor Class](API_REFERENCE.md#ocrprocessor-class)
 - [Configuration](API_REFERENCE.md#configuration-classes)
 
 ### Contributing

@@ -123,17 +123,12 @@ Contains all PDF manipulation logic.
 
 ```
 core/
-├── pdf_document.py     # Main document model
-├── operations/         # Stateless operations
-│   ├── merge.py
-│   ├── split.py
-│   ├── ocr.py
-│   └── compress.py
-└── converters/         # Format conversion
-    ├── to_word.py
-    ├── to_image.py
-    └── to_excel.py
+└── pdf_document.py     # Main document model (loading, saving, all PDF operations)
 ```
+
+All PDF manipulation (pages, merge/split, annotations, redaction, OCR text
+layer, watermark, compression, encryption) lives on `PDFDocument`; the UI
+handlers in `ui/handlers/` call into it.
 
 **Responsibilities:**
 - PDF loading and saving
@@ -634,19 +629,18 @@ finally:
 3. Add tool button in `AnnotationToolbar`
 4. Implement rendering in `PageWidget`
 
-### Adding New Converters
+### Adding New Export Formats
 
-1. Create converter in `core/converters/`
-2. Implement `Converter` interface
-3. Register in export menu
-4. Add file filter to dialog
+1. Add an `_export_as_*` handler in `ui/handlers/file_handler.py`
+2. Add it to the File → Export menu
+3. Add a file filter to the save dialog
 
 ### Adding New Operations
 
-1. Create operation in `core/operations/`
-2. Add method to `PDFDocument` if needed
-3. Create menu action
-4. Add keyboard shortcut (optional)
+1. Add the operation as a method on `PDFDocument`
+2. Call it from a handler mixin in `ui/handlers/`, wrapping destructive
+   edits in `_run_snapshot_op` so they remain undoable
+3. Create the menu/toolbar action (and an optional keyboard shortcut)
 
 ### Plugin Architecture (Future)
 

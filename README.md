@@ -12,7 +12,6 @@ A powerful, professional-grade PDF editor built with Python and PyQt6. Designed 
 ### Core Document Operations
 - **Open/Save PDF files** with full format preservation
 - **Create new PDFs** from scratch
-- **Multiple document tabs** for simultaneous editing
 - **Auto-save & recovery** to prevent data loss
 - **Drag & drop** file support
 
@@ -20,46 +19,35 @@ A powerful, professional-grade PDF editor built with Python and PyQt6. Designed 
 - Add, insert, delete, and duplicate pages
 - Reorder pages via drag & drop
 - Rotate pages (90°, 180°, 270°)
-- Crop and resize pages
+- Crop pages
 - Extract pages to new PDF
 - Page thumbnails sidebar with quick navigation
 
 ### Merge & Split
-- Merge multiple PDFs into a single document
-- Split PDF by page count or custom ranges
-- Split by bookmarks
-- Batch merge operations
+- Merge multiple PDFs into a single document (with reordering)
+- Split PDF by page count, custom ranges, or bookmarks
 
 ### Annotations & Markup
 - **Text markup**: Highlight, underline, strikethrough
 - **Sticky notes** and comments
 - **Text boxes** with customizable fonts
-- **Shapes**: Rectangle, circle, line, arrow, polygon
+- **Shapes**: Rectangle, circle, line, arrow
 - **Freehand drawing** tools
-- **Stamps**: Approved, Draft, Confidential, and custom stamps
+- **Stamps**: Approved, Draft, Confidential, and more presets
 - Annotation color and opacity controls
 
 ### Security
 - **Password protection** (user and owner passwords)
-- **Encryption**: 128-bit and 256-bit AES
+- **AES-256 encryption**
 - **Permission controls**: Print, copy, edit restrictions
 - **Redaction tools** for permanent content removal
-- **Digital signatures** support
 
 ### OCR (Optical Character Recognition)
-- Convert scanned PDFs to searchable text
-- Multiple language support (30+ languages)
-- Batch OCR processing
+- Add a searchable text layer to scanned PDFs (via Tesseract)
 
-### Conversion
-| From PDF | To PDF |
-|----------|--------|
-| Word (.docx) | Word (.docx) |
-| Excel (.xlsx) | Excel (.xlsx) |
-| PowerPoint (.pptx) | Images (PNG, JPG, TIFF) |
-| Images | HTML |
-| HTML | Plain Text |
-| PDF/A (archival) | |
+### Export
+- Export pages as **images** (PNG)
+- Export text to **Microsoft Word** (`.docx`) or **plain text**
 
 ### View & Navigation
 - Zoom controls (fit page, fit width, custom %)
@@ -251,8 +239,7 @@ User settings are stored at:
 | reportlab | PDF generation |
 | Pillow | Image processing |
 | pytesseract | OCR integration |
-| python-docx | Word document conversion |
-| openpyxl | Excel conversion |
+| python-docx | Word (.docx) export |
 | cryptography | Encryption support |
 
 ## Troubleshooting
@@ -275,9 +262,8 @@ User settings are stored at:
 - Check file permissions
 
 **Slow performance with large PDFs**
-- Reduce thumbnail cache size in settings
-- Close unused document tabs
-- Disable GPU acceleration if experiencing graphics issues
+- Close the document when you're done with it to free memory
+- Lower the rendering DPI with the `RENDER_DPI` environment variable
 
 ### Getting Help
 
