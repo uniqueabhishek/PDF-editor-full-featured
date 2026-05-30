@@ -4,10 +4,13 @@ Convert PDF documents to Microsoft Word format
 """
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any, TYPE_CHECKING
+import io
+import logging
 import fitz
 from docx import Document as WordDocument
 from docx.shared import Inches, Pt
-import io
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from docx.document import Document as WordDocumentType
@@ -182,7 +185,9 @@ class PDFToWordConverter:
                 max_width = Inches(6)
                 doc.add_picture(image_stream, width=min(Inches(width / 72), max_width))
         except Exception:
-            pass  # Skip images that can't be extracted
+            # Skip images that can't be extracted/decoded, but record why.
+            logger.debug("Skipping image that could not be added to the Word document",
+                         exc_info=True)
 
     def _add_page_images(self, doc: "WordDocumentType", page: fitz.Page):
         """Add all images from a page"""
@@ -198,6 +203,8 @@ class PDFToWordConverter:
                     image_stream = io.BytesIO(image_bytes)
                     doc.add_picture(image_stream, width=Inches(5))
             except Exception:
+                logger.debug("Skipping page image that could not be added",
+                             exc_info=True)
                 continue
 
     def extract_text(self, pages: Optional[List[int]] = None) -> str:

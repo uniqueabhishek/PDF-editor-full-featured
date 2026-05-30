@@ -2,11 +2,14 @@
 Ultra PDF Editor - OCR Module
 Optical Character Recognition for scanned PDFs
 """
+import logging
 import os
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any
 import fitz
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 class OCRProcessor:
@@ -32,6 +35,7 @@ class OCRProcessor:
             pytesseract.get_tesseract_version()
             return True
         except Exception:
+            logger.debug("Tesseract OCR is not available", exc_info=True)
             return False
 
     @property
@@ -262,6 +266,7 @@ class OCRProcessor:
                 ocr_doc.close()
 
             except Exception as e:
+                logger.exception("OCR failed on page %d", page_num + 1)
                 if callback:
                     callback(i + 1, total, f"Error on page {page_num + 1}: {e}")
 
@@ -316,6 +321,8 @@ class OCRProcessor:
         try:
             return pytesseract.get_languages()
         except Exception:
+            logger.debug("Could not list Tesseract languages; defaulting to ['eng']",
+                         exc_info=True)
             return ["eng"]
 
 

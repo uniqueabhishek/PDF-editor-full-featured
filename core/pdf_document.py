@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any, Union, Sequence
 from dataclasses import dataclass
 from enum import Enum
+import logging
 import os
 import re
-import statistics
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 
 class PageRotation(Enum):
@@ -226,6 +228,9 @@ class PDFDocument:
                     self._doc.save(str(save_path), incremental=True, encryption=1)
                 except Exception:
                     # Incremental save not possible (e.g. encryption change); do full save via temp
+                    logger.debug(
+                        "Incremental save failed for %s; falling back to full save",
+                        save_path, exc_info=True)
                     import tempfile
                     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
                     os.close(tmp_fd)
@@ -234,7 +239,8 @@ class PDFDocument:
                         # Close the doc so Windows releases the file lock, then replace
                         self._doc.close()
                         self._doc = None
-                        import gc, time
+                        import gc
+                        import time
                         gc.collect()
                         # Retry replace — the file may be briefly locked by AV scanner or
                         # an external viewer (Adobe/Edge). Surface a clear error if still locked.
@@ -264,7 +270,9 @@ class PDFDocument:
                                     if self._doc.needs_pass and self._password:
                                         self._doc.authenticate(self._password)
                                 except Exception:
-                                    pass
+                                    logger.warning(
+                                        "Could not reopen original %s after a failed save",
+                                        save_path, exc_info=True)
                                 raise
                             # Switch the open document to the new file
                             self._doc = fitz.open(str(edited_path))
@@ -288,7 +296,9 @@ class PDFDocument:
                                 if self._doc.needs_pass and self._password:
                                     self._doc.authenticate(self._password)
                             except Exception:
-                                pass
+                                logger.warning(
+                                    "Could not reopen original %s after a failed save",
+                                    save_path, exc_info=True)
                         raise
             else:
                 self._doc.save(str(save_path), **save_options)
@@ -305,11 +315,8 @@ class PDFDocument:
         if self._doc is None:
             raise ValueError("No document is open")
 
-        try:
-            self._doc.save(str(filepath), garbage=4, deflate=True)
-            return True
-        except Exception:
-            raise
+        self._doc.save(str(filepath), garbage=4, deflate=True)
+        return True
 
     # ==================== Page Operations ====================
 
@@ -331,7 +338,9 @@ class PDFDocument:
                 label = labels[page_num]
                 return str(label) if label else str(page_num + 1)
         except Exception:
-            pass
+            logger.debug(
+                "Could not read page label for page %d; using ordinal",
+                page_num, exc_info=True)
         return str(page_num + 1)
 
     def get_page_info(self, page_num: int) -> PageInfo:
@@ -453,12 +462,14 @@ class PDFDocument:
         if self._doc is None:
             raise ValueError("No document is open")
 
-        if to_index < 0:
-            to_index = self.page_count
-
+        # PyMuPDF's copy_page expects ``to`` in range(-1, page_count); -1 means
+        # "after the last page". Keep -1 for the append case (mapping it to
+        # page_count would be out of range and raise) while still reporting the
+        # index the copied page actually lands at.
+        new_index = self.page_count if to_index < 0 else to_index
         self._doc.copy_page(page_num, to_index)
         self._is_modified = True
-        return to_index
+        return new_index
 
     def extract_pages(self, page_nums: List[int], output_path: Union[str, Path]) -> bool:
         """Extract specific pages to a new PDF"""
@@ -895,6 +906,7 @@ class PDFDocument:
         annot = page.add_ink_annot(points)
         annot.set_colors(stroke=color)
         annot.set_border(width=int(width))
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
