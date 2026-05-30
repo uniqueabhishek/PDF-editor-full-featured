@@ -552,11 +552,11 @@ class FormManager:
         """Load all form fields from the document"""
         self._fields.clear()
 
-        if not self._document._doc:
+        if not self._document.doc:
             return
 
-        for page_num in range(len(self._document._doc)):
-            page = self._document._doc[page_num]
+        for page_num in range(len(self._document.doc)):
+            page = self._document.doc[page_num]
 
             for widget in page.widgets():
                 field = self._widget_to_field(widget, page_num)
@@ -648,10 +648,10 @@ class FormManager:
 
     def add_field(self, field: FormField):
         """Add a new form field"""
-        page = self._document._doc[field.page]
+        page = self._document.doc[field.page]
         field.create_on_page(page)
         self._fields[field.name] = field
-        self._document._is_modified = True
+        self._document.mark_modified()
 
     def remove_field(self, name: str):
         """Remove a form field"""
@@ -660,16 +660,16 @@ class FormManager:
             if field._widget:
                 # Note: fitz doesn't have a direct widget removal method
                 # Would need to rebuild the page or use lower-level operations
-                _ = self._document._doc[field.page]  # Page reference for future use
+                _ = self._document.doc[field.page]  # Page reference for future use
             del self._fields[name]
-            self._document._is_modified = True
+            self._document.mark_modified()
 
     def fill_field(self, name: str, value: Any):
         """Fill a form field with a value"""
         field = self._fields.get(name)
         if field:
             field.set_value(value)
-            self._document._is_modified = True
+            self._document.mark_modified()
 
     def export_data(self) -> Dict[str, Any]:
         """Export form data as dictionary"""

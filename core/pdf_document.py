@@ -66,6 +66,17 @@ class PDFDocument:
         return self._doc is not None
 
     @property
+    def doc(self) -> Optional[fitz.Document]:
+        """The underlying PyMuPDF document, or None when nothing is open.
+
+        Public, read-only access for the UI/forms layers that must hand the
+        document to PyMuPDF-based widgets (viewer, sidebar) or do low-level page
+        work. Prefer the higher-level methods on this class where one exists;
+        this exists so callers don't have to reach into the private ``_doc``.
+        """
+        return self._doc
+
+    @property
     def filepath(self) -> Optional[Path]:
         """Get the current file path"""
         return self._filepath
@@ -74,6 +85,10 @@ class PDFDocument:
     def is_modified(self) -> bool:
         """Check if document has unsaved changes"""
         return self._is_modified
+
+    def mark_modified(self, modified: bool = True) -> None:
+        """Mark the document as having unsaved changes (or clear the flag)."""
+        self._is_modified = modified
 
     @property
     def page_count(self) -> int:
