@@ -564,16 +564,35 @@ class PDFDocument:
         self._is_modified = True
         return True
 
-    def merge_pdfs(self, pdf_paths: Sequence[Union[str, Path]], output_path: Union[str, Path]) -> bool:
-        """Merge multiple PDFs into a new file"""
+    def merge_pdfs(self, pdf_paths: Sequence[Union[str, Path]],
+                   output_path: Union[str, Path],
+                   add_bookmarks: bool = False,
+                   compress: bool = True) -> bool:
+        """Merge multiple PDFs into a new file.
+
+        Args:
+            pdf_paths: PDFs to merge, in the given order.
+            output_path: Destination file.
+            add_bookmarks: Add a top-level bookmark per source file.
+            compress: Garbage-collect and deflate the output.
+        """
         merged_doc = fitz.open()
+        toc: List = []
 
         for pdf_path in pdf_paths:
+            if add_bookmarks:
+                # The next inserted file starts at the current page count (+1 for
+                # the 1-indexed TOC).
+                toc.append([1, Path(pdf_path).stem, merged_doc.page_count + 1])
             pdf = fitz.open(str(pdf_path))
             merged_doc.insert_pdf(pdf)
             pdf.close()
 
-        merged_doc.save(str(output_path))
+        if add_bookmarks and toc:
+            merged_doc.set_toc(toc)
+
+        save_options = {"garbage": 4, "deflate": True} if compress else {}
+        merged_doc.save(str(output_path), **save_options)
         merged_doc.close()
         return True
 
@@ -641,6 +660,44 @@ class PDFDocument:
             new_doc.save(str(output_path))
             new_doc.close()
 
+            created_files.append(str(output_path))
+
+        return created_files
+
+    def split_by_bookmarks(self, output_dir: Union[str, Path]) -> List[str]:
+        """
+        Split the document at each top-level (level-1) bookmark.
+
+        Each chapter becomes its own file spanning from its bookmark page up to
+        (but not including) the next top-level bookmark's page.
+
+        Returns:
+            List of created file paths.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+
+        points = [(entry[1], entry[2] - 1)
+                  for entry in self._doc.get_toc() if entry[0] == 1]
+        if not points:
+            raise ValueError("Document has no top-level bookmarks to split by")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        base_name = self._filepath.stem if self._filepath else "split"
+
+        created_files: List[str] = []
+        for i, (title, start) in enumerate(points):
+            end = points[i + 1][1] - 1 if i < len(points) - 1 else self.page_count - 1
+            end = max(end, start)
+
+            new_doc = fitz.open()
+            new_doc.insert_pdf(self._doc, from_page=start, to_page=end)
+
+            safe = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
+            output_path = output_dir / f"{base_name}_{safe or f'part_{i+1}'}.pdf"
+            new_doc.save(str(output_path))
+            new_doc.close()
             created_files.append(str(output_path))
 
         return created_files

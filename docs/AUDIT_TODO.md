@@ -61,7 +61,12 @@ contradict each other and the code (see item #10).
     (Stale doc references to these now feed into #10.)
   - [ ] [forms/form_field.py](../forms/form_field.py) (686) — full form system, never imported (no UI). Build the feature or delete + fix README.
   - [ ] [annotations/base.py](../annotations/base.py) (591) — parallel annotation system, unused (annotations run via `PDFDocument` + `AnnotationAddCommand`).
-  - [ ] [ui/dialogs/merge_dialog.py](../ui/dialogs/merge_dialog.py) (294), [split_dialog.py](../ui/dialogs/split_dialog.py) (374) — built but bypassed by inline `QFileDialog`; cheap to wire up.
+  - [x] **MergeDialog / SplitDialog wired up** — both refactored to pure UI/option
+    collectors (their duplicate worker threads removed); the work routes through
+    the tested `PDFDocument.merge_pdfs` / `split_by_*` methods on the in-memory
+    document. Adds real features: merge reordering + per-file bookmarks, and split
+    by every-N-pages / custom ranges / bookmarks (previously only 1-page-per-file).
+    `merge_pdfs` gained `add_bookmarks`/`compress`; added `split_by_bookmarks`.
   - [ ] [ui/dialogs/settings_dialog.py](../ui/dialogs/settings_dialog.py) (419) — unused (no Settings menu); wiring it also unlocks #9.
   - [ ] Also dead: `TransactionManager`/`CompoundCommand` in [utils/history.py](../utils/history.py) and `PDFDocument._temp_files`.
 - [ ] **#9 — Autosave / crash recovery advertised but absent.** Config/README/SettingsDialog

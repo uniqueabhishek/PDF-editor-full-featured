@@ -156,6 +156,20 @@ def test_merge_pdfs(make_pdf, tmp_path):
     check.close()
 
 
+def test_merge_pdfs_adds_bookmark_per_file(make_pdf, tmp_path):
+    a = make_pdf("intro.pdf", pages=2)
+    b = make_pdf("body.pdf", pages=3)
+    out = tmp_path / "merged_bm.pdf"
+
+    assert PDFDocument().merge_pdfs([a, b], out, add_bookmarks=True) is True
+    check = fitz.open(str(out))
+    try:
+        toc = check.get_toc()
+        assert [(e[1], e[2]) for e in toc] == [("intro", 1), ("body", 3)]
+    finally:
+        check.close()
+
+
 def test_close_resets_state(opened):
     opened.close()
     assert opened.is_open is False
@@ -297,6 +311,45 @@ def test_reorder_pages_requires_open_document():
     doc = PDFDocument()
     with pytest.raises(ValueError):
         doc.reorder_pages([0])
+
+
+# ==================== Split ====================
+
+def test_split_by_pages_every_n(opened, tmp_path):
+    files = opened.split_by_pages(tmp_path, pages_per_file=2)
+    # 3 pages, 2 per file -> 2 files (2 + 1).
+    assert len(files) == 2
+    first = fitz.open(files[0])
+    assert len(first) == 2
+    first.close()
+
+
+def test_split_by_ranges(opened, tmp_path):
+    files = opened.split_by_ranges([(0, 0), (1, 2)], tmp_path)
+    assert len(files) == 2
+    second = fitz.open(files[1])
+    assert len(second) == 2
+    second.close()
+
+
+def test_split_by_bookmarks(opened, tmp_path):
+    opened.set_toc([[1, "Chapter A", 1], [1, "Chapter B", 3]])
+    files = opened.split_by_bookmarks(tmp_path)
+    assert len(files) == 2
+    # Chapter A spans pages 1-2, Chapter B page 3.
+    a = fitz.open(files[0])
+    b = fitz.open(files[1])
+    try:
+        assert len(a) == 2
+        assert len(b) == 1
+    finally:
+        a.close()
+        b.close()
+
+
+def test_split_by_bookmarks_without_toc_raises(opened, tmp_path):
+    with pytest.raises(ValueError):
+        opened.split_by_bookmarks(tmp_path)
 
 
 def test_render_worker_copy_opens_and_renders_without_password(make_pdf, tmp_path):

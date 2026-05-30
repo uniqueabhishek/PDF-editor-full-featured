@@ -16,51 +16,74 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QImage, QPixmap
 
-from ..dialogs import HeaderFooterDialog, RemoveHeaderFooterDialog, BatchDialog
+from ..dialogs import (
+    HeaderFooterDialog, RemoveHeaderFooterDialog, BatchDialog,
+    MergeDialog, SplitDialog,
+)
 
 
 class ToolsHandlerMixin:
     """Tools-menu and header/footer operations for MainWindow."""
 
     def _merge_pdfs(self):
-        """Merge multiple PDFs"""
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "Select PDFs to Merge", "", "PDF Files (*.pdf)"
-        )
-        if len(files) < 2:
+        """Merge multiple PDFs into a new file (order/options via MergeDialog)."""
+        dialog = MergeDialog(self)
+        if not dialog.exec():
             return
 
-        output, _ = QFileDialog.getSaveFileName(
-            self, "Save Merged PDF", "", "PDF Files (*.pdf)"
-        )
-        if output:
-            try:
-                self._document.merge_pdfs(files, output)
-                self._statusbar.showMessage("PDFs merged successfully", 3000)
+        files = dialog.get_files()
+        output = dialog.get_output_path()
+        if len(files) < 2 or not output:
+            return
 
-                if QMessageBox.question(
-                    self, "Open Merged PDF",
-                    "Do you want to open the merged PDF?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                ) == QMessageBox.StandardButton.Yes:
-                    self._open_file(output)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to merge:\n{e}")
+        opts = dialog.get_options()
+        try:
+            self._document.merge_pdfs(
+                files, output,
+                add_bookmarks=opts.get("add_bookmarks", False),
+                compress=opts.get("compress", True),
+            )
+            self._statusbar.showMessage("PDFs merged successfully", 3000)
+
+            if QMessageBox.question(
+                self, "Open Merged PDF",
+                "Do you want to open the merged PDF?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            ) == QMessageBox.StandardButton.Yes:
+                self._open_file(output)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to merge:\n{e}")
 
     def _split_pdf(self):
-        """Split PDF into multiple files"""
+        """Split the current PDF into multiple files (mode/options via SplitDialog)."""
         if not self._document.is_open:
             return
 
-        output_dir = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory")
-        if output_dir:
-            try:
+        dialog = SplitDialog(
+            str(self._current_file) if self._current_file else None,
+            self._document.page_count, self)
+        if not dialog.exec():
+            return
+
+        opts = dialog.get_split_options()
+        output_dir = opts.get("output_dir")
+        if not output_dir:
+            return
+
+        mode = opts.get("mode", "single")
+        try:
+            if mode == "every_n":
+                files = self._document.split_by_pages(output_dir, opts["pages_per_file"])
+            elif mode == "ranges":
+                ranges = [(start - 1, end - 1) for start, end in opts["ranges"]]
+                files = self._document.split_by_ranges(ranges, output_dir)
+            elif mode == "bookmarks":
+                files = self._document.split_by_bookmarks(output_dir)
+            else:
                 files = self._document.split_by_pages(output_dir, 1)
-                self._statusbar.showMessage(
-                    f"Split into {len(files)} files", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to split:\n{e}")
+            self._statusbar.showMessage(f"Split into {len(files)} files", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to split:\n{e}")
 
     def _compress_pdf(self):
         """Compress PDF to reduce size"""
