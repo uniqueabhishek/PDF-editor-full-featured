@@ -216,7 +216,6 @@ ultra-pdf-editor/
 │   ├── toolbar.py          # Toolbars
 │   └── dialogs/            # Dialog windows
 │
-├── annotations/            # Annotation system
 └── utils/                  # Utilities
 ```
 

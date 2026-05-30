@@ -63,7 +63,10 @@ contradict each other and the code (see item #10).
     UI, and carried real bugs (colliding widget-type constants, stub
     `remove_field`/`flatten`, no FDF/XFDF). Removed the package and dropped the
     forms claims from the README. Rebuild deliberately if forms become a priority.
-  - [ ] [annotations/base.py](../annotations/base.py) (591) — parallel annotation system, unused (annotations run via `PDFDocument` + `AnnotationAddCommand`).
+  - [x] **annotations/base.py deleted** — a 591-line parallel annotation model
+    (Annotation classes + serialization) that was never imported; the annotation
+    feature runs via `PDFDocument` + `AnnotationAddCommand`. Removed the package
+    and its README structure entry. (The annotation *feature* is unaffected.)
   - [x] **MergeDialog / SplitDialog wired up** — both refactored to pure UI/option
     collectors (their duplicate worker threads removed); the work routes through
     the tested `PDFDocument.merge_pdfs` / `split_by_*` methods on the in-memory
