@@ -39,16 +39,6 @@ A powerful, professional-grade PDF editor built with Python and PyQt6. Designed 
 - **Stamps**: Approved, Draft, Confidential, and custom stamps
 - Annotation color and opacity controls
 
-### Forms
-- Fill existing PDF forms
-- Create fillable forms with:
-  - Text fields
-  - Checkboxes and radio buttons
-  - Dropdown lists
-  - Date pickers
-  - Signature fields
-- Form data import/export (FDF, XFDF)
-
 ### Security
 - **Password protection** (user and owner passwords)
 - **Encryption**: 128-bit and 256-bit AES
@@ -216,10 +206,8 @@ ultra-pdf-editor/
 ├── config.py               # Configuration and settings
 ├── pyproject.toml          # Project dependencies
 │
-├── core/                   # Core PDF operations
-│   ├── pdf_document.py     # Document model
-│   ├── operations/         # PDF operations (merge, split, OCR)
-│   └── converters/         # Format converters
+├── core/                   # Core PDF model
+│   └── pdf_document.py     # Document model
 │
 ├── ui/                     # User interface
 │   ├── main_window.py      # Main application window
@@ -229,7 +217,6 @@ ultra-pdf-editor/
 │   └── dialogs/            # Dialog windows
 │
 ├── annotations/            # Annotation system
-├── forms/                  # Form handling
 └── utils/                  # Utilities
 ```
 

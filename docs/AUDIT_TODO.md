@@ -59,7 +59,10 @@ contradict each other and the code (see item #10).
     `file_handler`, OCR in `tools_handler`, image render via
     `PDFDocument.render_page_to_image`). ~985 LOC removed; no behavior change.
     (Stale doc references to these now feed into #10.)
-  - [ ] [forms/form_field.py](../forms/form_field.py) (686) — full form system, never imported (no UI). Build the feature or delete + fix README.
+  - [x] **forms/ deleted** — the 686-line form system was never imported, had no
+    UI, and carried real bugs (colliding widget-type constants, stub
+    `remove_field`/`flatten`, no FDF/XFDF). Removed the package and dropped the
+    forms claims from the README. Rebuild deliberately if forms become a priority.
   - [ ] [annotations/base.py](../annotations/base.py) (591) — parallel annotation system, unused (annotations run via `PDFDocument` + `AnnotationAddCommand`).
   - [x] **MergeDialog / SplitDialog wired up** — both refactored to pure UI/option
     collectors (their duplicate worker threads removed); the work routes through
