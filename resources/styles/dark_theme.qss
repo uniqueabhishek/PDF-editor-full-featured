@@ -1,0 +1,105 @@
+/* Ultra PDF Editor - Dark theme */
+QMainWindow {
+    background-color: #1e1e1e;
+}
+QWidget {
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+QMenuBar {
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+QMenuBar::item:selected {
+    background-color: #0078d4;
+}
+QMenu {
+    background-color: #2d2d2d;
+    color: #ffffff;
+    border: 1px solid #3d3d3d;
+}
+QMenu::item:selected {
+    background-color: #0078d4;
+}
+QToolBar {
+    background-color: #2d2d2d;
+    border: none;
+    spacing: 3px;
+    padding: 3px;
+}
+QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 4px;
+}
+QToolButton:hover {
+    background-color: #3d3d3d;
+}
+QToolButton:pressed {
+    background-color: #4d4d4d;
+}
+QStatusBar {
+    background-color: #007acc;
+    color: white;
+}
+QScrollBar:vertical {
+    background-color: #2d2d2d;
+    width: 12px;
+}
+QScrollBar::handle:vertical {
+    background-color: #5d5d5d;
+    border-radius: 6px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: #7d7d7d;
+}
+QLineEdit, QSpinBox, QComboBox {
+    background-color: #3d3d3d;
+    border: 1px solid #5d5d5d;
+    border-radius: 4px;
+    padding: 4px;
+    color: white;
+}
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+    border-color: #0078d4;
+}
+QPushButton {
+    background-color: #0078d4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 16px;
+}
+QPushButton:hover {
+    background-color: #1084d8;
+}
+QPushButton:pressed {
+    background-color: #006cbd;
+}
+QTabWidget::pane {
+    border: 1px solid #3d3d3d;
+}
+QTabBar::tab {
+    background-color: #2d2d2d;
+    color: #aaa;
+    padding: 8px 16px;
+}
+QTabBar::tab:selected {
+    background-color: #0078d4;
+    color: white;
+}
+QSplitter::handle {
+    background-color: #3d3d3d;
+}
+QTreeWidget, QListWidget {
+    background-color: #2d2d2d;
+    border: none;
+}
+QTreeWidget::item:hover, QListWidget::item:hover {
+    background-color: #3d3d3d;
+}
+QTreeWidget::item:selected, QListWidget::item:selected {
+    background-color: #0078d4;
+}

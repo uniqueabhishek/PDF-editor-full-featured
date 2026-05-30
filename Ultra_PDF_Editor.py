@@ -83,212 +83,30 @@ def setup_application():
     return app
 
 
+STYLES_DIR = Path(__file__).parent / "resources" / "styles"
+
+
+def _load_stylesheet(filename: str) -> str:
+    """Load a Qt stylesheet from resources/styles.
+
+    Returns an empty string (falls back to the Fusion default) if the file is
+    missing or unreadable, so a missing resource never crashes startup.
+    """
+    try:
+        return (STYLES_DIR / filename).read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"Warning: could not load stylesheet '{filename}': {e}")
+        return ""
+
+
 def apply_dark_theme(app):
     """Apply dark theme to application"""
-    dark_stylesheet = """
-    QMainWindow {
-        background-color: #1e1e1e;
-    }
-    QWidget {
-        background-color: #2d2d2d;
-        color: #ffffff;
-    }
-    QMenuBar {
-        background-color: #2d2d2d;
-        color: #ffffff;
-    }
-    QMenuBar::item:selected {
-        background-color: #0078d4;
-    }
-    QMenu {
-        background-color: #2d2d2d;
-        color: #ffffff;
-        border: 1px solid #3d3d3d;
-    }
-    QMenu::item:selected {
-        background-color: #0078d4;
-    }
-    QToolBar {
-        background-color: #2d2d2d;
-        border: none;
-        spacing: 3px;
-        padding: 3px;
-    }
-    QToolButton {
-        background-color: transparent;
-        border: none;
-        border-radius: 4px;
-        padding: 4px;
-    }
-    QToolButton:hover {
-        background-color: #3d3d3d;
-    }
-    QToolButton:pressed {
-        background-color: #4d4d4d;
-    }
-    QStatusBar {
-        background-color: #007acc;
-        color: white;
-    }
-    QScrollBar:vertical {
-        background-color: #2d2d2d;
-        width: 12px;
-    }
-    QScrollBar::handle:vertical {
-        background-color: #5d5d5d;
-        border-radius: 6px;
-        min-height: 30px;
-    }
-    QScrollBar::handle:vertical:hover {
-        background-color: #7d7d7d;
-    }
-    QLineEdit, QSpinBox, QComboBox {
-        background-color: #3d3d3d;
-        border: 1px solid #5d5d5d;
-        border-radius: 4px;
-        padding: 4px;
-        color: white;
-    }
-    QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
-        border-color: #0078d4;
-    }
-    QPushButton {
-        background-color: #0078d4;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 6px 16px;
-    }
-    QPushButton:hover {
-        background-color: #1084d8;
-    }
-    QPushButton:pressed {
-        background-color: #006cbd;
-    }
-    QTabWidget::pane {
-        border: 1px solid #3d3d3d;
-    }
-    QTabBar::tab {
-        background-color: #2d2d2d;
-        color: #aaa;
-        padding: 8px 16px;
-    }
-    QTabBar::tab:selected {
-        background-color: #0078d4;
-        color: white;
-    }
-    QSplitter::handle {
-        background-color: #3d3d3d;
-    }
-    QTreeWidget, QListWidget {
-        background-color: #2d2d2d;
-        border: none;
-    }
-    QTreeWidget::item:hover, QListWidget::item:hover {
-        background-color: #3d3d3d;
-    }
-    QTreeWidget::item:selected, QListWidget::item:selected {
-        background-color: #0078d4;
-    }
-    """
-    app.setStyleSheet(dark_stylesheet)
+    app.setStyleSheet(_load_stylesheet("dark_theme.qss"))
 
 
 def apply_light_theme(app):
     """Apply light theme to application"""
-    light_stylesheet = """
-    QMainWindow {
-        background-color: #f5f5f5;
-    }
-    QMenuBar {
-        background-color: #ffffff;
-        border-bottom: 1px solid #e0e0e0;
-    }
-    QMenuBar::item:selected {
-        background-color: #e5e5e5;
-    }
-    QMenu {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-    }
-    QMenu::item:selected {
-        background-color: #0078d4;
-        color: white;
-    }
-    QToolBar {
-        background-color: #f5f5f5;
-        border: none;
-        border-bottom: 1px solid #e0e0e0;
-        spacing: 3px;
-        padding: 3px;
-    }
-    QToolButton {
-        background-color: transparent;
-        border: none;
-        border-radius: 4px;
-        padding: 4px;
-    }
-    QToolButton:hover {
-        background-color: #e0e0e0;
-    }
-    QToolButton:pressed {
-        background-color: #d0d0d0;
-    }
-    QStatusBar {
-        background-color: #0078d4;
-        color: white;
-    }
-    QScrollBar:vertical {
-        background-color: #f5f5f5;
-        width: 12px;
-    }
-    QScrollBar::handle:vertical {
-        background-color: #c0c0c0;
-        border-radius: 6px;
-        min-height: 30px;
-    }
-    QScrollBar::handle:vertical:hover {
-        background-color: #a0a0a0;
-    }
-    QLineEdit, QSpinBox, QComboBox {
-        background-color: #ffffff;
-        border: 1px solid #c0c0c0;
-        border-radius: 4px;
-        padding: 4px;
-    }
-    QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
-        border-color: #0078d4;
-    }
-    QPushButton {
-        background-color: #0078d4;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 6px 16px;
-    }
-    QPushButton:hover {
-        background-color: #1084d8;
-    }
-    QPushButton:pressed {
-        background-color: #006cbd;
-    }
-    QTabWidget::pane {
-        border: 1px solid #e0e0e0;
-        background-color: white;
-    }
-    QTabBar::tab {
-        background-color: #f5f5f5;
-        padding: 8px 16px;
-    }
-    QTabBar::tab:selected {
-        background-color: #0078d4;
-        color: white;
-    }
-    QSplitter::handle {
-        background-color: #e0e0e0;
-    }
-    """
-    app.setStyleSheet(light_stylesheet)
+    app.setStyleSheet(_load_stylesheet("light_theme.qss"))
 
 
 def main():
