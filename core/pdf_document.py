@@ -61,6 +61,8 @@ class PDFDocument:
         self._is_modified: bool = False
         self._password: Optional[str] = None
         self._temp_files: List[str] = []
+        # Encryption settings queued by encrypt() and applied on the next save.
+        self._pending_encryption: Optional[Dict[str, Any]] = None
 
     @property
     def is_open(self) -> bool:
@@ -164,6 +166,7 @@ class PDFDocument:
         self._filepath = None
         self._is_modified = False
         self._password = None
+        self._pending_encryption = None
 
         # Clean up temp files
         for temp_file in self._temp_files:
@@ -201,113 +204,118 @@ class PDFDocument:
         if not save_path:
             raise ValueError("No filepath specified")
 
-        try:
-            # Prepare save options
-            save_options = {
-                "garbage": garbage,
-                "deflate": deflate,
-                "deflate_images": deflate_images,
-                "deflate_fonts": deflate_fonts,
-            }
+        # An explicit ``encryption`` argument wins; otherwise apply any settings
+        # queued by encrypt(). When encryption is being set or changed we must do
+        # a full rewrite — PyMuPDF cannot change encryption on an incremental save
+        # (an incremental save can only KEEP the existing encryption state).
+        enc = encryption if encryption is not None else self._pending_encryption
 
-            # Handle encryption
-            if encryption:
-                # PDF_ENCRYPT_AES_256 = 4
-                save_options["encryption"] = encryption.get("method", 4)
-                if "user_password" in encryption:
-                    save_options["user_pw"] = encryption["user_password"]
-                if "owner_password" in encryption:
-                    save_options["owner_pw"] = encryption["owner_password"]
-                if "permissions" in encryption:
-                    save_options["permissions"] = encryption["permissions"]
+        save_options: Dict[str, Any] = {
+            "garbage": garbage,
+            "deflate": deflate,
+            "deflate_images": deflate_images,
+            "deflate_fonts": deflate_fonts,
+        }
+        if enc:
+            save_options["encryption"] = enc.get("method", fitz.PDF_ENCRYPT_AES_256)
+            if enc.get("user_password") is not None:
+                save_options["user_pw"] = enc["user_password"]
+            if enc.get("owner_password") is not None:
+                save_options["owner_pw"] = enc["owner_password"]
+            if enc.get("permissions") is not None:
+                save_options["permissions"] = enc["permissions"]
 
-            # If saving to same file, try incremental save; fall back to full save via temp file
-            if save_path == self._filepath:
+        if save_path == self._filepath:
+            if enc:
+                # Changing encryption — the incremental path can only KEEP the
+                # current state, so go straight to a full rewrite.
+                save_path = self._save_full_via_temp(save_path, save_options)
+            else:
                 try:
                     # PDF_ENCRYPT_KEEP = 1
                     self._doc.save(str(save_path), incremental=True, encryption=1)
                 except Exception:
-                    # Incremental save not possible (e.g. encryption change); do full save via temp
+                    # Incremental save not possible; do a full save via temp file.
                     logger.debug(
                         "Incremental save failed for %s; falling back to full save",
                         save_path, exc_info=True)
-                    import tempfile
-                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
-                    os.close(tmp_fd)
-                    try:
-                        self._doc.save(tmp_path, **save_options)
-                        # Close the doc so Windows releases the file lock, then replace
-                        self._doc.close()
-                        self._doc = None
-                        import gc
-                        import time
-                        gc.collect()
-                        # Retry replace — the file may be briefly locked by AV scanner or
-                        # an external viewer (Adobe/Edge). Surface a clear error if still locked.
-                        last_err = None
-                        for attempt in range(8):
-                            try:
-                                os.replace(tmp_path, str(save_path))
-                                last_err = None
-                                break
-                            except PermissionError as e:
-                                last_err = e
-                                time.sleep(0.25)
-                        if last_err is not None:
-                            # Target is locked — save alongside with ".edited" suffix instead.
-                            edited_path = save_path.with_name(save_path.stem + ".edited.pdf")
-                            try:
-                                os.replace(tmp_path, str(edited_path))
-                            except Exception:
-                                try:
-                                    if os.path.exists(tmp_path):
-                                        os.remove(tmp_path)
-                                except OSError:
-                                    pass
-                                # Reopen original and bail
-                                try:
-                                    self._doc = fitz.open(str(save_path))
-                                    if self._doc.needs_pass and self._password:
-                                        self._doc.authenticate(self._password)
-                                except Exception:
-                                    logger.warning(
-                                        "Could not reopen original %s after a failed save",
-                                        save_path, exc_info=True)
-                                raise
-                            # Switch the open document to the new file
-                            self._doc = fitz.open(str(edited_path))
-                            if self._doc.needs_pass and self._password:
-                                self._doc.authenticate(self._password)
-                            save_path = edited_path
-                        # Reopen the saved file
-                        self._doc = fitz.open(str(save_path))
-                        if self._doc.needs_pass and self._password:
-                            self._doc.authenticate(self._password)
-                    except Exception:
-                        try:
-                            if os.path.exists(tmp_path):
-                                os.remove(tmp_path)
-                        except OSError:
-                            pass
-                        # If we closed the doc but failed to replace, try to reopen the original
-                        if self._doc is None and save_path.exists():
-                            try:
-                                self._doc = fitz.open(str(save_path))
-                                if self._doc.needs_pass and self._password:
-                                    self._doc.authenticate(self._password)
-                            except Exception:
-                                logger.warning(
-                                    "Could not reopen original %s after a failed save",
-                                    save_path, exc_info=True)
-                        raise
-            else:
-                self._doc.save(str(save_path), **save_options)
+                    save_path = self._save_full_via_temp(save_path, save_options)
+        else:
+            self._doc.save(str(save_path), **save_options)
 
-            self._filepath = save_path
-            self._is_modified = False
-            return True
+        self._filepath = save_path
+        self._is_modified = False
+        self._pending_encryption = None
+        return True
+
+    def _save_full_via_temp(self, save_path: Path,
+                            save_options: Dict[str, Any]) -> Path:
+        """Full-rewrite save over the file the document already has open.
+
+        PyMuPDF cannot full-save onto the file it is currently reading (and
+        cannot change encryption with an incremental save), so write to a temp
+        file in the same directory, close the document to release the OS lock,
+        replace the original, then reopen it.
+
+        Returns the path actually written — normally ``save_path``, but a sibling
+        ``*.edited.pdf`` if the original stayed locked by another process.
+        """
+        import tempfile
+        import gc
+        import time
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
+        os.close(tmp_fd)
+        try:
+            self._doc.save(tmp_path, **save_options)
+            # Close the doc so Windows releases the file lock, then replace.
+            self._doc.close()
+            self._doc = None
+            gc.collect()
+
+            # Retry the replace — the target may be briefly locked by an AV
+            # scanner or an external viewer (Adobe/Edge).
+            last_err = None
+            for _attempt in range(8):
+                try:
+                    os.replace(tmp_path, str(save_path))
+                    last_err = None
+                    break
+                except PermissionError as e:
+                    last_err = e
+                    time.sleep(0.25)
+
+            if last_err is not None:
+                # Target stayed locked — save alongside with an ".edited" suffix.
+                final_path = save_path.with_name(save_path.stem + ".edited.pdf")
+                os.replace(tmp_path, str(final_path))
+            else:
+                final_path = save_path
+
+            # Reopen the saved file, re-authenticating if we just encrypted it.
+            self._doc = fitz.open(str(final_path))
+            if self._doc.needs_pass and self._password:
+                self._doc.authenticate(self._password)
+            return final_path
 
         except Exception:
+            # Clean up the temp file if it's still around.
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+            # If we closed the doc but never replaced, reopen the original so the
+            # application still has a live document to work with.
+            if self._doc is None and save_path.exists():
+                try:
+                    self._doc = fitz.open(str(save_path))
+                    if self._doc.needs_pass and self._password:
+                        self._doc.authenticate(self._password)
+                except Exception:
+                    logger.warning(
+                        "Could not reopen original %s after a failed save",
+                        save_path, exc_info=True)
             raise
 
     def save_copy(self, filepath: Union[str, Path]) -> bool:
@@ -979,29 +987,47 @@ class PDFDocument:
     # ==================== Security ====================
 
     def encrypt(self, user_password: str = "", owner_password: str = "",
-                permissions: int = 2048) -> bool:  # 2048 = PDF_PERM_ACCESSIBILITY
+                permissions: Optional[int] = None,
+                method: int = fitz.PDF_ENCRYPT_AES_256) -> bool:
         """
-        Encrypt the document
+        Queue password encryption to be applied on the next save.
+
+        PyMuPDF can only (re)encrypt a PDF during a full rewrite, so the settings
+        are stored here and applied by :meth:`save`. The usual flow is
+        ``encrypt(...)`` followed by ``save(...)`` to write the encrypted file.
 
         Args:
-            user_password: Password to open the document
-            owner_password: Password for full permissions
-            permissions: Permission flags
+            user_password: Password required to open the document.
+            owner_password: Password granting full permissions. Defaults to the
+                user password when omitted so the file isn't left with an empty
+                owner password.
+            permissions: Optional permission bitmask built from ``fitz.PDF_PERM_*``
+                flags (e.g. ``fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY``). When
+                ``None`` every action is permitted and the password only controls
+                opening the document.
+            method: Encryption algorithm (default AES-256).
+
+        Returns:
+            True once the encryption request has been queued.
         """
         if self._doc is None:
             raise ValueError("No document is open")
 
-        # Permissions can be combined:
-        # fitz.PDF_PERM_PRINT - printing
-        # fitz.PDF_PERM_MODIFY - modifying
-        # fitz.PDF_PERM_COPY - copying
-        # fitz.PDF_PERM_ANNOTATE - annotating
-        # fitz.PDF_PERM_FORM - filling forms
-        # fitz.PDF_PERM_ACCESSIBILITY - accessibility
-        # fitz.PDF_PERM_ASSEMBLE - assembling
-        # fitz.PDF_PERM_PRINT_HQ - high quality printing
+        if not user_password and not owner_password:
+            raise ValueError("At least one of user_password or owner_password is required")
 
-        self._password = user_password
+        enc: Dict[str, Any] = {"method": method}
+        if user_password:
+            enc["user_password"] = user_password
+        # Always set an owner password (falling back to the user password) so the
+        # document can't be opened with full owner rights and no password.
+        enc["owner_password"] = owner_password or user_password
+        if permissions is not None:
+            enc["permissions"] = permissions
+
+        self._pending_encryption = enc
+        # Re-opening the encrypted file after the save needs the open password.
+        self._password = user_password or owner_password or None
         self._is_modified = True
         return True
 

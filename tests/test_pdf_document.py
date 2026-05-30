@@ -161,3 +161,65 @@ def test_close_resets_state(opened):
     assert opened.is_open is False
     assert opened.doc is None
     assert opened.page_count == 0
+
+
+# ==================== Encryption ====================
+
+def test_encrypt_then_save_requires_password(opened, tmp_path):
+    out = tmp_path / "encrypted.pdf"
+    assert opened.encrypt(user_password="s3cret") is True
+    assert opened.save(out) is True
+
+    # The freshly written file must actually demand the password.
+    raw = fitz.open(str(out))
+    try:
+        assert raw.needs_pass  # PyMuPDF returns an int flag, not a bool
+        assert raw.authenticate("wrong") == 0
+        assert raw.authenticate("s3cret") > 0
+    finally:
+        raw.close()
+
+
+def test_encrypt_save_in_place_overwrites_with_encrypted(make_pdf):
+    src = make_pdf("plain.pdf", pages=2)
+    doc = PDFDocument()
+    assert doc.open(src) is True
+    assert doc.encrypt(user_password="pw123") is True
+    assert doc.save() is True  # in-place full rewrite via temp file
+    doc.close()
+
+    raw = fitz.open(str(src))
+    try:
+        assert raw.needs_pass
+        assert raw.authenticate("pw123") > 0
+    finally:
+        raw.close()
+
+
+def test_plain_save_is_not_encrypted(opened, tmp_path):
+    out = tmp_path / "plain_out.pdf"
+    assert opened.save(out) is True
+    raw = fitz.open(str(out))
+    try:
+        assert not raw.needs_pass
+    finally:
+        raw.close()
+
+
+def test_encryption_request_is_cleared_after_save(opened, tmp_path):
+    opened.encrypt(user_password="once")
+    opened.save(tmp_path / "enc1.pdf")
+
+    # A subsequent save to a new path must NOT re-encrypt.
+    out2 = tmp_path / "enc2.pdf"
+    opened.save(out2)
+    raw = fitz.open(str(out2))
+    try:
+        assert not raw.needs_pass
+    finally:
+        raw.close()
+
+
+def test_encrypt_requires_a_password(opened):
+    with pytest.raises(ValueError):
+        opened.encrypt()

@@ -382,19 +382,47 @@ class ToolsHandlerMixin:
             QMessageBox.critical(self, "Error", f"Redaction failed:\n{e}")
 
     def _encrypt_pdf(self):
-        """Encrypt PDF with password"""
+        """Password-protect the document with AES-256 encryption."""
         if not self._document.is_open:
             return
 
         from PyQt6.QtWidgets import QLineEdit
         password, ok = QInputDialog.getText(
-            self, "Encrypt PDF", "Enter password:",
-            QLineEdit.EchoMode.Password
+            self, "Encrypt PDF",
+            "Enter a password to protect this PDF:",
+            QLineEdit.EchoMode.Password,
         )
-        if ok and password:
+        if not ok or not password:
+            return
+
+        # Confirm the password — an encryption typo locks the file permanently.
+        confirm, ok = QInputDialog.getText(
+            self, "Encrypt PDF",
+            "Re-enter the password to confirm:",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok:
+            return
+        if confirm != password:
+            QMessageBox.warning(
+                self, "Passwords Do Not Match",
+                "The passwords you entered do not match. "
+                "The document was not encrypted.",
+            )
+            return
+
+        try:
             self._document.encrypt(
                 user_password=password, owner_password=password)
             self._save_document()
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error", f"Failed to encrypt the document:\n{e}")
+            return
+
+        if not self._document.is_modified:
+            self._statusbar.showMessage(
+                "PDF encrypted with AES-256 and saved.", 4000)
 
     def _remove_password(self):
         """Remove password protection"""
