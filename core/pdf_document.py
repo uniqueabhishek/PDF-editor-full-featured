@@ -491,6 +491,20 @@ class PDFDocument:
         self._doc.move_page(from_index, to_index)
         self._is_modified = True
 
+    def reorder_pages(self, new_order: Sequence[int]) -> bool:
+        """Reorder the document's pages to match ``new_order``.
+
+        ``new_order`` is the desired sequence of current page indices (a
+        permutation of ``range(page_count)`` for a pure reorder). Used by the
+        thumbnail drag-and-drop; computing the full target order avoids any
+        ambiguity in single-page move semantics.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        self._doc.select(list(new_order))
+        self._is_modified = True
+        return True
+
     def copy_page(self, page_num: int, to_index: int = -1) -> int:
         """
         Copy a page within the document

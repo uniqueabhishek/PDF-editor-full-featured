@@ -2,17 +2,20 @@
 Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel,
+    QWidget, QVBoxLayout, QScrollArea, QLabel, QApplication,
     QListWidget, QListWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem,
     QMenu, QInputDialog, QLineEdit, QFrame
 )
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QPoint, QTimer
+    Qt, pyqtSignal, QPoint, QMimeData, QTimer
 )
-from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtGui import QPixmap, QImage, QDrag
 import fitz
 from typing import Optional, List, Dict
 from dataclasses import dataclass
+
+# MIME type used to carry a page index during thumbnail drag-and-drop reorder.
+_PAGE_MIME = "application/x-pdf-page"
 
 
 @dataclass
@@ -35,6 +38,7 @@ class ThumbnailWidget(QFrame):
         self.page_num = page_num
         self._selected = False
         self._pixmap: Optional[QPixmap] = None
+        self._drag_start_pos: Optional[QPoint] = None
 
         self._setup_ui()
 
@@ -102,8 +106,30 @@ class ThumbnailWidget(QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
             self.clicked.emit(self.page_num)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        # Start a drag once the pointer has moved far enough with the button held,
+        # so a plain click still selects the page.
+        if not (event.buttons() & Qt.MouseButton.LeftButton) or self._drag_start_pos is None:
+            super().mouseMoveEvent(event)
+            return
+        moved = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+        if moved < QApplication.startDragDistance():
+            return
+
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setData(_PAGE_MIME, str(self.page_num).encode())
+        drag.setMimeData(mime)
+        if self._pixmap is not None:
+            drag.setPixmap(self._pixmap.scaled(
+                80, 100, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+        self._drag_start_pos = None
+        drag.exec(Qt.DropAction.MoveAction)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -119,7 +145,7 @@ class ThumbnailPanel(QScrollArea):
 
     page_selected = pyqtSignal(int)
     page_double_clicked = pyqtSignal(int)
-    pages_reordered = pyqtSignal(int, int)  # from_index, to_index
+    pages_reordered = pyqtSignal(int, int)  # source page, insert-before index
     page_rotate_requested = pyqtSignal(int, int)  # page, degrees
     page_delete_requested = pyqtSignal(int)
     page_extract_requested = pyqtSignal(list)
@@ -141,6 +167,7 @@ class ThumbnailPanel(QScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setAcceptDrops(True)  # accept page reorder drops from thumbnails
 
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
@@ -230,6 +257,39 @@ class ThumbnailPanel(QScrollArea):
     def _on_scroll(self):
         """Handle scroll"""
         self._render_timer.start(50)
+
+    # ---- Drag-and-drop page reordering ----
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(_PAGE_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(_PAGE_MIME):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        md = event.mimeData()
+        if not md.hasFormat(_PAGE_MIME):
+            return
+        try:
+            source_page = int(bytes(md.data(_PAGE_MIME)).decode())
+        except (ValueError, UnicodeDecodeError):
+            return
+
+        # Map the drop point into the thumbnail container's coordinate system,
+        # then find the page it should be inserted in front of.
+        global_pos = self.mapToGlobal(event.position().toPoint())
+        drop_y = self._container.mapFromGlobal(global_pos).y()
+        target = len(self._thumbnails)
+        for i, thumb in enumerate(self._thumbnails):
+            geo = thumb.geometry()
+            if drop_y < geo.y() + geo.height() / 2:
+                target = i
+                break
+
+        event.acceptProposedAction()
+        self.pages_reordered.emit(source_page, target)
 
     def _on_thumbnail_clicked(self, page_num: int):
         """Handle thumbnail click"""
@@ -571,6 +631,7 @@ class Sidebar(QTabWidget):
     page_rotate_requested = pyqtSignal(int, int)
     page_delete_requested = pyqtSignal(int)
     page_extract_requested = pyqtSignal(list)
+    pages_reordered = pyqtSignal(int, int)  # source page, insert-before index
     toc_changed = pyqtSignal(list)  # full new table of contents
     bookmark_add_requested = pyqtSignal(str)  # title (added at current page)
 
@@ -599,6 +660,7 @@ class Sidebar(QTabWidget):
         self.thumbnail_panel.page_rotate_requested.connect(self.page_rotate_requested)
         self.thumbnail_panel.page_delete_requested.connect(self.page_delete_requested)
         self.thumbnail_panel.page_extract_requested.connect(self.page_extract_requested)
+        self.thumbnail_panel.pages_reordered.connect(self.pages_reordered)
 
         self.bookmark_panel.bookmark_clicked.connect(self.bookmark_clicked)
         self.bookmark_panel.toc_changed.connect(self.toc_changed)

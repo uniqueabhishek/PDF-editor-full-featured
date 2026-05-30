@@ -86,6 +86,33 @@ class PageHandlerMixin:
             self._update_title()
             self._statusbar.showMessage("Rotated page", 2000)
 
+    def _reorder_page(self, from_index: int, before_index: int):
+        """Move a page via thumbnail drag-and-drop.
+
+        ``before_index`` is the position (in current page coordinates) to insert
+        the page in front of; ``page_count`` means move it to the end.
+        """
+        if not self._document.is_open:
+            return
+        count = self._document.page_count
+        if not (0 <= from_index < count):
+            return
+
+        # Build the target order, then reorder in one operation (avoids any
+        # ambiguity in single-page move semantics).
+        order = list(range(count))
+        page = order.pop(from_index)
+        insert_at = before_index if before_index <= from_index else before_index - 1
+        insert_at = max(0, min(insert_at, len(order)))
+        order.insert(insert_at, page)
+        if order == list(range(count)):
+            return  # dropped back in the same place
+
+        if self._run_snapshot_op(
+                "Reorder pages",
+                lambda: self._document.reorder_pages(order)) is not None:
+            self._statusbar.showMessage("Page moved", 2000)
+
     def _extract_pages(self):
         """Extract pages to new PDF"""
         if not self._document.is_open:

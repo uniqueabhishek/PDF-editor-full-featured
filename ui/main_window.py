@@ -476,6 +476,7 @@ class MainWindow(
         self._sidebar.page_delete_requested.connect(self._delete_page)
         self._sidebar.page_extract_requested.connect(
             self._extract_specific_pages)
+        self._sidebar.pages_reordered.connect(self._reorder_page)
         self._sidebar.toc_changed.connect(self._apply_toc)
         self._sidebar.bookmark_add_requested.connect(self._add_bookmark)
 

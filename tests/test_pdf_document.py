@@ -283,6 +283,22 @@ def test_set_toc_round_trips_through_save(opened, tmp_path):
         reopened.close()
 
 
+# ==================== Page reorder ====================
+
+def test_reorder_pages_changes_order(opened):
+    before = [opened.get_page_text(i).strip() for i in range(3)]
+    opened.reorder_pages([2, 0, 1])
+    after = [opened.get_page_text(i).strip() for i in range(3)]
+    assert after == [before[2], before[0], before[1]]
+    assert opened.page_count == 3
+
+
+def test_reorder_pages_requires_open_document():
+    doc = PDFDocument()
+    with pytest.raises(ValueError):
+        doc.reorder_pages([0])
+
+
 def test_render_worker_copy_opens_and_renders_without_password(make_pdf, tmp_path):
     """The viewer hands the render thread a decrypted, in-memory copy.
 
