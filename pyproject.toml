@@ -50,3 +50,7 @@ dev = [
     "pytest-qt>=4.2.0",
     "ruff>=0.1.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
