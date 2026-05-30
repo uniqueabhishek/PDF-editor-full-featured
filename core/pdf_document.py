@@ -766,31 +766,37 @@ class PDFDocument:
         return list(page.annots()) if page.annots() else []
 
     def add_highlight(self, page_num: int, rect: Tuple[float, float, float, float],
-                      color: Tuple[float, float, float] = (1, 1, 0)) -> fitz.Annot:
+                      color: Tuple[float, float, float] = (1, 1, 0),
+                      opacity: float = 1.0) -> fitz.Annot:
         """Add a highlight annotation"""
         page = self.get_page(page_num)
         annot = page.add_highlight_annot(fitz.Rect(rect))
         annot.set_colors(stroke=color)
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
 
     def add_underline(self, page_num: int, rect: Tuple[float, float, float, float],
-                      color: Tuple[float, float, float] = (0, 0, 1)) -> fitz.Annot:
+                      color: Tuple[float, float, float] = (0, 0, 1),
+                      opacity: float = 1.0) -> fitz.Annot:
         """Add an underline annotation"""
         page = self.get_page(page_num)
         annot = page.add_underline_annot(fitz.Rect(rect))
         annot.set_colors(stroke=color)
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
 
     def add_strikethrough(self, page_num: int, rect: Tuple[float, float, float, float],
-                          color: Tuple[float, float, float] = (1, 0, 0)) -> fitz.Annot:
+                          color: Tuple[float, float, float] = (1, 0, 0),
+                          opacity: float = 1.0) -> fitz.Annot:
         """Add a strikethrough annotation"""
         page = self.get_page(page_num)
         annot = page.add_strikeout_annot(fitz.Rect(rect))
         annot.set_colors(stroke=color)
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
@@ -824,12 +830,13 @@ class PDFDocument:
     def add_rect_annotation(self, page_num: int, rect: Tuple[float, float, float, float],
                             stroke_color: Tuple[float, float, float] = (1, 0, 0),
                             fill_color: Optional[Tuple[float, float, float]] = None,
-                            width: float = 1) -> fitz.Annot:
+                            width: float = 1, opacity: float = 1.0) -> fitz.Annot:
         """Add a rectangle annotation"""
         page = self.get_page(page_num)
         annot = page.add_rect_annot(fitz.Rect(rect))
         annot.set_colors(stroke=stroke_color, fill=fill_color)
         annot.set_border(width=int(width))
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
@@ -837,12 +844,13 @@ class PDFDocument:
     def add_circle_annotation(self, page_num: int, rect: Tuple[float, float, float, float],
                               stroke_color: Tuple[float, float, float] = (1, 0, 0),
                               fill_color: Optional[Tuple[float, float, float]] = None,
-                              width: float = 1) -> fitz.Annot:
+                              width: float = 1, opacity: float = 1.0) -> fitz.Annot:
         """Add a circle/ellipse annotation"""
         page = self.get_page(page_num)
         annot = page.add_circle_annot(fitz.Rect(rect))
         annot.set_colors(stroke=stroke_color, fill=fill_color)
         annot.set_border(width=int(width))
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
@@ -850,12 +858,13 @@ class PDFDocument:
     def add_line_annotation(self, page_num: int,
                             start: Tuple[float, float], end: Tuple[float, float],
                             color: Tuple[float, float, float] = (1, 0, 0),
-                            width: float = 1) -> fitz.Annot:
+                            width: float = 1, opacity: float = 1.0) -> fitz.Annot:
         """Add a line annotation"""
         page = self.get_page(page_num)
         annot = page.add_line_annot(fitz.Point(start), fitz.Point(end))
         annot.set_colors(stroke=color)
         annot.set_border(width=int(width))
+        annot.set_opacity(opacity)
         annot.update()
         self._is_modified = True
         return annot
@@ -863,7 +872,7 @@ class PDFDocument:
     def add_ink_annotation(self, page_num: int,
                            points: List[List[Tuple[float, float]]],
                            color: Tuple[float, float, float] = (0, 0, 0),
-                           width: float = 2) -> fitz.Annot:
+                           width: float = 2, opacity: float = 1.0) -> fitz.Annot:
         """Add a freehand drawing (ink) annotation"""
         page = self.get_page(page_num)
         # PyMuPDF expects list of lists of point sequences

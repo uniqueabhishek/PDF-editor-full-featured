@@ -755,18 +755,49 @@ class PDFViewer(QScrollArea):
                 self.document_modified.emit()
                 self.refresh()
 
+    def _style_data(self) -> Dict[str, Any]:
+        """Current annotation style (color/opacity/width/font) from the toolbar.
+
+        Threaded into every ``annotation_create_requested`` so the command that
+        actually creates the annotation applies the user's chosen style instead
+        of falling back to hard-coded defaults.
+        """
+        return {
+            "color": (
+                self._annotation_color.redF(),
+                self._annotation_color.greenF(),
+                self._annotation_color.blueF(),
+            ),
+            "opacity": self._annotation_opacity,
+            "width": self._stroke_width,
+            "font_size": self._font_size,
+            "font_family": self._font_family,
+        }
+
+    def _request_annotation(self, page_num: int, annot_type: str,
+                            rect, extra: Optional[Dict[str, Any]] = None):
+        """Emit an annotation-creation request with the current style merged in."""
+        data = self._style_data()
+        if extra:
+            data.update(extra)
+        self.annotation_create_requested.emit(page_num, annot_type, rect, data)
+
     def _on_freehand_created(self, page_num: int, points: list):
         """Handle freehand drawing with actual tracked points"""
         if not self._doc or len(points) < 2:
             return
 
         # Emit signal instead of creating directly
-        self.annotation_create_requested.emit(
-            page_num, "ink", None, {"points": points})
+        self._request_annotation(page_num, "ink", None, {"points": points})
 
     def _on_annotation_created(self, page_num: int, annot_type: str, rect: QRectF):
         """Handle annotation creation based on current tool mode"""
-        if not self._doc or rect.width() < 5 or rect.height() < 5:
+        # Reject accidental clicks (near-zero drag), but allow thin selections so
+        # that horizontal/vertical lines and arrows (height or width ~0) still work.
+        if not self._doc:
+            return
+        drag_distance = (rect.width() ** 2 + rect.height() ** 2) ** 0.5
+        if drag_distance < 5:
             return
 
         if self._tool_mode == ToolMode.SELECT:
@@ -783,16 +814,13 @@ class PDFViewer(QScrollArea):
                     clipboard.setText(text)
 
         elif self._tool_mode == ToolMode.HIGHLIGHT:
-            self.annotation_create_requested.emit(
-                page_num, "highlight", rect, {})
+            self._request_annotation(page_num, "highlight", rect)
 
         elif self._tool_mode == ToolMode.UNDERLINE:
-            self.annotation_create_requested.emit(
-                page_num, "underline", rect, {})
+            self._request_annotation(page_num, "underline", rect)
 
         elif self._tool_mode == ToolMode.STRIKETHROUGH:
-            self.annotation_create_requested.emit(
-                page_num, "strikethrough", rect, {})
+            self._request_annotation(page_num, "strikethrough", rect)
 
         elif self._tool_mode == ToolMode.TEXT_BOX:
             self._create_text_annotation(page_num, rect, free_text=True)
@@ -801,22 +829,19 @@ class PDFViewer(QScrollArea):
             self._create_text_annotation(page_num, rect, free_text=False)
 
         elif self._tool_mode == ToolMode.RECTANGLE:
-            self.annotation_create_requested.emit(
-                page_num, "rectangle", rect, {})
+            self._request_annotation(page_num, "rectangle", rect)
 
         elif self._tool_mode == ToolMode.CIRCLE:
-            self.annotation_create_requested.emit(page_num, "circle", rect, {})
+            self._request_annotation(page_num, "circle", rect)
 
         elif self._tool_mode == ToolMode.LINE:
-            self.annotation_create_requested.emit(
-                page_num, "line", rect, {"arrow": False})
+            self._request_annotation(page_num, "line", rect, {"arrow": False})
 
         elif self._tool_mode == ToolMode.ARROW:
-            self.annotation_create_requested.emit(
-                page_num, "line", rect, {"arrow": True})
+            self._request_annotation(page_num, "line", rect, {"arrow": True})
 
         elif self._tool_mode == ToolMode.REDACT:
-            self.annotation_create_requested.emit(page_num, "redact", rect, {})
+            self._request_annotation(page_num, "redact", rect)
 
         elif self._tool_mode == ToolMode.ERASER:
             self._erase_annotation_at(page_num, rect)
@@ -931,8 +956,7 @@ class PDFViewer(QScrollArea):
 
         # Emit signal to create annotation through history manager (enables undo)
         annot_type = "text_box" if free_text else "sticky_note"
-        self.annotation_create_requested.emit(
-            page_num, annot_type, rect, {"text": text})
+        self._request_annotation(page_num, annot_type, rect, {"text": text})
 
     def _create_stamp_annotation(self, page_num: int, rect: QRectF):
         """Create a stamp annotation with user-selected stamp type"""
@@ -985,8 +1009,7 @@ class PDFViewer(QScrollArea):
             stamp_id = combo.currentIndex()  # Fallback to index if userData not retrieved
 
         # Emit signal to create stamp through history manager (enables undo)
-        self.annotation_create_requested.emit(
-            page_num, "stamp", rect, {"stamp_id": stamp_id})
+        self._request_annotation(page_num, "stamp", rect, {"stamp_id": stamp_id})
 
     def _create_shape_annotation(self, page_num: int, rect: QRectF, shape: str):
         """Create rectangle or circle annotation"""

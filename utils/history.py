@@ -253,26 +253,41 @@ class AnnotationAddCommand(Command):
         try:
             annot = None
             rect_tuple = self._rect_to_tuple(self.rect)
+
+            # Style threaded from the toolbar via the viewer. Fall back to each
+            # document method's own default when a value wasn't supplied.
+            color = self.annot_data.get("color")
+            opacity = float(self.annot_data.get("opacity", 1.0))
+            width = self.annot_data.get("width", 1)
+
             if self.annot_type == "highlight":
-                annot = self.document.add_highlight(self.page_index, rect_tuple)
+                annot = self.document.add_highlight(
+                    self.page_index, rect_tuple,
+                    color=color or (1, 1, 0), opacity=opacity)
             elif self.annot_type == "underline":
-                annot = self.document.add_underline(self.page_index, rect_tuple)
+                annot = self.document.add_underline(
+                    self.page_index, rect_tuple,
+                    color=color or (0, 0, 1), opacity=opacity)
             elif self.annot_type == "strikethrough":
                 annot = self.document.add_strikethrough(
-                    self.page_index, rect_tuple)
+                    self.page_index, rect_tuple,
+                    color=color or (1, 0, 0), opacity=opacity)
             elif self.annot_type == "rectangle":
                 annot = self.document.add_rect_annotation(
-                    self.page_index, rect_tuple)
+                    self.page_index, rect_tuple,
+                    stroke_color=color or (1, 0, 0), width=width, opacity=opacity)
             elif self.annot_type == "circle":
                 annot = self.document.add_circle_annotation(
-                    self.page_index, rect_tuple)
+                    self.page_index, rect_tuple,
+                    stroke_color=color or (1, 0, 0), width=width, opacity=opacity)
             elif self.annot_type == "line":
                 # Use rect corners as start/end points for line
                 start = (rect_tuple[0], rect_tuple[1])
                 end = (rect_tuple[2], rect_tuple[3])
                 arrow = self.annot_data.get("arrow", False)
                 annot = self.document.add_line_annotation(
-                    self.page_index, start, end)
+                    self.page_index, start, end,
+                    color=color or (1, 0, 0), width=width, opacity=opacity)
                 if arrow and annot:
                     # Add arrow head to the end
                     annot.set_line_ends(0, 5)  # 0=none, 5=closed arrow
@@ -288,7 +303,8 @@ class AnnotationAddCommand(Command):
                         stroke = [(float(p[0]), float(p[1])) for p in points]
                         strokes = [stroke]
                         annot = self.document.add_ink_annotation(
-                            self.page_index, strokes)
+                            self.page_index, strokes,
+                            color=color or (0, 0, 0), width=width, opacity=opacity)
             elif self.annot_type == "stamp":
                 # Create a stamp annotation using the rect
                 annot = self._create_stamp_annotation(rect_tuple)
@@ -296,8 +312,12 @@ class AnnotationAddCommand(Command):
             # Text annotations
             elif self.annot_type == "text_box":
                 text = self.annot_data.get("text", "Text")
+                font_size = self.annot_data.get("font_size", 12)
+                # Keep text color at the document default (black) for legibility;
+                # the toolbar Color control is markup/shape-oriented and defaults
+                # to yellow, which would be unreadable as body text.
                 annot = self.document.add_freetext(
-                    self.page_index, rect_tuple, text)
+                    self.page_index, rect_tuple, text, font_size=font_size)
             elif self.annot_type == "sticky_note":
                 # Rect to point
                 point = (rect_tuple[0], rect_tuple[1])
