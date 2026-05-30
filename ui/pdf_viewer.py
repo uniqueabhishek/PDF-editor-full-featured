@@ -14,9 +14,13 @@ from PyQt6.QtGui import (
     QWheelEvent, QMouseEvent, QKeyEvent
 )
 import fitz
+import logging
+import threading
 from typing import Optional, List, Dict, cast, Any
 from enum import Enum
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 class ViewMode(Enum):
@@ -66,73 +70,118 @@ class PageRenderWorker(QThread):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # The worker renders from its OWN private copy of the document so it
+        # never touches the editable document the main thread reads and mutates
+        # (PyMuPDF documents are not thread-safe). `_lock` guards that private
+        # copy (render vs. hand-off/close); `_task_lock` guards the task queue.
         self._doc: Optional[fitz.Document] = None
         self._tasks: List[RenderTask] = []
         self._render_dpi = 150
         self._rotation = 0
         self._running = True
         self._current_zoom = 1.0
+        self._lock = threading.Lock()
+        self._task_lock = threading.Lock()
 
-    def set_document(self, doc: Optional[fitz.Document], render_dpi: int = 150):
-        """Set the document to render"""
-        self._doc = doc
-        self._render_dpi = render_dpi
-        self._tasks.clear()
+    def set_document(self, data: Optional[bytes], render_dpi: int = 150):
+        """Give the worker its own document, opened from serialized PDF bytes.
+
+        Passing ``None`` detaches (e.g. when the document is closed). Opening a
+        private copy keeps the render thread fully isolated from the editable
+        document, so rendering can never collide with edits or other reads.
+        """
+        new_doc = None
+        if data is not None:
+            try:
+                new_doc = fitz.open(stream=data, filetype="pdf")
+            except Exception:
+                logger.exception("Render worker could not open its document copy")
+                new_doc = None
+        with self._lock:
+            old_doc = self._doc
+            self._doc = new_doc
+            self._render_dpi = render_dpi
+            if old_doc is not None:
+                try:
+                    old_doc.close()
+                except Exception:
+                    logger.debug("Failed to close previous render copy", exc_info=True)
+        with self._task_lock:
+            self._tasks.clear()
 
     def set_rotation(self, rotation: int):
         """Set rotation angle"""
-        self._rotation = rotation
+        with self._lock:
+            self._rotation = rotation
 
     def request_page(self, page_num: int, zoom: float, priority: int = 0):
         """Request a page to be rendered"""
-        # Remove any existing task for this page
-        self._tasks = [t for t in self._tasks if t.page_num != page_num]
-        self._tasks.append(RenderTask(page_num, zoom, priority))
-        self._current_zoom = zoom
-        # Sort by priority (higher first)
-        self._tasks.sort(key=lambda t: t.priority, reverse=True)
+        with self._task_lock:
+            # Remove any existing task for this page
+            self._tasks = [t for t in self._tasks if t.page_num != page_num]
+            self._tasks.append(RenderTask(page_num, zoom, priority))
+            self._current_zoom = zoom
+            # Sort by priority (higher first)
+            self._tasks.sort(key=lambda t: t.priority, reverse=True)
 
     def clear_tasks(self):
         """Clear pending tasks"""
-        self._tasks.clear()
+        with self._task_lock:
+            self._tasks.clear()
 
     def stop(self):
-        """Stop the worker"""
+        """Stop the worker and release its document copy."""
         self._running = False
         self.wait()
+        with self._lock:
+            if self._doc is not None:
+                try:
+                    self._doc.close()
+                except Exception:
+                    logger.debug("Failed to close render copy on stop", exc_info=True)
+                self._doc = None
 
     def run(self):
         """Main render loop"""
         while self._running:
-            if self._tasks and self._doc:
-                task = self._tasks.pop(0)
+            task = None
+            with self._task_lock:
+                if self._tasks:
+                    task = self._tasks.pop(0)
 
-                # Skip if zoom changed (task is outdated)
-                if abs(task.zoom - self._current_zoom) > 0.001:
-                    continue
-
-                try:
-                    page = self._doc[task.page_num]
-                    zoom_matrix = fitz.Matrix(
-                        task.zoom * self._render_dpi / 72,
-                        task.zoom * self._render_dpi / 72
-                    )
-                    zoom_matrix = zoom_matrix.prerotate(self._rotation)
-
-                    pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
-
-                    # Convert to QImage (can be done in thread)
-                    img = QImage(
-                        pixmap.samples, pixmap.width, pixmap.height,
-                        pixmap.stride, QImage.Format.Format_RGB888
-                    ).copy()  # Copy to detach from pixmap memory
-
-                    self.page_rendered.emit(task.page_num, img, task.zoom)
-
-                except Exception as e:
-                    print(f"Error rendering page {task.page_num}: {e}")
-            else:
+            if task is None:
                 self.msleep(10)  # Sleep briefly when idle
+                continue
+
+            # Skip if zoom changed (task is outdated)
+            if abs(task.zoom - self._current_zoom) > 0.001:
+                continue
+
+            img = None
+            with self._lock:
+                doc = self._doc
+                if doc is not None and 0 <= task.page_num < len(doc):
+                    try:
+                        page = doc[task.page_num]
+                        zoom_matrix = fitz.Matrix(
+                            task.zoom * self._render_dpi / 72,
+                            task.zoom * self._render_dpi / 72,
+                        ).prerotate(self._rotation)
+
+                        pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
+
+                        # Copy detaches from the pixmap memory so the QImage is
+                        # safe to use after the lock is released.
+                        img = QImage(
+                            pixmap.samples, pixmap.width, pixmap.height,
+                            pixmap.stride, QImage.Format.Format_RGB888,
+                        ).copy()
+                    except Exception:
+                        logger.exception("Error rendering page %s", task.page_num)
+                        img = None
+
+            if img is not None:
+                self.page_rendered.emit(task.page_num, img, task.zoom)
 
 
 class PageWidget(QLabel):
@@ -412,9 +461,10 @@ class PDFViewer(QScrollArea):
         self._current_page = 0
         self._page_cache.clear()
 
-        # Update render worker
+        # Hand the render worker its own private copy (see PageRenderWorker) so
+        # the background thread never touches this editable document.
         self._render_worker.clear_tasks()
-        self._render_worker.set_document(doc, self._render_dpi)
+        self._render_worker.set_document(self._render_source(doc), self._render_dpi)
 
         # Clear existing pages
         self._clear_pages()
@@ -428,6 +478,36 @@ class PDFViewer(QScrollArea):
 
             # Request visible pages to be rendered
             QTimer.singleShot(50, self._request_visible_pages)
+
+    def _render_source(self, doc: Optional[fitz.Document]) -> Optional[bytes]:
+        """Serialize the document to PDF bytes for the render worker's copy.
+
+        Encryption is dropped in this transient, in-memory copy so the worker
+        can render without a password; the bytes never touch disk. Returns None
+        if there is no document or serialization fails (the worker then renders
+        nothing and the main-thread sync render still shows the current page).
+        """
+        if doc is None:
+            return None
+        try:
+            return doc.tobytes(garbage=0, deflate=True,
+                               encryption=fitz.PDF_ENCRYPT_NONE)
+        except Exception:
+            logger.exception("Could not serialize document for the render worker")
+            return None
+
+    def invalidate_render_copy(self, page_num: int = -1):
+        """Refresh the worker's document copy after an in-place edit.
+
+        Re-serializes the (mutated) document for the worker and, when a page is
+        given, renders it synchronously from the editable document for instant
+        feedback and queues a background re-render.
+        """
+        self._render_worker.set_document(self._render_source(self._doc), self._render_dpi)
+        if 0 <= page_num < len(self._page_widgets):
+            self._page_cache.pop(page_num, None)
+            self._render_page_sync(page_num)
+            self._render_worker.request_page(page_num, self._zoom)
 
     def _clear_pages(self):
         """Clear all page widgets"""
@@ -1369,9 +1449,11 @@ class PDFViewer(QScrollArea):
         return ""
 
     def refresh(self):
-        """Refresh the view - re-render pages to show annotation changes"""
+        """Refresh the view - re-render pages to show document changes"""
         self._page_cache.clear()
-        self._render_worker.clear_tasks()
+        # The document may have changed in place — refresh the worker's copy
+        # (this also clears its pending tasks).
+        self._render_worker.set_document(self._render_source(self._doc), self._render_dpi)
 
         # Mark all page widgets as needing re-render
         for page_widget in self._page_widgets:
@@ -1408,8 +1490,8 @@ class PDFViewer(QScrollArea):
             self._page_cache[page_num] = qpixmap
             if page_num < len(self._page_widgets):
                 self._page_widgets[page_num].set_pixmap(qpixmap, self._zoom)
-        except Exception as e:
-            print(f"Error in sync render: {e}")
+        except Exception:
+            logger.exception("Error in sync render of page %s", page_num)
 
     def cleanup(self):
         """Clean up resources (call before closing)"""

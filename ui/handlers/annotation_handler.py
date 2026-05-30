@@ -37,12 +37,9 @@ class AnnotationHandlerMixin:
         command = AnnotationAddCommand(
             self._document, page_num, annot_type, rect, data)
         if self._history_manager.execute(command):
-            # We don't need to full reload, just refresh view?
-            # Ideally we just repaint, but to be safe and consistent:
-            # Clear cache for this page
-            self._viewer._page_cache.pop(page_num, None)
-            self._viewer._render_worker.request_page(
-                page_num, self._viewer._zoom)
+            # The edit is in place; refresh the render worker's copy and re-render
+            # just this page (no full reload, so the view position is preserved).
+            self._viewer.invalidate_render_copy(page_num)
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage(f"Added {annot_type} annotation", 2000)

@@ -254,3 +254,33 @@ def test_snapshot_requires_open_document():
     doc = PDFDocument()
     with pytest.raises(ValueError):
         doc.snapshot()
+
+
+def test_render_worker_copy_opens_and_renders_without_password(make_pdf, tmp_path):
+    """The viewer hands the render thread a decrypted, in-memory copy.
+
+    Validates the core assumption of the isolated-render-thread design: an
+    authenticated (originally encrypted) document can be serialized to a
+    password-free copy that opens and renders on its own.
+    """
+    src = make_pdf("enc_src.pdf", pages=2)
+    d = PDFDocument()
+    d.open(src)
+    d.encrypt(user_password="pw")
+    out = tmp_path / "enc.pdf"
+    d.save(out)
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(out, password="pw") is True
+    # Same serialization the viewer's _render_source() uses for the worker copy.
+    data = doc.doc.tobytes(garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE)
+    doc.close()
+
+    copy = fitz.open(stream=data, filetype="pdf")
+    try:
+        assert not copy.needs_pass
+        pm = copy[0].get_pixmap()
+        assert pm.width > 0 and pm.height > 0
+    finally:
+        copy.close()
