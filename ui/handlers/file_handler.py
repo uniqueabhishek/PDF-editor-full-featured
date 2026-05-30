@@ -398,8 +398,21 @@ Encrypted: {metadata.encryption}
                 "Export complete. Do you want to open the Word document?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             ) == QMessageBox.StandardButton.Yes:
+                # Open with the OS default application (cross-platform).
+                import os
+                import sys
                 import subprocess
-                subprocess.Popen(['start', '', filepath], shell=True)
+                try:
+                    if sys.platform.startswith("win"):
+                        os.startfile(filepath)  # type: ignore[attr-defined]
+                    elif sys.platform == "darwin":
+                        subprocess.Popen(["open", filepath])
+                    else:
+                        subprocess.Popen(["xdg-open", filepath])
+                except Exception as e:
+                    QMessageBox.warning(
+                        self, "Open Failed",
+                        f"Saved, but couldn't open the file automatically:\n{e}")
 
         except Exception as e:
             QMessageBox.critical(self, "Export Error",

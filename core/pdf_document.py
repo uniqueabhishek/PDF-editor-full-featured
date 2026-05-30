@@ -180,7 +180,8 @@ class PDFDocument:
              garbage: int = 4,
              deflate: bool = True,
              deflate_images: bool = True,
-             deflate_fonts: bool = True) -> bool:
+             deflate_fonts: bool = True,
+             full_rewrite: bool = False) -> bool:
         """
         Save the PDF document
 
@@ -191,6 +192,8 @@ class PDFDocument:
             deflate: Compress streams
             deflate_images: Compress images
             deflate_fonts: Compress fonts
+            full_rewrite: Force a full rewrite even when saving in place (an
+                incremental save can't garbage-collect, so compression needs this)
 
         Returns:
             True if successful
@@ -224,9 +227,10 @@ class PDFDocument:
                 save_options["permissions"] = enc["permissions"]
 
         if save_path == self._filepath:
-            if enc:
-                # Changing encryption — the incremental path can only KEEP the
-                # current state, so go straight to a full rewrite.
+            if enc or full_rewrite:
+                # Encryption change or an explicit full rewrite (e.g. compress):
+                # the incremental path can only KEEP state / can't garbage-collect,
+                # so go straight to a full rewrite.
                 save_path = self._save_full_via_temp(save_path, save_options)
             else:
                 try:
@@ -1164,12 +1168,15 @@ class PDFDocument:
             deflate_fonts: Compress fonts
             image_quality: JPEG quality for images (1-100)
         """
+        # full_rewrite ensures garbage collection runs even when compressing in
+        # place — an incremental save would leave the file size unchanged.
         return self.save(
             output_path,
             garbage=garbage,
             deflate=deflate,
             deflate_images=deflate_images,
-            deflate_fonts=deflate_fonts
+            deflate_fonts=deflate_fonts,
+            full_rewrite=True,
         )
 
     # ==================== Clean PDF — Scan & Redact ====================

@@ -4,7 +4,6 @@ Implements command pattern for unlimited undo/redo
 """
 import logging
 from typing import Callable, List, Optional, Any, Dict, Tuple
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
 
@@ -51,16 +50,9 @@ class Command(ABC):
         return self.execute()
 
 
-@dataclass
 class PageAddCommand(Command):
     """Command for adding a page"""
     requires_reload = True  # page count changes — rebuild the viewer's pages
-
-    document: Any
-    page_index: int
-    page_data: Optional[bytes] = None
-    width: float = 595
-    height: float = 842
 
     def __init__(self, document, page_index: int, width: float = 595, height: float = 842):
         super().__init__(CommandType.PAGE_ADD, f"Add page at {page_index + 1}")
@@ -86,14 +78,9 @@ class PageAddCommand(Command):
             return False
 
 
-@dataclass
 class PageDeleteCommand(Command):
     """Command for deleting a page"""
     requires_reload = True  # page count changes — rebuild the viewer's pages
-
-    document: Any
-    page_index: int
-    page_data: Optional[bytes] = None
 
     def __init__(self, document, page_index: int):
         super().__init__(CommandType.PAGE_DELETE,
@@ -137,13 +124,8 @@ class PageDeleteCommand(Command):
             return False
 
 
-@dataclass
 class PageRotateCommand(Command):
     """Command for rotating a page"""
-    document: Any
-    page_index: int
-    rotation: int
-    original_rotation: int = 0
 
     def __init__(self, document, page_index: int, rotation: int):
         super().__init__(CommandType.PAGE_ROTATE,
@@ -171,15 +153,8 @@ class PageRotateCommand(Command):
             return False
 
 
-@dataclass
 class AnnotationAddCommand(Command):
     """Command for adding an annotation"""
-    document: Any
-    page_index: int
-    annot_type: str
-    rect: Any  # Tuple or Rect
-    annot_data: Optional[Dict[str, Any]] = None
-    _annot_xref: int = 0
 
     def __init__(self, document, page_index: int, annot_type: str, rect: Any, annot_data: Optional[Dict[str, Any]] = None):
         super().__init__(CommandType.ANNOTATION_ADD, f"Add {annot_type}")
@@ -229,11 +204,10 @@ class AnnotationAddCommand(Command):
             fitz_stamp = stamp_map.get(stamp_id, fitz.STAMP_Approved)
             annot = page.add_stamp_annot(fitz.Rect(rect), stamp=fitz_stamp)
             annot.update()
-            # Mark document as modified
-            self.document._is_modified = True
+            self.document.mark_modified()
             return annot
-        except Exception as e:
-            print(f"Stamp error: {e}")
+        except Exception:
+            logger.exception("Stamp annotation failed")
             return None
 
     def execute(self) -> bool:

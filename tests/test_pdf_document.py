@@ -128,6 +128,25 @@ def test_save_copy_requires_open_document():
         doc.save_copy("nope.pdf")
 
 
+def test_compress_in_place_full_rewrites(opened):
+    # Compressing with no output path saves over the current file; full_rewrite
+    # must force a real rewrite (not a no-op incremental save) and reopen cleanly.
+    assert opened.compress() is True
+    assert opened.is_open
+    assert opened.page_count == 3
+
+
+def test_compress_to_new_path(opened, tmp_path):
+    out = tmp_path / "compressed.pdf"
+    assert opened.compress(out) is True
+    assert out.exists()
+    check = fitz.open(str(out))
+    try:
+        assert len(check) == 3
+    finally:
+        check.close()
+
+
 def test_add_highlight_applies_style(opened):
     annot = opened.add_highlight(0, (72, 92, 200, 108), color=(0, 1, 1), opacity=0.4)
     assert annot is not None

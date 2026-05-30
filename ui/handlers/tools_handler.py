@@ -156,22 +156,27 @@ class ToolsHandlerMixin:
                     f"Processing page {i + 1} of {self._document.page_count}...")
                 QApplication.processEvents()
 
-                # Render page to image
+                # Render page to image (the zoom must match the coordinate
+                # scaling applied to the OCR word boxes below).
                 page = doc[i]
-                # Higher resolution for better OCR
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                img_data = pix.tobytes("png")
+                zoom = 2  # higher resolution for better OCR
+                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
 
-                # OCR the image
-                img = Image.open(io.BytesIO(img_data))
-                text = pytesseract.image_to_string(img)
-
-                # Add text layer to page (invisible)
-                if text.strip():
-                    # Insert as invisible text behind the image
-                    text_point = fitz.Point(0, page.rect.height)
-                    page.insert_text(text_point, text, fontsize=1,
-                                     color=(1, 1, 1), render_mode=3)
+                # Position each recognised word individually so the invisible
+                # text layer lines up with the page (image_to_string would put
+                # the whole page's text at a single point).
+                data = pytesseract.image_to_data(
+                    img, output_type=pytesseract.Output.DICT)
+                for j, word in enumerate(data["text"]):
+                    if not word.strip():
+                        continue
+                    x = data["left"][j] / zoom
+                    y = (data["top"][j] + data["height"][j]) / zoom
+                    fontsize = max(1.0, data["height"][j] / zoom)
+                    page.insert_text(
+                        fitz.Point(x, y), word, fontsize=fontsize,
+                        color=(1, 1, 1), render_mode=3)
 
             progress.setValue(self._document.page_count)
 

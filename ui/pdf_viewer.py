@@ -771,8 +771,8 @@ class PDFViewer(QScrollArea):
                     if annot_type == 0:
                         self._edit_sticky_note(page_num, annot)
                         return
-        except Exception as e:
-            print(f"Error checking annotation click: {e}")
+        except Exception:
+            logger.exception("Error checking annotation click")
 
     def _edit_sticky_note(self, page_num: int, annot):
         """Open dialog to view/edit sticky note content"""
@@ -944,8 +944,8 @@ class PDFViewer(QScrollArea):
             )
             text = cast(str, page.get_text("text", clip=fitz_rect))
             return text.strip()
-        except Exception as e:
-            print(f"Error extracting text: {e}")
+        except Exception:
+            logger.exception("Error extracting text")
             return ""
 
     def _create_text_markup_annotation(self, page_num: int, rect: QRectF, annot_type: str):
@@ -991,8 +991,8 @@ class PDFViewer(QScrollArea):
             self.refresh()
             self.annotation_added.emit(page_num, "text_markup", {"rect": rect})
 
-        except Exception as e:
-            print(f"Error creating text markup annotation: {e}")
+        except Exception:
+            logger.exception("Error creating text markup annotation")
 
     def _create_text_annotation(self, page_num: int, rect: QRectF, free_text: bool = False):
         """Create text box or sticky note annotation"""
@@ -1119,8 +1119,8 @@ class PDFViewer(QScrollArea):
             self.refresh()
             self.annotation_added.emit(page_num, shape, {"rect": rect})
 
-        except Exception as e:
-            print(f"Error creating shape annotation: {e}")
+        except Exception:
+            logger.exception("Error creating shape annotation")
 
     def _create_line_annotation(self, page_num: int, rect: QRectF, arrow: bool = False):
         """Create line or arrow annotation"""
@@ -1161,8 +1161,8 @@ class PDFViewer(QScrollArea):
             self.annotation_added.emit(
                 page_num, "line" if not arrow else "arrow", {"rect": rect})
 
-        except Exception as e:
-            print(f"Error creating line annotation: {e}")
+        except Exception:
+            logger.exception("Error creating line annotation")
 
     def _create_freehand_annotation_from_points(self, page_num: int, points: list):
         """Create a freehand/ink annotation from actual tracked points"""
@@ -1188,8 +1188,8 @@ class PDFViewer(QScrollArea):
             self.annotation_added.emit(page_num, "freehand", {
                                        "points": len(points)})
 
-        except Exception as e:
-            print(f"Error creating freehand annotation: {e}")
+        except Exception:
+            logger.exception("Error creating freehand annotation")
 
     def _erase_annotation_at(self, page_num: int, rect: QRectF):
         """Erase annotations that intersect with the given rect"""
@@ -1211,8 +1211,8 @@ class PDFViewer(QScrollArea):
                 self.document_modified.emit()
                 self.refresh()
 
-        except Exception as e:
-            print(f"Error erasing annotation: {e}")
+        except Exception:
+            logger.exception("Error erasing annotation")
 
     # ==================== Public Interface ====================
 
