@@ -33,16 +33,19 @@ contradict each other and the code (see item #10).
 
 ---
 
-## 🟠 High — broken features
+## ✅ Done (high — broken features)
 
-- [ ] **#5 — Bookmark edits don't persist.** Rename/delete/add in the sidebar only
-  touch the tree widget; they never call `set_toc`/`add_bookmark`, so edits vanish
-  on save/reopen. [ui/sidebar.py:407-434](../ui/sidebar.py#L407-L434)
-- [ ] **#6 — Page drag-drop reorder not wired.** No `dropEvent`→`move_page`; the
-  `PageMoveCommand` in [utils/history.py](../utils/history.py) is never invoked.
-  README/feature report claim reordering works.
-- [ ] **#7 — Edit-menu clipboard ops are cosmetic.** `_paste`/`_delete`/`_cut` only
-  show hints and don't change the document. [ui/handlers/edit_handler.py:52-83](../ui/handlers/edit_handler.py#L52-L83)
+- [x] **#5 — Bookmark edits now persist.** Rename/delete in the sidebar rebuild the
+  TOC and call `set_toc`; "Add Bookmark Here" adds at the current page via
+  `add_bookmark`. Changes mark the document modified and survive save/reopen.
+  (Bookmark edits are not yet on the undo stack — minor follow-up.)
+- [x] **#6 — Page drag-drop reorder wired.** Thumbnails are draggable; dropping
+  reorders the document via `PDFDocument.reorder_pages()` (computed full target
+  order + `Document.select`), undoable through the snapshot mechanism.
+- [x] **#7 — Edit-menu clipboard ops do real work.** Copy/Select-All copy text;
+  Paste inserts clipboard text as a text box on the current page; Cut/Delete erase
+  the selected region (undoable until saved). Empty/no-selection cases inform the
+  user instead of silently doing nothing.
 
 ---
 

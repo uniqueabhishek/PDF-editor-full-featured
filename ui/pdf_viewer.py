@@ -1448,6 +1448,36 @@ class PDFViewer(QScrollArea):
                     return text.strip()
         return ""
 
+    def get_selection(self):
+        """Return the current selection as (page_num, fitz.Rect) or None.
+
+        Mirrors get_selected_text() but returns the selected region in PDF
+        coordinates so callers can erase/redact it.
+        """
+        if not self._doc:
+            return None
+        if self._current_page < len(self._page_widgets):
+            page_widget = self._page_widgets[self._current_page]
+            rect = page_widget._selection_rect
+            if rect is not None:
+                scale = page_widget._zoom * page_widget._render_dpi / 72
+                if scale > 0:
+                    fitz_rect = fitz.Rect(
+                        rect.x() / scale, rect.y() / scale,
+                        (rect.x() + rect.width()) / scale,
+                        (rect.y() + rect.height()) / scale,
+                    )
+                    return self._current_page, fitz_rect
+        return None
+
+    def clear_selection(self):
+        """Clear the rubber-band selection on the current page."""
+        if 0 <= self._current_page < len(self._page_widgets):
+            page_widget = self._page_widgets[self._current_page]
+            page_widget._selection_rect = None
+            page_widget._selection_start = None
+            page_widget.update()
+
     def refresh(self):
         """Refresh the view - re-render pages to show document changes"""
         self._page_cache.clear()

@@ -68,13 +68,16 @@ class EditHandlerMixin:
             self._statusbar.showMessage("Action failed", 2000)
 
     def _cut(self):
-        """Cut selection"""
-        self._copy()
+        """Copy the selected text to the clipboard, then erase the selection."""
+        selected_text = self._viewer.get_selected_text()
+        if selected_text:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(selected_text)
         self._delete()
 
     def _copy(self):
-        """Copy selection"""
-        # Copy selected text to clipboard
+        """Copy selected text to the clipboard"""
         selected_text = self._viewer.get_selected_text()
         if selected_text:
             clipboard = QApplication.clipboard()
@@ -85,20 +88,40 @@ class EditHandlerMixin:
             self._statusbar.showMessage("No text selected", 2000)
 
     def _paste(self):
-        """Paste from clipboard"""
+        """Paste clipboard text as a text box on the current page."""
+        if not self._document.is_open:
+            return
         clipboard = QApplication.clipboard()
         text = clipboard.text() if clipboard else ""
-        if text:
-            # For now, show info that paste creates text annotation
-            self._statusbar.showMessage(
-                "Use Text Box tool to add text to PDF", 3000)
-        else:
+        if not text:
             self._statusbar.showMessage("Clipboard is empty", 2000)
+            return
+
+        page_num = self._viewer.get_current_page()
+        try:
+            info = self._document.get_page_info(page_num)
+        except Exception:
+            return
+        # A reasonable default text-box rectangle near the top-left of the page.
+        rect = (50.0, 50.0, max(150.0, min(info.width - 50.0, 400.0)), 150.0)
+        # Reuse the annotation pipeline (undoable, refreshes the view).
+        self._create_annotation(page_num, "text_box", rect, {"text": text})
 
     def _delete(self):
-        """Delete selection"""
-        # Delete selected annotation if any
-        self._statusbar.showMessage("Select an annotation to delete", 2000)
+        """Erase (redact) the selected region; undoable until the file is saved."""
+        if not self._document.is_open:
+            return
+        selection = self._viewer.get_selection()
+        if selection is None:
+            self._statusbar.showMessage(
+                "Select an area first (Select tool), then Delete", 3000)
+            return
+        page_num, rect = selection
+        if self._run_snapshot_op(
+                "Erase selection",
+                lambda: self._document.redact_area(page_num, rect)) is not None:
+            self._viewer.clear_selection()
+            self._statusbar.showMessage("Erased selection (Undo to restore)", 3000)
 
     def _select_all(self):
         """Select all text on current page"""
