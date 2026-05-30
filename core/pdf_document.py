@@ -60,7 +60,6 @@ class PDFDocument:
         self._filepath: Optional[Path] = None
         self._is_modified: bool = False
         self._password: Optional[str] = None
-        self._temp_files: List[str] = []
         # Encryption settings queued by encrypt() and applied on the next save.
         self._pending_encryption: Optional[Dict[str, Any]] = None
 
@@ -175,15 +174,6 @@ class PDFDocument:
         self._is_modified = False
         self._password = None
         self._pending_encryption = None
-
-        # Clean up temp files
-        for temp_file in self._temp_files:
-            try:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-            except OSError:
-                pass
-        self._temp_files.clear()
 
     def save(self, filepath: Optional[Union[str, Path]] = None,
              encryption: Optional[Dict[str, Any]] = None,

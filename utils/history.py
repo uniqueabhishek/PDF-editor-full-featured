@@ -18,24 +18,8 @@ class CommandType(Enum):
     PAGE_ADD = "page_add"
     PAGE_DELETE = "page_delete"
     PAGE_ROTATE = "page_rotate"
-    PAGE_MOVE = "page_move"
     ANNOTATION_ADD = "annotation_add"
-    ANNOTATION_DELETE = "annotation_delete"
-    ANNOTATION_MODIFY = "annotation_modify"
-    TEXT_ADD = "text_add"
-    TEXT_EDIT = "text_edit"
-    TEXT_DELETE = "text_delete"
-    IMAGE_ADD = "image_add"
-    IMAGE_DELETE = "image_delete"
-    IMAGE_MODIFY = "image_modify"
-    FORM_FIELD_ADD = "form_field_add"
-    FORM_FIELD_DELETE = "form_field_delete"
-    FORM_FIELD_MODIFY = "form_field_modify"
     METADATA_CHANGE = "metadata_change"
-    BOOKMARK_ADD = "bookmark_add"
-    BOOKMARK_DELETE = "bookmark_delete"
-    MERGE = "merge"
-    SPLIT = "split"
 
 
 class Command(ABC):
@@ -182,35 +166,6 @@ class PageRotateCommand(Command):
         try:
             # Rotate back to original
             self.document.rotate_page(self.page_index, -self.rotation)
-            return True
-        except Exception:
-            return False
-
-
-@dataclass
-class PageMoveCommand(Command):
-    """Command for moving a page"""
-    document: Any
-    from_index: int
-    to_index: int
-
-    def __init__(self, document, from_index: int, to_index: int):
-        super().__init__(CommandType.PAGE_MOVE,
-                         f"Move page {from_index + 1} to {to_index + 1}")
-        self.document = document
-        self.from_index = from_index
-        self.to_index = to_index
-
-    def execute(self) -> bool:
-        try:
-            self.document.move_page(self.from_index, self.to_index)
-            return True
-        except Exception:
-            return False
-
-    def undo(self) -> bool:
-        try:
-            self.document.move_page(self.to_index, self.from_index)
             return True
         except Exception:
             return False
@@ -553,93 +508,3 @@ class HistoryManager:
     def get_history(self) -> List[str]:
         """Get list of all actions in history"""
         return [cmd.description for cmd in self._undo_stack]
-
-
-class TransactionManager:
-    """Manages compound commands as transactions"""
-
-    def __init__(self, history: HistoryManager):
-        self._history = history
-        self._transaction_commands: List[Command] = []
-        self._in_transaction = False
-        self._transaction_name = ""
-
-    def begin_transaction(self, name: str = ""):
-        """Begin a new transaction"""
-        if self._in_transaction:
-            raise RuntimeError("Transaction already in progress")
-
-        self._in_transaction = True
-        self._transaction_name = name
-        self._transaction_commands.clear()
-
-    def add_command(self, command: Command):
-        """Add a command to the current transaction"""
-        if not self._in_transaction:
-            raise RuntimeError("No transaction in progress")
-
-        command.execute()
-        self._transaction_commands.append(command)
-
-    def commit_transaction(self) -> bool:
-        """Commit the current transaction"""
-        if not self._in_transaction:
-            return False
-
-        if self._transaction_commands:
-            # Create a compound command
-            compound = CompoundCommand(
-                self._transaction_commands.copy(),
-                self._transaction_name or "Multiple actions"
-            )
-            self._history._undo_stack.append(compound)
-            self._history._redo_stack.clear()
-
-        self._in_transaction = False
-        self._transaction_commands.clear()
-        return True
-
-    def rollback_transaction(self) -> bool:
-        """Rollback the current transaction"""
-        if not self._in_transaction:
-            return False
-
-        # Undo all commands in reverse order
-        for command in reversed(self._transaction_commands):
-            command.undo()
-
-        self._in_transaction = False
-        self._transaction_commands.clear()
-        return True
-
-    @property
-    def in_transaction(self) -> bool:
-        return self._in_transaction
-
-
-class CompoundCommand(Command):
-    """A command that contains multiple sub-commands"""
-
-    def __init__(self, commands: List[Command], description: str = ""):
-        super().__init__(CommandType.METADATA_CHANGE, description)
-        self._commands = commands
-
-    def execute(self) -> bool:
-        for command in self._commands:
-            if not command.execute():
-                # Rollback previously executed commands
-                idx = self._commands.index(command)
-                for i in range(idx - 1, -1, -1):
-                    self._commands[i].undo()
-                return False
-        return True
-
-    def undo(self) -> bool:
-        # Undo in reverse order
-        for command in reversed(self._commands):
-            if not command.undo():
-                return False
-        return True
-
-    def redo(self) -> bool:
-        return self.execute()

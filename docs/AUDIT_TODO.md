@@ -51,8 +51,8 @@ contradict each other and the code (see item #10).
 
 ## 🟡 Medium — dead code & documentation drift
 
-- [ ] **#8 — Dead code advertised as features.** Tackled in steps; decide per
-  module: wire it up or delete it.
+- [x] **#8 — Dead code advertised as features.** Done across the steps below
+  (~2,350 LOC of dead code removed; merge/split/settings turned into real features).
   - [x] **Pure duplicates removed** — `core/converters/to_word.py`, `to_image.py`
     and `core/operations/ocr.py` (plus their package `__init__.py`). These
     reimplemented functionality the app already runs inline (Word export in
@@ -78,7 +78,12 @@ contradict each other and the code (see item #10).
     confirm-close, auto-save), removing the decorative tabs/controls. Theme and
     sidebar width apply live; theme application is shared via new `ui/theme.py`
     (also used at startup). Done together with #9.
-  - [ ] Also dead: `TransactionManager`/`CompoundCommand` in [utils/history.py](../utils/history.py) and `PDFDocument._temp_files`.
+  - [x] **Small dead bits removed** — `TransactionManager` + `CompoundCommand`
+    (never instantiated) and the unused `PageMoveCommand` (reorder uses the
+    snapshot command); `CommandType` trimmed to the members live commands use
+    (dropping the orphaned `FORM_FIELD_*`, `TEXT_*`, `IMAGE_*`, `BOOKMARK_*`,
+    `MERGE`/`SPLIT`); and `PDFDocument._temp_files` (never populated) with its
+    dead cleanup loop in `close()`.
 - [x] **#9 — Autosave / crash recovery implemented.** A `QTimer` writes a recovery
   copy (`AUTOSAVE_DIR/recovery.pdf` + `recovery.json`) of the open document while
   it has unsaved changes, at the configured interval. On startup the app offers to
