@@ -3,7 +3,7 @@ Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
 import logging
-from typing import List, Optional, Any, Dict, Tuple
+from typing import Callable, List, Optional, Any, Dict, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -376,6 +376,71 @@ class AnnotationAddCommand(Command):
                             return True
             return False
         except Exception:
+            return False
+
+
+class DocumentSnapshotCommand(Command):
+    """Undoable wrapper for in-place mutations that have no natural inverse.
+
+    Captures a full-document snapshot before and after running ``operation``, so
+    destructive edits (redaction, crop, watermark, header/footer, OCR, ...) can
+    be reversed by restoring the document to its earlier bytes. Restoring swaps
+    the underlying document object, hence ``swaps_document``/``requires_reload``.
+    """
+
+    swaps_document = True
+    requires_reload = True
+
+    def __init__(self, document: Any, operation: Callable[[], Any],
+                 command_type: CommandType = CommandType.METADATA_CHANGE,
+                 description: str = ""):
+        super().__init__(command_type, description)
+        self.document = document
+        self._operation = operation
+        self._before: Optional[bytes] = None
+        self._after: Optional[bytes] = None
+        self.result: Any = None
+
+    def execute(self) -> bool:
+        try:
+            self._before = self.document.snapshot()
+        except Exception:
+            logger.exception("Could not snapshot before '%s'", self.description)
+            return False
+        try:
+            self.result = self._operation()
+        except Exception:
+            logger.exception("Operation '%s' failed; rolling back", self.description)
+            try:
+                self.document.restore(self._before)
+            except Exception:
+                logger.exception("Rollback after '%s' failed", self.description)
+            return False
+        try:
+            self._after = self.document.snapshot()
+        except Exception:
+            # The mutation succeeded but redo won't be available; not fatal.
+            logger.exception("Could not snapshot after '%s'", self.description)
+        return True
+
+    def undo(self) -> bool:
+        if self._before is None:
+            return False
+        try:
+            self.document.restore(self._before)
+            return True
+        except Exception:
+            logger.exception("Undo of '%s' failed", self.description)
+            return False
+
+    def redo(self) -> bool:
+        if self._after is None:
+            return self.execute()
+        try:
+            self.document.restore(self._after)
+            return True
+        except Exception:
+            logger.exception("Redo of '%s' failed", self.description)
             return False
 
 

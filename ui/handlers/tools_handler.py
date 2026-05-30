@@ -122,10 +122,8 @@ class ToolsHandlerMixin:
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.show()
 
-        try:
+        def _do():
             doc = self._document.doc
-            if not doc:
-                return
             for i in range(self._document.page_count):
                 if progress.wasCanceled():
                     break
@@ -153,14 +151,15 @@ class ToolsHandlerMixin:
                                      color=(1, 1, 1), render_mode=3)
 
             progress.setValue(self._document.page_count)
-            self._load_document_to_viewer()
-            self._is_modified = True
-            self._update_title()
+
+        cmd = self._run_snapshot_op("OCR", _do)
+        progress.close()
+        if cmd is not None:
             self._statusbar.showMessage(
                 "OCR completed - document is now searchable", 3000)
-
-        except Exception as e:
-            QMessageBox.critical(self, "OCR Error", f"Failed to run OCR:\n{e}")
+        else:
+            QMessageBox.critical(
+                self, "OCR Error", "Failed to run OCR. See log for details.")
 
     def _add_watermark(self):
         """Add watermark to document"""
@@ -170,10 +169,13 @@ class ToolsHandlerMixin:
         text, ok = QInputDialog.getText(
             self, "Add Watermark", "Watermark text:")
         if ok and text:
-            self._document.add_watermark(text)
-            self._load_document_to_viewer()
-            self._is_modified = True
-            self._update_title()
+            cmd = self._run_snapshot_op(
+                "Add watermark", lambda: self._document.add_watermark(text))
+            if cmd is not None:
+                self._statusbar.showMessage("Watermark added", 2000)
+            else:
+                QMessageBox.critical(
+                    self, "Error", "Failed to add watermark. See log for details.")
 
     def _add_header_footer(self):
         """Add header/footer"""
@@ -181,87 +183,84 @@ class ToolsHandlerMixin:
             return
 
         dialog = HeaderFooterDialog(self._document.page_count, self)
-        if dialog.exec():
-            try:
-                doc = self._document.doc
-                if not doc:
-                    return
-                # Get settings from dialog
-                header_texts = dialog.get_header_texts()
-                footer_texts = dialog.get_footer_texts()
-                font_settings = dialog.get_font_settings()
-                page_range = dialog.get_page_range()
-                margins = dialog.get_margins()
+        if not dialog.exec() or not self._document.doc:
+            return
 
-                fontsize      = font_settings['size']
-                fontname      = font_settings['fitz_font']
-                font_color    = font_settings['color']
-                margin_top    = margins['top']
-                margin_bottom = margins['bottom']
-                margin_side   = margins['side']
-                filename_str  = self._current_file.name if self._current_file else ""
-                today_str     = datetime.datetime.now().strftime("%Y-%m-%d")
+        # Get settings from dialog
+        header_texts = dialog.get_header_texts()
+        footer_texts = dialog.get_footer_texts()
+        font_settings = dialog.get_font_settings()
+        page_range = dialog.get_page_range()
+        margins = dialog.get_margins()
 
-                for i in range(page_range[0], page_range[1] + 1):
-                    page = doc[i]
-                    rect = page.rect
+        fontsize      = font_settings['size']
+        fontname      = font_settings['fitz_font']
+        font_color    = font_settings['color']
+        margin_top    = margins['top']
+        margin_bottom = margins['bottom']
+        margin_side   = margins['side']
+        filename_str  = self._current_file.name if self._current_file else ""
+        today_str     = datetime.datetime.now().strftime("%Y-%m-%d")
 
-                    def process_text(raw: str) -> str:
-                        return (
-                            raw
-                            .replace("{page}",     str(i + 1))
-                            .replace("{total}",    str(self._document.page_count))
-                            .replace("{date}",     today_str)
-                            .replace("{filename}", filename_str)
-                        )
+        def _do():
+            doc = self._document.doc
+            for i in range(page_range[0], page_range[1] + 1):
+                page = doc[i]
+                rect = page.rect
 
-                    def insert(pt: "fitz.Point", raw: str) -> None:
-                        page.insert_text(
-                            pt, process_text(raw),
-                            fontsize=fontsize,
-                            fontname=fontname,
-                            color=font_color,
-                        )
+                def process_text(raw: str) -> str:
+                    return (
+                        raw
+                        .replace("{page}",     str(i + 1))
+                        .replace("{total}",    str(self._document.page_count))
+                        .replace("{date}",     today_str)
+                        .replace("{filename}", filename_str)
+                    )
 
-                    def text_w(raw: str) -> float:
-                        return fitz.get_text_length(
-                            process_text(raw),
-                            fontname=fontname,
-                            fontsize=fontsize,
-                        )
+                def insert(pt: "fitz.Point", raw: str) -> None:
+                    page.insert_text(
+                        pt, process_text(raw),
+                        fontsize=fontsize,
+                        fontname=fontname,
+                        color=font_color,
+                    )
 
-                    # Add header
-                    if any(header_texts.values()):
-                        y = margin_top
-                        if header_texts['left']:
-                            insert(fitz.Point(margin_side, y), header_texts['left'])
-                        if header_texts['center']:
-                            insert(fitz.Point((rect.width - text_w(header_texts['center'])) / 2, y),
-                                   header_texts['center'])
-                        if header_texts['right']:
-                            insert(fitz.Point(rect.width - margin_side - text_w(header_texts['right']), y),
-                                   header_texts['right'])
+                def text_w(raw: str) -> float:
+                    return fitz.get_text_length(
+                        process_text(raw),
+                        fontname=fontname,
+                        fontsize=fontsize,
+                    )
 
-                    # Add footer
-                    if any(footer_texts.values()):
-                        y = rect.height - margin_bottom
-                        if footer_texts['left']:
-                            insert(fitz.Point(margin_side, y), footer_texts['left'])
-                        if footer_texts['center']:
-                            insert(fitz.Point((rect.width - text_w(footer_texts['center'])) / 2, y),
-                                   footer_texts['center'])
-                        if footer_texts['right']:
-                            insert(fitz.Point(rect.width - margin_side - text_w(footer_texts['right']), y),
-                                   footer_texts['right'])
+                # Add header
+                if any(header_texts.values()):
+                    y = margin_top
+                    if header_texts['left']:
+                        insert(fitz.Point(margin_side, y), header_texts['left'])
+                    if header_texts['center']:
+                        insert(fitz.Point((rect.width - text_w(header_texts['center'])) / 2, y),
+                               header_texts['center'])
+                    if header_texts['right']:
+                        insert(fitz.Point(rect.width - margin_side - text_w(header_texts['right']), y),
+                               header_texts['right'])
 
-                self._load_document_to_viewer()
-                self._is_modified = True
-                self._update_title()
-                self._statusbar.showMessage("Header/Footer added", 2000)
+                # Add footer
+                if any(footer_texts.values()):
+                    y = rect.height - margin_bottom
+                    if footer_texts['left']:
+                        insert(fitz.Point(margin_side, y), footer_texts['left'])
+                    if footer_texts['center']:
+                        insert(fitz.Point((rect.width - text_w(footer_texts['center'])) / 2, y),
+                               footer_texts['center'])
+                    if footer_texts['right']:
+                        insert(fitz.Point(rect.width - margin_side - text_w(footer_texts['right']), y),
+                               footer_texts['right'])
 
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"Failed to add header/footer:\n{e}")
+        if self._run_snapshot_op("Add header/footer", _do) is not None:
+            self._statusbar.showMessage("Header/Footer added", 2000)
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to add header/footer. See log for details.")
 
     def _remove_header_footer(self):
         """Remove header/footer strips via redaction"""
@@ -289,9 +288,10 @@ class ToolsHandlerMixin:
         footer_h = dialog.get_footer_height()
         start, end = dialog.get_page_range()
 
-        try:
+        def _do():
+            d = self._document.doc
             for i in range(start, end + 1):
-                pg = doc[i]
+                pg = d[i]
                 pr = pg.rect
 
                 if header_h > 0:
@@ -306,16 +306,14 @@ class ToolsHandlerMixin:
                     )
                 pg.apply_redactions()
 
-            self._load_document_to_viewer()
-            self._is_modified = True
-            self._update_title()
+        if self._run_snapshot_op("Trim header/footer", _do) is not None:
             pages_label = f"{end - start + 1} page(s)"
             self._statusbar.showMessage(
                 f"Header/Footer removed from {pages_label}", 3000
             )
-        except Exception as e:
+        else:
             QMessageBox.critical(
-                self, "Error", f"Failed to remove header/footer:\n{e}"
+                self, "Error", "Failed to remove header/footer. See log for details."
             )
 
     def _clean_pdf(self):
@@ -370,16 +368,17 @@ class ToolsHandlerMixin:
         if not selected:
             self._statusbar.clearMessage()
             return
-        try:
-            total_rects, pages = self._document.redact_findings(selected)
-            self._load_document_to_viewer()
-            self._is_modified = True
-            self._update_title()
+        cmd = self._run_snapshot_op(
+            "Clean PDF (redact margins)",
+            lambda: self._document.redact_findings(selected))
+        if cmd is not None:
+            total_rects, pages = cmd.result
             self._statusbar.showMessage(
                 f"Removed {total_rects} item(s) across {pages} page(s).", 5000
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Redaction failed:\n{e}")
+        else:
+            QMessageBox.critical(
+                self, "Error", "Redaction failed. See log for details.")
 
     def _encrypt_pdf(self):
         """Password-protect the document with AES-256 encryption."""

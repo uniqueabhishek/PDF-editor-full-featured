@@ -223,3 +223,34 @@ def test_encryption_request_is_cleared_after_save(opened, tmp_path):
 def test_encrypt_requires_a_password(opened):
     with pytest.raises(ValueError):
         opened.encrypt()
+
+
+# ==================== Snapshot / restore (undo support) ====================
+
+def test_snapshot_restore_round_trip(opened):
+    original = opened.get_page_text(0)
+    assert "page 1" in original
+
+    snap = opened.snapshot()
+    opened.redact_area(0, opened.doc[0].rect)  # wipe page 0
+    assert opened.get_page_text(0).strip() == ""
+
+    opened.restore(snap)
+    assert "page 1" in opened.get_page_text(0)
+    assert opened.page_count == 3
+
+
+def test_restore_swaps_document_object(opened):
+    snap = opened.snapshot()
+    before = opened.doc
+    opened.restore(snap)
+    # restore() rebuilds the document, so the underlying object must change
+    # (callers holding the old doc need to re-fetch it).
+    assert opened.doc is not before
+    assert opened.page_count == 3
+
+
+def test_snapshot_requires_open_document():
+    doc = PDFDocument()
+    with pytest.raises(ValueError):
+        doc.snapshot()

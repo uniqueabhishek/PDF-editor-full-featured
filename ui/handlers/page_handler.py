@@ -143,35 +143,32 @@ class PageHandlerMixin:
         preview_pixmap = QPixmap.fromImage(img)
 
         dialog = CropDialog(preview_pixmap, rect.width, rect.height, self)
-        if dialog.exec():
-            crop_rect = dialog.get_crop_rect()
-            try:
-                # Apply crop to the page
-                new_rect = fitz.Rect(
-                    crop_rect[0], crop_rect[1], crop_rect[2], crop_rect[3])
-                page.set_cropbox(new_rect)
+        if not dialog.exec():
+            return
 
-                # Apply to all pages if requested
-                if dialog.apply_to_all_pages():
-                    for i in range(self._document.page_count):
-                        if i != page_num:
-                            p = self._document.doc[i]
-                            p_rect = p.rect
-                            # Scale crop proportionally
-                            scale_x = p_rect.width / rect.width
-                            scale_y = p_rect.height / rect.height
-                            p_new_rect = fitz.Rect(
-                                crop_rect[0] * scale_x,
-                                crop_rect[1] * scale_y,
-                                crop_rect[2] * scale_x,
-                                crop_rect[3] * scale_y
-                            )
-                            p.set_cropbox(p_new_rect)
+        crop_rect = dialog.get_crop_rect()
+        apply_all = dialog.apply_to_all_pages()
+        ref_w, ref_h = rect.width, rect.height
 
-                self._load_document_to_viewer()
-                self._is_modified = True
-                self._update_title()
-                self._statusbar.showMessage("Page(s) cropped", 2000)
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"Failed to crop page:\n{e}")
+        def _do():
+            doc = self._document.doc
+            doc[page_num].set_cropbox(
+                fitz.Rect(crop_rect[0], crop_rect[1], crop_rect[2], crop_rect[3]))
+            if apply_all:
+                for i in range(self._document.page_count):
+                    if i == page_num:
+                        continue
+                    p = doc[i]
+                    p_rect = p.rect
+                    # Scale crop proportionally to each page's size.
+                    scale_x = p_rect.width / ref_w
+                    scale_y = p_rect.height / ref_h
+                    p.set_cropbox(fitz.Rect(
+                        crop_rect[0] * scale_x, crop_rect[1] * scale_y,
+                        crop_rect[2] * scale_x, crop_rect[3] * scale_y))
+
+        if self._run_snapshot_op("Crop page(s)", _do) is not None:
+            self._statusbar.showMessage("Page(s) cropped", 2000)
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to crop page(s). See log for details.")

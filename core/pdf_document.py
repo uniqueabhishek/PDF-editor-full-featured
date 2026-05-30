@@ -326,6 +326,41 @@ class PDFDocument:
         self._doc.save(str(filepath), garbage=4, deflate=True)
         return True
 
+    # ==================== Snapshots (undo support) ====================
+
+    def snapshot(self) -> bytes:
+        """Serialize the current document to PDF bytes for an undo snapshot.
+
+        Used by the history layer to make destructive, otherwise-irreversible
+        operations (redaction, crop, watermark, OCR, header/footer) undoable by
+        capturing the document before and after the change.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        # Keep any existing encryption so a restored snapshot re-opens the same way.
+        return self._doc.tobytes(garbage=3, deflate=True,
+                                 encryption=fitz.PDF_ENCRYPT_KEEP)
+
+    def restore(self, data: bytes) -> None:
+        """Replace the in-memory document with one rebuilt from snapshot bytes.
+
+        The underlying :class:`fitz.Document` object is swapped, so callers that
+        hold the previous ``doc`` (viewer, sidebar) must re-fetch it afterwards.
+        """
+        new_doc = fitz.open(stream=data, filetype="pdf")
+        if new_doc.needs_pass and self._password:
+            new_doc.authenticate(self._password)
+        old_doc = self._doc
+        self._doc = new_doc
+        if old_doc is not None:
+            try:
+                old_doc.close()
+            except Exception:
+                logger.debug(
+                    "Failed to close previous document during restore",
+                    exc_info=True)
+        self._is_modified = True
+
     # ==================== Page Operations ====================
 
     def get_page(self, page_num: int) -> fitz.Page:

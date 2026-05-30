@@ -60,27 +60,28 @@ class AnnotationHandlerMixin:
         )
 
     def _apply_area_redaction(self, page_num: int, rect) -> None:
-        """Show confirmation dialog then permanently erase the selected rectangle."""
+        """Show confirmation dialog then erase the selected rectangle."""
         result = QMessageBox.question(
             self,
             "Erase Area",
-            "Permanently erase the selected area?\n\nThis cannot be undone.",
+            "Erase the selected area?\n\nThe content is removed from the page; "
+            "you can Undo this until the document is saved.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if result != QMessageBox.StandardButton.Yes:
             return
-        try:
-            import fitz
-            fitz_rect = fitz.Rect(
-                rect.x(), rect.y(),
-                rect.x() + rect.width(),
-                rect.y() + rect.height(),
-            )
-            self._document.redact_area(page_num, fitz_rect)
-            self._load_document_to_viewer()
-            self._is_modified = True
-            self._update_title()
+
+        import fitz
+        fitz_rect = fitz.Rect(
+            rect.x(), rect.y(),
+            rect.x() + rect.width(),
+            rect.y() + rect.height(),
+        )
+        cmd = self._run_snapshot_op(
+            "Erase area", lambda: self._document.redact_area(page_num, fitz_rect))
+        if cmd is not None:
             self._statusbar.showMessage("Area erased.", 3000)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to erase area:\n{e}")
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to erase area. See log for details.")

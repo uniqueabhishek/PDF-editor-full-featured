@@ -571,6 +571,25 @@ class MainWindow(
             title = f"*{title}"
         self.setWindowTitle(title)
 
+    def _run_snapshot_op(self, description: str, operation, command_type=None):
+        """Run a destructive document mutation as an undoable snapshot command.
+
+        ``operation`` is a no-argument callable that performs the in-place change
+        (and may return a value, available afterwards as ``command.result``). The
+        document is snapshotted before/after so the edit can be undone. Returns
+        the executed command on success, or None if the operation failed.
+        """
+        from utils.history import DocumentSnapshotCommand, CommandType
+        command = DocumentSnapshotCommand(
+            self._document, operation,
+            command_type or CommandType.METADATA_CHANGE, description)
+        if self._history_manager.execute(command):
+            self._load_document_to_viewer()
+            self._is_modified = True
+            self._update_title()
+            return command
+        return None
+
     def _update_actions_state(self):
         """Update enabled state of actions"""
         has_doc = self._document.is_open

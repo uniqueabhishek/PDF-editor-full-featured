@@ -4,7 +4,7 @@ import pytest
 from core.pdf_document import PDFDocument
 from utils.history import (
     HistoryManager, PageAddCommand, PageDeleteCommand, PageRotateCommand,
-    AnnotationAddCommand,
+    AnnotationAddCommand, DocumentSnapshotCommand,
 )
 
 
@@ -122,7 +122,47 @@ def test_clear_history(doc):
     assert hm.can_redo() is False
 
 
-# ==================== View-refresh flags & peek ====================
+# ==================== Snapshot-based undo (destructive ops) ====================
+
+def test_document_snapshot_command_undo_redo(doc):
+    """Destructive ops captured by snapshot must be reversible."""
+    hm = HistoryManager()
+    assert "page 1" in doc.get_page_text(0)
+
+    def erase_page_0():
+        doc.redact_area(0, doc.doc[0].rect)  # wipe the whole first page
+        return "erased"
+
+    cmd = DocumentSnapshotCommand(doc, erase_page_0, description="Erase page 1")
+    assert hm.execute(cmd) is True
+    assert cmd.result == "erased"
+    assert doc.get_page_text(0).strip() == ""
+
+    assert hm.undo() is True
+    assert "page 1" in doc.get_page_text(0)  # real content is back
+
+    assert hm.redo() is True
+    assert doc.get_page_text(0).strip() == ""
+
+
+def test_document_snapshot_command_rolls_back_on_failure(doc):
+    hm = HistoryManager()
+    before = doc.get_page_text(0)
+
+    def boom():
+        doc.redact_area(0, doc.doc[0].rect)
+        raise RuntimeError("operation blew up midway")
+
+    assert hm.execute(DocumentSnapshotCommand(doc, boom, description="boom")) is False
+    assert hm.can_undo() is False              # failed command not pushed
+    assert doc.get_page_text(0) == before      # rolled back to pre-op state
+
+
+def test_snapshot_command_sets_view_flags():
+    cmd = DocumentSnapshotCommand(None, lambda: None)
+    assert cmd.swaps_document is True
+    assert cmd.requires_reload is True
+
 
 def test_page_structure_commands_require_reload(doc):
     assert PageDeleteCommand(doc, 0).requires_reload is True
