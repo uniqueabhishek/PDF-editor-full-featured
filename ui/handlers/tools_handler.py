@@ -456,49 +456,40 @@ class ToolsHandlerMixin:
         if not self._document.is_open or not self._document.doc:
             return
 
-        if not self._document.doc.is_encrypted:
+        # `needs_pass` stays True for an encrypted document even after it has been
+        # authenticated on open, whereas `is_encrypted` flips to False once the
+        # document is authenticated — so test needs_password here, not is_encrypted
+        # (otherwise this always reports "not protected" for an opened PDF).
+        if not self._document.needs_password:
             QMessageBox.information(
                 self, "No Password", "This document is not password protected.")
             return
 
-        # Ask for current password
-        from PyQt6.QtWidgets import QLineEdit
-        password, ok = QInputDialog.getText(
-            self, "Remove Password",
-            "Enter current password to remove protection:",
-            QLineEdit.EchoMode.Password
+        # The document is already authenticated — this app can't keep an
+        # encrypted PDF open otherwise (open() authenticates or fails) — so there
+        # is no need to re-enter the password; we can strip it directly.
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Unprotected PDF", "", "PDF Files (*.pdf)"
         )
-        if not ok:
+        if not filepath:
             return
 
         try:
-            doc = self._document.doc
-            if not doc:
-                return
-            # Try to authenticate with the password
-            if doc.authenticate(password):
-                # Save without encryption
-                filepath, _ = QFileDialog.getSaveFileName(
-                    self, "Save Unprotected PDF", "", "PDF Files (*.pdf)"
-                )
-                if filepath:
-                    doc.save(
-                        filepath, encryption=0)  # PDF_ENCRYPT_NONE
-                    self._statusbar.showMessage(
-                        "Password removed and saved", 3000)
-
-                    if QMessageBox.question(
-                        self, "Open Unprotected PDF",
-                        "Do you want to open the unprotected PDF?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    ) == QMessageBox.StandardButton.Yes:
-                        self._open_file(filepath)
-            else:
-                QMessageBox.warning(self, "Incorrect Password",
-                                    "The password you entered is incorrect.")
+            # Already authenticated on open, so no password is needed here; the
+            # model re-primes the stored password and writes an unencrypted copy.
+            self._document.save_unencrypted(filepath)
         except Exception as e:
             QMessageBox.critical(
                 self, "Error", f"Failed to remove password:\n{e}")
+            return
+
+        self._statusbar.showMessage("Password removed and saved", 3000)
+        if QMessageBox.question(
+            self, "Open Unprotected PDF",
+            "Do you want to open the unprotected PDF?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) == QMessageBox.StandardButton.Yes:
+            self._open_file(filepath)
 
     def _batch_process(self):
         """Open batch processing dialog"""

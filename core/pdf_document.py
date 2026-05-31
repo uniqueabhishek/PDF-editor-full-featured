@@ -234,8 +234,11 @@ class PDFDocument:
                 save_path = self._save_full_via_temp(save_path, save_options)
             else:
                 try:
-                    # PDF_ENCRYPT_KEEP = 1
-                    self._doc.save(str(save_path), incremental=True, encryption=1)
+                    # Incremental saves must keep the existing encryption state;
+                    # PDF_ENCRYPT_KEEP is 0 (PDF_ENCRYPT_NONE is 1 and would raise
+                    # "can't change encryption on an incremental save").
+                    self._doc.save(str(save_path), incremental=True,
+                                   encryption=fitz.PDF_ENCRYPT_KEEP)
                 except Exception:
                     # Incremental save not possible; do a full save via temp file.
                     logger.debug(
@@ -1148,6 +1151,21 @@ class PDFDocument:
             self._password = password
             return True
         return False
+
+    def save_unencrypted(self, output_path: Union[str, Path]) -> bool:
+        """Save an unprotected copy of the (already open) document.
+
+        No password prompt: the document is already authenticated, so we re-prime
+        it with the stored password before serializing — without that, writing the
+        streams back out without encryption can fail (empty/garbled content) once
+        the document has been serialized elsewhere (e.g. for the render worker).
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        if self._password:
+            self._doc.authenticate(self._password)
+        self._doc.save(str(output_path), encryption=fitz.PDF_ENCRYPT_NONE)
+        return True
 
     # ==================== Compression ====================
 
