@@ -724,7 +724,9 @@ class PDFViewer(QScrollArea):
 
     def _on_hover_position(self, page_num: int, position: QPointF):
         """Handle mouse hover to show annotation tooltips"""
-        if not self._doc or page_num >= len(self._page_widgets):
+        # `not self._doc` would call fitz.Document.__len__ (-> page_count),
+        # which raises ValueError on a closed document; test identity instead.
+        if self._doc is None or page_num >= len(self._page_widgets):
             return
 
         page_widget = self._page_widgets[page_num]

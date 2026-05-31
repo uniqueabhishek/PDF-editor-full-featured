@@ -717,6 +717,12 @@ class MainWindow(
             self._is_modified = True
             self._update_title()
             return command
+        # The command failed. A snapshot command rolls back via restore(),
+        # which swaps in a fresh document and closes the one the viewer and
+        # sidebar still hold. Reattach so they drop that now-closed reference;
+        # otherwise the next event that touches the viewer's document raises
+        # "document closed".
+        self._load_document_to_viewer()
         return None
 
     # ==================== Bookmarks ====================
