@@ -503,11 +503,15 @@ class PDFViewer(QScrollArea):
         can render without a password; the bytes never touch disk. Returns None
         if there is no document or serialization fails (the worker then renders
         nothing and the main-thread sync render still shows the current page).
+
+        ``deflate=False``: the copy lives only in memory and is fed straight to
+        ``fitz.open(stream=...)``, so compressing it buys nothing and re-deflating
+        every stream is the dominant cost of each per-edit resync on large PDFs.
         """
         if doc is None:
             return None
         try:
-            return doc.tobytes(garbage=0, deflate=True,
+            return doc.tobytes(garbage=0, deflate=False,
                                encryption=fitz.PDF_ENCRYPT_NONE)
         except Exception:
             logger.exception("Could not serialize document for the render worker")
