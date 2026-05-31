@@ -758,11 +758,17 @@ class PDFDocument:
             raise ValueError("No document is open")
 
         results = []
-        flags = 0 if case_sensitive else fitz.TEXT_PRESERVE_WHITESPACE
+        # PyMuPDF's search_for is always case-insensitive; the flag here only
+        # controls whitespace handling, not case. When the caller wants a
+        # case-sensitive match we post-filter each hit against the exact-case
+        # text inside its bounding box.
+        flags = fitz.TEXT_PRESERVE_WHITESPACE
 
         for page_num in range(self.page_count):
             page = self.get_page(page_num)
             rects = page.search_for(text, flags=flags)
+            if case_sensitive and rects:
+                rects = [r for r in rects if text in page.get_textbox(r)]
             if rects:
                 results.append({
                     "page": page_num,

@@ -94,6 +94,26 @@ def test_search_text_finds_page(opened):
     assert all("rects" in r for r in results)
 
 
+def test_search_case_sensitive_filters(tmp_path):
+    p = tmp_path / "case.pdf"
+    d = fitz.open()
+    page = d.new_page(width=300, height=200)
+    page.insert_text((50, 50), "Apple")
+    page.insert_text((50, 100), "apple")
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        insensitive = doc.search_text("apple", case_sensitive=False)
+        assert sum(len(r["rects"]) for r in insensitive) == 2
+        sensitive = doc.search_text("apple", case_sensitive=True)
+        assert sum(len(r["rects"]) for r in sensitive) == 1
+    finally:
+        doc.close()
+
+
 def test_metadata_round_trip(opened):
     opened.set_metadata({"title": "My Title", "author": "Tester"})
     meta = opened.get_metadata()

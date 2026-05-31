@@ -22,7 +22,7 @@ implements the fix.
   the Replace surface. **Fix:** implement redaction-based replace on the model
   (`PDFDocument.replace_text`) and wire it through an undoable snapshot op.
 
-- [ ] **#A2 — "Case sensitive" search does nothing.**
+- [x] **#A2 — "Case sensitive" search does nothing.**
   `PDFDocument.search_text` (`core/pdf_document.py`) sets
   `flags = 0 if case_sensitive else TEXT_PRESERVE_WHITESPACE`.
   `TEXT_PRESERVE_WHITESPACE` is an extraction flag, not a case toggle, and
