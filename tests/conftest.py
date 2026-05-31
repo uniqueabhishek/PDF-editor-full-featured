@@ -4,10 +4,15 @@ Shared pytest fixtures for Ultra PDF Editor.
 These tests exercise the headless core (no Qt / no display required): document
 model, undo/redo, settings and file utilities.
 """
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+# Run Qt headless (no display) for the GUI smoke tests; must be set before any
+# QApplication is created. Harmless for the headless-core tests.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # The project uses a flat layout (core/, config.py, utils/ at the repo root) and
 # is run from source, so make the repo root importable for the test session.

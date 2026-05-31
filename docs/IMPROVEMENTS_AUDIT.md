@@ -100,12 +100,21 @@ implements the fix.
 
 ## 🧪 Testing
 
-- [ ] **#E1 — No GUI/handler tests.** Model/history/config/utils are well
-  covered, but the save→detach→reattach flow, undo/redo view-sync, and the render
-  worker are untested. **Fix:** add `pytest-qt` smoke tests.
+- [x] **#E1 — No GUI/handler tests.** Added `tests/test_gui_smoke.py` (pytest-qt,
+  headless via the `offscreen` platform) covering the `FunctionWorker`
+  (success/failure/progress), MainWindow open, search, insert-page + undo, and
+  the save→detach→reattach flow. These surfaced a real latent crash (below).
+
+- [x] **#E2 — (found by #E1) Timer callbacks crash on a closed document.**
+  `_request_visible_pages` and the sidebar thumbnail render tested `not self._doc`,
+  which calls `fitz.Document.__len__` and raises "document closed" when a queued
+  timer fires after the document is closed/swapped (e.g. at shutdown). **Fixed:**
+  added `_doc_live()` (`is_closed`-aware) guards on the timer/event/getter paths.
 
 ---
 
 ## Status
 
-Tracking in progress — see commit history for per-item changes.
+All items **#A1–#A3, #B1–#B2, #C1–#C3, #D1–#D5, #E1–#E2 are complete.** Each was
+committed separately. Follow-up for the maintainer: run `uv lock` / `uv sync` to
+prune `uv.lock` after the dependency trim (#D4).

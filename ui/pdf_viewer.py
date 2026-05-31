@@ -524,9 +524,19 @@ class PDFViewer(QScrollArea):
         """
         self._resync_timer.start(delay_ms)
 
+    def _doc_live(self) -> bool:
+        """True if a document is open and not yet closed.
+
+        ``not self._doc`` / ``if self._doc`` call ``fitz.Document.__len__``, which
+        raises 'document closed' on a closed document — which can happen when a
+        queued timer (render/scroll/thumbnail) fires after the document was closed
+        or swapped. Guard with this instead of relying on truthiness.
+        """
+        return self._doc is not None and not self._doc.is_closed
+
     def _resync_render_worker(self):
         """Hand the worker a fresh copy of the (mutated) document, then re-render."""
-        if self._doc is None:
+        if not self._doc_live():
             return
         self._render_worker.set_document(
             self._render_source(self._doc), self._render_dpi)
@@ -593,7 +603,7 @@ class PDFViewer(QScrollArea):
 
     def _render_page(self, page_num: int) -> QPixmap:
         """Render a single page to pixmap"""
-        if not self._doc or page_num < 0 or page_num >= len(self._doc):
+        if not self._doc_live() or page_num < 0 or page_num >= len(self._doc):
             return QPixmap()
 
         # Check cache
@@ -618,7 +628,7 @@ class PDFViewer(QScrollArea):
 
     def _request_visible_pages(self):
         """Request visible pages to be rendered in background"""
-        if not self._doc or not self._page_widgets:
+        if not self._doc_live() or not self._page_widgets:
             return
 
         viewport_widget = self.viewport()
@@ -662,7 +672,7 @@ class PDFViewer(QScrollArea):
 
     def _render_all_pages(self):
         """Update all page sizes and request rendering (used when zoom changes)"""
-        if not self._doc or not self._page_widgets:
+        if not self._doc_live() or not self._page_widgets:
             return
 
         # Clear cache and pending tasks
@@ -719,7 +729,7 @@ class PDFViewer(QScrollArea):
 
     def _update_zoom(self):
         """Update zoom level based on zoom mode"""
-        if not self._doc or not self._page_widgets:
+        if not self._doc_live() or not self._page_widgets:
             return
 
         viewport_widget = self.viewport()
@@ -1119,7 +1129,7 @@ class PDFViewer(QScrollArea):
 
     def get_page_count(self) -> int:
         """Get total page count"""
-        return len(self._doc) if self._doc else 0
+        return len(self._doc) if self._doc_live() else 0
 
     def get_zoom(self) -> float:
         """Get current zoom level (percentage)"""
@@ -1256,7 +1266,7 @@ class PDFViewer(QScrollArea):
 
     def _rebuild_layout(self):
         """Rebuild the page layout based on current view mode"""
-        if not self._doc or not self._page_widgets:
+        if not self._doc_live() or not self._page_widgets:
             return
 
         # Clear current layout
@@ -1385,7 +1395,7 @@ class PDFViewer(QScrollArea):
 
         # Immediate synchronous render of the current page for instant feedback,
         # straight from the editable document.
-        if self._doc and 0 <= self._current_page < len(self._page_widgets):
+        if self._doc_live() and 0 <= self._current_page < len(self._page_widgets):
             self._render_page_sync(self._current_page)
 
         # The document may have changed in place — refresh the worker's copy
@@ -1395,7 +1405,7 @@ class PDFViewer(QScrollArea):
 
     def _render_page_sync(self, page_num: int):
         """Synchronously render a single page (for immediate feedback)"""
-        if not self._doc or page_num < 0 or page_num >= len(self._doc):
+        if not self._doc_live() or page_num < 0 or page_num >= len(self._doc):
             return
 
         try:

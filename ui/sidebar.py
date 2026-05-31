@@ -392,9 +392,18 @@ class ThumbnailPanel(QScrollArea):
             self._layout.addWidget(thumb)
             self._thumbnails.append(thumb)
 
+    def _doc_live(self) -> bool:
+        """True if a document is open and not closed.
+
+        ``not self._doc`` calls fitz.Document.__len__, which raises 'document
+        closed' if a queued thumbnail-render timer fires after the document was
+        closed or swapped — so test explicitly.
+        """
+        return self._doc is not None and not self._doc.is_closed
+
     def _render_visible_thumbnails(self):
         """Render thumbnails that are visible"""
-        if not self._doc or not self._thumbnails:
+        if not self._doc_live() or not self._thumbnails:
             return
 
         viewport_widget = self.viewport()
@@ -415,7 +424,7 @@ class ThumbnailPanel(QScrollArea):
 
     def _render_thumbnail(self, page_num: int) -> QPixmap:
         """Render a single thumbnail"""
-        if not self._doc or page_num < 0 or page_num >= len(self._doc):
+        if not self._doc_live() or page_num < 0 or page_num >= len(self._doc):
             return QPixmap()
 
         page = self._doc[page_num]
