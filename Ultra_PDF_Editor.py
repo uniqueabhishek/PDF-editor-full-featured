@@ -18,13 +18,54 @@ Author: Ultra PDF Team
 Version: 1.0.0
 """
 import importlib.util
+import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Add the project root to the path before importing local modules
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+
+
+def setup_logging():
+    """Configure application logging to a rotating file plus stderr.
+
+    Modules across the app log via ``logging.getLogger(__name__)`` and several
+    error dialogs tell the user to "see the log" — without a configured handler
+    those records went nowhere. Logs to ``CONFIG_DIR/ultra_pdf.log`` (1 MB x 3
+    rotation). The level can be overridden with the ``ULTRA_PDF_LOG_LEVEL``
+    environment variable (e.g. ``DEBUG``).
+    """
+    from config import config
+
+    level_name = os.environ.get("ULTRA_PDF_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+
+    try:
+        config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            config.CONFIG_DIR / "ultra_pdf.log",
+            maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        file_handler.setFormatter(fmt)
+        file_handler.setLevel(level)
+        root.addHandler(file_handler)
+    except OSError:
+        # If the log file can't be opened (e.g. read-only home), keep going
+        # with just the stderr handler below.
+        pass
+
+    stderr_handler = logging.StreamHandler()
+    stderr_handler.setFormatter(fmt)
+    stderr_handler.setLevel(logging.WARNING)
+    root.addHandler(stderr_handler)
 
 
 def check_dependencies():
@@ -84,6 +125,11 @@ def main():
     # Check dependencies
     if not check_dependencies():
         sys.exit(1)
+
+    # Configure logging before anything else does real work, so module-level
+    # logger.exception(...) calls actually land somewhere.
+    setup_logging()
+    logging.getLogger(__name__).info("Starting Ultra PDF Editor")
 
     # Create application
     app = setup_application()

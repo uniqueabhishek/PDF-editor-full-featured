@@ -42,7 +42,7 @@ implements the fix.
   `~/.ultra_pdf_editor/autosave/`. **Fix:** skip the unencrypted recovery write
   for protected documents (and document the behaviour).
 
-- [ ] **#B2 — No logging is configured.** Modules log heavily and error dialogs
+- [x] **#B2 — No logging is configured.** Modules log heavily and error dialogs
   say "See log for details," but `main()` never calls `logging.basicConfig`, so
   those records have no destination. **Fix:** configure a rotating log file in
   `CONFIG_DIR`.
