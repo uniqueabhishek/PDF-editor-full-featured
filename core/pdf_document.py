@@ -359,7 +359,11 @@ class PDFDocument:
         if self._doc is None:
             raise ValueError("No document is open")
         # Keep any existing encryption so a restored snapshot re-opens the same way.
-        return self._doc.tobytes(garbage=3, deflate=True,
+        # garbage=1 (drop unused objects) rather than 3: a before/after snapshot
+        # only needs a faithful round-trip, not the expensive duplicate-stream-merge
+        # pass, which dominates the per-op cost on large documents. deflate=True is
+        # kept so the undo stack's in-memory snapshots stay compact.
+        return self._doc.tobytes(garbage=1, deflate=True,
                                  encryption=fitz.PDF_ENCRYPT_KEEP)
 
     def restore(self, data: bytes) -> None:
