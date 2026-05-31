@@ -595,27 +595,63 @@ class MainWindow(
             self._autosave_timer.start(interval_ms)
 
     def _autosave(self):
-        """Write a recovery copy of the current document if it has unsaved edits."""
+        """Write a recovery copy of the current document if it has unsaved edits.
+
+        The serialize runs on the GUI thread (PyMuPDF is not thread-safe) but is
+        fast — ``recovery_bytes()`` skips compression and garbage collection — and
+        the disk write is offloaded to a background worker so a large recovery copy
+        never stalls the window.
+        """
         if not self._document.is_open or not self._is_modified:
             return
         # Never write an *unencrypted* recovery copy of a protected document:
-        # save_copy() has no password, so this would leak its plaintext to
+        # the recovery copy has no password, so this would leak its plaintext to
         # AUTOSAVE_DIR. Skip auto-save for protected files instead.
         if self._document.is_protected:
             self._statusbar.showMessage(
                 "Auto-save skipped for password-protected document", 2000)
             return
+        # Don't pile up writes if a previous recovery write is still in flight.
+        if getattr(self, "_autosave_in_flight", False):
+            return
         try:
-            self._document.save_copy(config.AUTOSAVE_DIR / "recovery.pdf")
-            meta = {
-                "original": str(self._current_file) if self._current_file else None,
-                "saved_at": datetime.now().isoformat(timespec="seconds"),
-            }
-            (config.AUTOSAVE_DIR / "recovery.json").write_text(
-                json.dumps(meta), encoding="utf-8")
-            self._statusbar.showMessage("Auto-saved a recovery copy", 1500)
+            data = self._document.recovery_bytes()
         except Exception:
             logger.warning("Auto-save failed", exc_info=True)
+            return
+
+        pdf_path = config.AUTOSAVE_DIR / "recovery.pdf"
+        meta_path = config.AUTOSAVE_DIR / "recovery.json"
+        meta_json = json.dumps({
+            "original": str(self._current_file) if self._current_file else None,
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+        })
+
+        def _write(_progress, _is_cancelled):
+            # Disk I/O only (no PyMuPDF access), so it is safe off the GUI thread.
+            pdf_path.write_bytes(data)
+            meta_path.write_text(meta_json, encoding="utf-8")
+            return True
+
+        from ui.workers import FunctionWorker
+        worker = FunctionWorker(_write, self)
+        self._autosave_in_flight = True
+
+        def _ok(_result):
+            self._autosave_in_flight = False
+            self._active_workers.discard(worker)
+            self._statusbar.showMessage("Auto-saved a recovery copy", 1500)
+
+        def _err(message: str):
+            self._autosave_in_flight = False
+            self._active_workers.discard(worker)
+            logger.warning("Auto-save failed: %s", message)
+
+        worker.succeeded.connect(_ok)
+        worker.failed.connect(_err)
+        worker.finished.connect(worker.deleteLater)
+        self._active_workers.add(worker)
+        worker.start()
 
     def _clear_autosave(self):
         """Remove any recovery files (after a clean save/close)."""

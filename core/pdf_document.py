@@ -347,6 +347,21 @@ class PDFDocument:
         self._doc.save(str(filepath), garbage=4, deflate=True)
         return True
 
+    def recovery_bytes(self) -> bytes:
+        """Serialize the document for a crash-recovery copy, optimized for speed.
+
+        Unlike :meth:`snapshot`, this skips compression and garbage collection
+        (``garbage=0, deflate=False``): a recovery copy is transient and written
+        on a timer, so we trade file size for a fast serialize that doesn't stall
+        the UI. Existing encryption is kept so the copy reopens the same way;
+        callers must still avoid writing an unencrypted recovery of a protected
+        document (see ``MainWindow._autosave``).
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        return self._doc.tobytes(garbage=0, deflate=False,
+                                 encryption=fitz.PDF_ENCRYPT_KEEP)
+
     # ==================== Snapshots (undo support) ====================
 
     def snapshot(self) -> bytes:
