@@ -46,6 +46,34 @@ class AnnotationHandlerMixin:
         else:
             self._statusbar.showMessage(f"Failed to add {annot_type} annotation", 2000)
 
+    def _go_to_annotation(self, page_num: int, _index: int) -> None:
+        """Navigate to the page of an annotation clicked in the sidebar panel."""
+        self._viewer.go_to_page(page_num)
+
+    def _delete_annotation(self, page_num: int, xref: int) -> None:
+        """Delete the annotation (identified by xref) chosen in the sidebar; undoable."""
+        if not self._document.is_open or not self._document.doc:
+            return
+        doc = self._document.doc
+        if not (0 <= page_num < doc.page_count):
+            return
+        page = doc[page_num]
+        if not any(annot.xref == xref for annot in page.annots()):
+            return  # already gone (e.g. removed by an earlier undo/redo)
+
+        def _do():
+            pg = self._document.doc[page_num]
+            for annot in pg.annots():
+                if annot.xref == xref:
+                    pg.delete_annot(annot)
+                    return
+
+        if self._run_snapshot_op("Delete annotation", _do) is not None:
+            self._statusbar.showMessage("Annotation deleted (Undo to restore)", 2000)
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to delete annotation. See log for details.")
+
     def _activate_erase_selection(self) -> None:
         """Switch to Erase Selection tool so the user can draw a rectangle to erase."""
         if not self._document.is_open:

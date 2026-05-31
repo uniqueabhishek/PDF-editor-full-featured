@@ -500,6 +500,8 @@ class MainWindow(
         self._sidebar.pages_reordered.connect(self._reorder_page)
         self._sidebar.toc_changed.connect(self._apply_toc)
         self._sidebar.bookmark_add_requested.connect(self._add_bookmark)
+        self._sidebar.annotation_clicked.connect(self._go_to_annotation)
+        self._sidebar.annotation_deleted.connect(self._delete_annotation)
 
     def _apply_settings(self):
         """Apply saved settings"""

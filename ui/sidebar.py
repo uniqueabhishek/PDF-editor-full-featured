@@ -514,7 +514,7 @@ class AnnotationPanel(QListWidget):
     """Panel showing document annotations"""
 
     annotation_clicked = pyqtSignal(int, int)  # page, annotation index
-    annotation_deleted = pyqtSignal(int, int)
+    annotation_deleted = pyqtSignal(int, int)  # page, annotation xref
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -586,7 +586,8 @@ class AnnotationPanel(QListWidget):
         item.setData(Qt.ItemDataRole.UserRole, {
             "page": page_num,
             "type": annot_type,
-            "rect": tuple(annot.rect)
+            "rect": tuple(annot.rect),
+            "xref": annot.xref,
         })
 
         self._annotations.append({
@@ -612,7 +613,7 @@ class AnnotationPanel(QListWidget):
                 menu.addAction("Go to Annotation",
                               lambda: self.annotation_clicked.emit(data["page"], self.row(item)))
                 menu.addAction("Delete",
-                              lambda: self.annotation_deleted.emit(data["page"], self.row(item)))
+                              lambda: self.annotation_deleted.emit(data["page"], data["xref"]))
                 menu.exec(self.mapToGlobal(pos))
 
     def refresh(self):
@@ -628,6 +629,7 @@ class Sidebar(QTabWidget):
     page_double_clicked = pyqtSignal(int)
     bookmark_clicked = pyqtSignal(int)
     annotation_clicked = pyqtSignal(int, int)
+    annotation_deleted = pyqtSignal(int, int)  # page, annotation xref
     page_rotate_requested = pyqtSignal(int, int)
     page_delete_requested = pyqtSignal(int)
     page_extract_requested = pyqtSignal(list)
@@ -666,6 +668,7 @@ class Sidebar(QTabWidget):
         self.bookmark_panel.toc_changed.connect(self.toc_changed)
         self.bookmark_panel.bookmark_add_requested.connect(self.bookmark_add_requested)
         self.annotation_panel.annotation_clicked.connect(self.annotation_clicked)
+        self.annotation_panel.annotation_deleted.connect(self.annotation_deleted)
 
         # Styling
         self.setStyleSheet("""
