@@ -412,15 +412,22 @@ class ThumbnailPanel(QScrollArea):
             return
         viewport = viewport_widget.rect()
         scroll_pos = v_scrollbar.value()
+        viewport_top = viewport.top()
+        viewport_bottom = viewport.bottom()
 
         for thumb in self._thumbnails:
             widget_rect = thumb.geometry()
             widget_rect.translate(0, -scroll_pos)
 
-            if viewport.intersects(widget_rect):
-                if thumb._pixmap is None:
-                    pixmap = self._render_thumbnail(thumb.page_num)
-                    thumb.set_pixmap(pixmap)
+            # Thumbnails stack top-to-bottom: stop once we pass the viewport,
+            # and skip the ones entirely above it.
+            if widget_rect.top() > viewport_bottom:
+                break
+            if widget_rect.bottom() < viewport_top:
+                continue
+            if thumb._pixmap is None:
+                pixmap = self._render_thumbnail(thumb.page_num)
+                thumb.set_pixmap(pixmap)
 
     def _render_thumbnail(self, page_num: int) -> QPixmap:
         """Render a single thumbnail"""

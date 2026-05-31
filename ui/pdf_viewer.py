@@ -641,24 +641,31 @@ class PDFViewer(QScrollArea):
 
         viewport = viewport_widget.rect()
         scroll_pos = v_scrollbar.value()
+        viewport_top = viewport.top()
+        viewport_bottom = viewport.bottom()
+        viewport_center_y = viewport.center().y()
 
         for i, page_widget in enumerate(self._page_widgets):
             widget_rect = page_widget.geometry()
             widget_rect.translate(0, -scroll_pos)
 
-            # Check if visible
-            if viewport.intersects(widget_rect):
-                # Check cache first (only if page is not marked for re-render)
-                cached = None if page_widget._is_loading else self._cache_get(i)
-                if cached is not None:
-                    page_widget.set_pixmap(cached, self._zoom)
-                else:
-                    # Request background render
-                    # Priority based on distance from center
-                    center_dist = abs(
-                        widget_rect.center().y() - viewport.center().y())
-                    priority = int(1000 - center_dist)
-                    self._render_worker.request_page(i, self._zoom, priority)
+            # Pages are laid out top-to-bottom, so once one starts below the
+            # viewport every later page is off-screen too — stop scanning.
+            if widget_rect.top() > viewport_bottom:
+                break
+            # Skip pages that sit entirely above the viewport.
+            if widget_rect.bottom() < viewport_top:
+                continue
+
+            # Check cache first (only if page is not marked for re-render)
+            cached = None if page_widget._is_loading else self._cache_get(i)
+            if cached is not None:
+                page_widget.set_pixmap(cached, self._zoom)
+            else:
+                # Request background render; priority by distance from center.
+                center_dist = abs(widget_rect.center().y() - viewport_center_y)
+                priority = int(1000 - center_dist)
+                self._render_worker.request_page(i, self._zoom, priority)
 
     def _on_page_rendered(self, page_num: int, image: QImage, zoom: float):
         """Handle page rendered from background worker"""
@@ -722,8 +729,11 @@ class PDFViewer(QScrollArea):
 
         for i, page_widget in enumerate(self._page_widgets):
             widget_rect = page_widget.geometry()
+            # Pages are ordered top-to-bottom: once one starts past the viewport
+            # centre, no later page can straddle the centre either — stop here.
+            if widget_rect.top() - scroll_pos > viewport_center:
+                break
             widget_center = widget_rect.center().y() - scroll_pos
-
             if abs(widget_center - viewport_center) < widget_rect.height() / 2:
                 if i != self._current_page:
                     self._current_page = i
