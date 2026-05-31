@@ -74,7 +74,8 @@ class PageRenderWorker(QThread):
         # The worker renders from its OWN private copy of the document so it
         # never touches the editable document the main thread reads and mutates
         # (PyMuPDF documents are not thread-safe). `_lock` guards that private
-        # copy (render vs. hand-off/close); `_task_lock` guards the task queue.
+        # copy (render vs. hand-off/close); `_task_cond` (a Condition) guards the
+        # task queue and lets the loop sleep until there is work or a stop.
         self._doc: Optional[fitz.Document] = None
         self._tasks: List[RenderTask] = []
         self._render_dpi = 150
@@ -82,7 +83,7 @@ class PageRenderWorker(QThread):
         self._running = True
         self._current_zoom = 1.0
         self._lock = threading.Lock()
-        self._task_lock = threading.Lock()
+        self._task_cond = threading.Condition()
 
     def set_document(self, data: Optional[bytes], render_dpi: int = 150):
         """Give the worker its own document, opened from serialized PDF bytes.
@@ -107,7 +108,7 @@ class PageRenderWorker(QThread):
                     old_doc.close()
                 except Exception:
                     logger.debug("Failed to close previous render copy", exc_info=True)
-        with self._task_lock:
+        with self._task_cond:
             self._tasks.clear()
 
     def set_rotation(self, rotation: int):
@@ -117,22 +118,25 @@ class PageRenderWorker(QThread):
 
     def request_page(self, page_num: int, zoom: float, priority: int = 0):
         """Request a page to be rendered"""
-        with self._task_lock:
+        with self._task_cond:
             # Remove any existing task for this page
             self._tasks = [t for t in self._tasks if t.page_num != page_num]
             self._tasks.append(RenderTask(page_num, zoom, priority))
             self._current_zoom = zoom
             # Sort by priority (higher first)
             self._tasks.sort(key=lambda t: t.priority, reverse=True)
+            self._task_cond.notify()  # wake the render loop
 
     def clear_tasks(self):
         """Clear pending tasks"""
-        with self._task_lock:
+        with self._task_cond:
             self._tasks.clear()
 
     def stop(self):
         """Stop the worker and release its document copy."""
         self._running = False
+        with self._task_cond:
+            self._task_cond.notify()  # wake the loop so it can exit promptly
         self.wait()
         with self._lock:
             if self._doc is not None:
@@ -146,12 +150,15 @@ class PageRenderWorker(QThread):
         """Main render loop"""
         while self._running:
             task = None
-            with self._task_lock:
+            with self._task_cond:
+                if not self._tasks and self._running:
+                    # Sleep until a task is queued or stop() is called; the
+                    # timeout is only a safety net so _running is re-checked.
+                    self._task_cond.wait(0.1)
                 if self._tasks:
                     task = self._tasks.pop(0)
 
             if task is None:
-                self.msleep(10)  # Sleep briefly when idle
                 continue
 
             # Skip if zoom changed (task is outdated)

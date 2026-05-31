@@ -89,7 +89,7 @@ implements the fix.
   python-docx, send2trash, darkdetect). **Note:** regenerate the lock with
   `uv lock` (or `uv sync`) to prune `uv.lock`.
 
-- [ ] **#D5 — Assorted nits.** `PDFDocument.__del__` calling `close()` is a
+- [x] **#D5 — Assorted nits.** `PDFDocument.__del__` calling `close()` is a
   fragile shutdown backstop; `config` creates directories at import time (import
   side effects in tests); `PageRenderWorker.run` busy-polls with `msleep(10)`.
   **Fix:** guard `__del__`, make config dir creation explicit/lazy, replace the

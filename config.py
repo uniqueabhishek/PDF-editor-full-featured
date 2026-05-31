@@ -136,12 +136,16 @@ class AppConfig:
         "properties": "Ctrl+D",
     })
 
-    def __post_init__(self):
-        """Ensure directories exist"""
-        self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        self.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        self.AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
-        self.STAMPS_DIR.mkdir(parents=True, exist_ok=True)
+    def ensure_dirs(self) -> None:
+        """Create the application's working directories.
+
+        Called once at startup (from ``main()``) rather than in ``__post_init__``
+        so that merely importing this module has no filesystem side effects —
+        important for tests and tooling that import ``config``.
+        """
+        for directory in (self.CONFIG_DIR, self.TEMP_DIR,
+                          self.AUTOSAVE_DIR, self.STAMPS_DIR):
+            directory.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass

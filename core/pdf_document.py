@@ -1491,5 +1491,13 @@ class PDFDocument:
         self._is_modified = True
 
     def __del__(self):
-        """Cleanup on deletion"""
-        self.close()
+        """Best-effort cleanup on garbage collection.
+
+        Explicit ``close()`` (on window close) is the real cleanup path; this is
+        only a backstop and must never raise — during interpreter shutdown the
+        ``fitz`` module may already be partially torn down.
+        """
+        try:
+            self.close()
+        except Exception:
+            pass

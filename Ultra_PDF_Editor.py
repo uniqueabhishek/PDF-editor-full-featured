@@ -126,8 +126,11 @@ def main():
     if not check_dependencies():
         sys.exit(1)
 
-    # Configure logging before anything else does real work, so module-level
-    # logger.exception(...) calls actually land somewhere.
+    # Create the application's working directories (config no longer does this
+    # at import time), then configure logging so module-level logger.exception(...)
+    # calls actually land somewhere.
+    from config import config
+    config.ensure_dirs()
     setup_logging()
     logging.getLogger(__name__).info("Starting Ultra PDF Editor")
 
