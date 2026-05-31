@@ -11,7 +11,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import QPixmap, QImage, QDrag, QColor, QPainter, QPen
 import fitz
-from typing import Optional, List, Dict
+from typing import Optional, List
 from dataclasses import dataclass
 
 # MIME type used to carry a page index during thumbnail drag-and-drop reorder.
@@ -766,7 +766,10 @@ class AnnotationPanel(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._doc: Optional[fitz.Document] = None
-        self._annotations: List[Dict] = []
+        # Enumerating annotations is a full page-by-page scan, so the list is
+        # rebuilt lazily: edits only mark it dirty and the rescan happens when the
+        # panel is next shown (see refresh / refresh_if_dirty / showEvent).
+        self._dirty = False
 
         self._setup_ui()
 
@@ -794,13 +797,29 @@ class AnnotationPanel(QListWidget):
         self.customContextMenuRequested.connect(self._show_context_menu)
 
     def set_document(self, doc: Optional[fitz.Document]):
-        """Set document and load annotations"""
+        """Set the document; (re)load the annotation list lazily.
+
+        Loading scans every page, so on a large document it is deferred until the
+        panel is actually visible. While hidden the panel is just marked dirty and
+        the scan runs on the next show (see showEvent / refresh_if_dirty).
+        """
         self._doc = doc
         self.clear()
-        self._annotations.clear()
+        self._dirty = bool(doc)
+        if doc is not None and self.isVisible():
+            self._reload()
 
-        if doc:
+    def _reload(self):
+        """Rebuild the annotation list from the current document (full page scan)."""
+        self._dirty = False
+        self.clear()
+        if self._doc is not None:
             self._load_annotations()
+
+    def showEvent(self, event):
+        # Rescan on the show that follows an edit made while this tab was hidden.
+        super().showEvent(event)
+        self.refresh_if_dirty()
 
     def _load_annotations(self):
         """Load all annotations from document"""
@@ -836,12 +855,9 @@ class AnnotationPanel(QListWidget):
             "rect": tuple(annot.rect),
             "xref": annot.xref,
         })
-
-        self._annotations.append({
-            "page": page_num,
-            "annot": annot
-        })
-
+        # Note: only serializable data (page + xref) is stored on the item; live
+        # fitz.Annot objects must not be kept, as undo/redo swaps the document and
+        # would leave them dangling.
         self.addItem(item)
 
     def _on_item_clicked(self, item: QListWidgetItem):
@@ -864,9 +880,15 @@ class AnnotationPanel(QListWidget):
                 menu.exec(self.mapToGlobal(pos))
 
     def refresh(self):
-        """Refresh annotations list"""
-        if self._doc:
-            self.set_document(self._doc)
+        """Mark the list stale; rescan now only if the panel is visible."""
+        self._dirty = True
+        if self.isVisible():
+            self._reload()
+
+    def refresh_if_dirty(self):
+        """Rescan if a modification happened while the panel was hidden."""
+        if self._dirty:
+            self._reload()
 
 
 class Sidebar(QTabWidget):
