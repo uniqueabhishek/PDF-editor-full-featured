@@ -432,18 +432,49 @@ Encrypted: {metadata.encryption}
                 "Could not open %s with the default app", filepath, exc_info=True)
 
     def _export_as_text(self):
-        """Export as plain text"""
-        if not self._document.is_open:
+        """Export as plain text on a background worker (extracting every page's
+        text blocks the GUI thread on a large document)."""
+        if not self._document.is_open or not self._document.doc:
             return
 
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Export as Text", "", "Text Files (*.txt)"
         )
-        if filepath:
+        if not filepath:
+            return
+
+        try:
+            # Serialize once on the GUI thread; the worker reads from its own copy
+            # (PyMuPDF is not thread-safe). deflate=False keeps this fast.
+            src_bytes = self._document.doc.tobytes(
+                garbage=0, deflate=False, encryption=fitz.PDF_ENCRYPT_NONE)
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
+            return
+        total = self._document.page_count
+
+        progress = QProgressDialog(
+            "Exporting to text...", "Cancel", 0, total, self)
+        progress.setWindowTitle("Exporting")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+
+        def work(progress_cb, is_cancelled):
+            tdoc = fitz.open(stream=src_bytes, filetype="pdf")
             try:
-                text = self._document.get_all_text()
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(text)
-                self._statusbar.showMessage("Exported as text", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to export:\n{e}")
+                parts = []
+                for i in range(len(tdoc)):
+                    if is_cancelled():
+                        return None  # don't write a partial file
+                    progress_cb(i, total)
+                    parts.append(tdoc[i].get_text("text"))
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write("\n\n".join(parts))
+                return filepath
+            finally:
+                tdoc.close()
+
+        def on_success(saved_path):
+            self._statusbar.showMessage(
+                f"Exported to {Path(saved_path).name}", 3000)
+
+        self._run_background(work, progress, on_success, error_title="Export Error")
