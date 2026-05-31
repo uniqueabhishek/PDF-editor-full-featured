@@ -16,6 +16,7 @@ from PyQt6.QtGui import (
 import fitz
 import logging
 import threading
+from collections import OrderedDict
 from typing import Optional, List, Dict, cast, Any
 from enum import Enum
 from dataclasses import dataclass
@@ -376,7 +377,8 @@ class PDFViewer(QScrollArea):
         # Rendering
         self._render_dpi = 150
         self._page_widgets: List[PageWidget] = []
-        self._page_cache: Dict[int, QPixmap] = {}
+        # LRU cache keyed by page number; most-recently-used at the end.
+        self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
         self._cache_size = 10
 
         # Tool state
@@ -541,14 +543,30 @@ class PDFViewer(QScrollArea):
             self._layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
 
+    def _cache_get(self, page_num: int) -> Optional[QPixmap]:
+        """Return a cached pixmap, marking it most-recently-used (true LRU)."""
+        pixmap = self._page_cache.get(page_num)
+        if pixmap is not None:
+            self._page_cache.move_to_end(page_num)
+        return pixmap
+
+    def _cache_put(self, page_num: int, pixmap: QPixmap) -> None:
+        """Insert a pixmap as most-recently-used, evicting the LRU entry."""
+        self._page_cache[page_num] = pixmap
+        self._page_cache.move_to_end(page_num)
+        while len(self._page_cache) > self._cache_size:
+            # popitem(last=False) drops the least-recently-used entry.
+            self._page_cache.popitem(last=False)
+
     def _render_page(self, page_num: int) -> QPixmap:
         """Render a single page to pixmap"""
         if not self._doc or page_num < 0 or page_num >= len(self._doc):
             return QPixmap()
 
         # Check cache
-        if page_num in self._page_cache:
-            return self._page_cache[page_num]
+        cached = self._cache_get(page_num)
+        if cached is not None:
+            return cached
 
         page = self._doc[page_num]
         zoom_matrix = fitz.Matrix(self._zoom * self._render_dpi / 72,
@@ -562,13 +580,7 @@ class PDFViewer(QScrollArea):
                      pixmap.stride, QImage.Format.Format_RGB888)
         qpixmap = QPixmap.fromImage(img)
 
-        # Cache management
-        if len(self._page_cache) >= self._cache_size:
-            # Remove oldest entry
-            oldest = next(iter(self._page_cache))
-            del self._page_cache[oldest]
-
-        self._page_cache[page_num] = qpixmap
+        self._cache_put(page_num, qpixmap)
         return qpixmap
 
     def _request_visible_pages(self):
@@ -591,8 +603,9 @@ class PDFViewer(QScrollArea):
             # Check if visible
             if viewport.intersects(widget_rect):
                 # Check cache first (only if page is not marked for re-render)
-                if i in self._page_cache and not page_widget._is_loading:
-                    page_widget.set_pixmap(self._page_cache[i], self._zoom)
+                cached = None if page_widget._is_loading else self._cache_get(i)
+                if cached is not None:
+                    page_widget.set_pixmap(cached, self._zoom)
                 else:
                     # Request background render
                     # Priority based on distance from center
@@ -609,12 +622,7 @@ class PDFViewer(QScrollArea):
 
         if page_num < len(self._page_widgets):
             qpixmap = QPixmap.fromImage(image)
-
-            # Cache the pixmap
-            if len(self._page_cache) >= self._cache_size:
-                oldest = next(iter(self._page_cache))
-                del self._page_cache[oldest]
-            self._page_cache[page_num] = qpixmap
+            self._cache_put(page_num, qpixmap)
 
             # Update widget
             self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
@@ -1373,7 +1381,7 @@ class PDFViewer(QScrollArea):
             qpixmap = QPixmap.fromImage(img)
 
             # Update cache and widget
-            self._page_cache[page_num] = qpixmap
+            self._cache_put(page_num, qpixmap)
             if page_num < len(self._page_widgets):
                 self._page_widgets[page_num].set_pixmap(qpixmap, self._zoom)
         except Exception:

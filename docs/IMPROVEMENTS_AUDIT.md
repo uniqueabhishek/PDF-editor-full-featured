@@ -61,7 +61,7 @@ implements the fix.
   `UNDO_HISTORY_SIZE = 100` commands. **Fix:** add a total-bytes budget that
   evicts the oldest snapshot commands.
 
-- [ ] **#C3 — Page cache is not true LRU.** Eviction drops the oldest *inserted*
+- [x] **#C3 — Page cache is not true LRU.** Eviction drops the oldest *inserted*
   entry; cache hits don't reorder, so a frequently-viewed page can be evicted.
   **Fix:** `OrderedDict` + `move_to_end` on hit.
 
