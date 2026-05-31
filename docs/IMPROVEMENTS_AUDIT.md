@@ -50,7 +50,7 @@ implements the fix.
 
 ## 🟡 Performance
 
-- [ ] **#C1 — Every edit re-serializes the whole document.**
+- [x] **#C1 — Every edit re-serializes the whole document.**
   `refresh` / `invalidate_render_copy` call `doc.tobytes()` to hand the render
   worker a fresh copy; on large PDFs that is the dominant per-edit cost.
   **Fix:** debounce the worker re-serialize (the synchronous current-page render

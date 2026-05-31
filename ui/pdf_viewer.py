@@ -407,6 +407,13 @@ class PDFViewer(QScrollArea):
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._request_visible_pages)
 
+        # Debounce timer for re-serializing the document for the render worker.
+        # Re-serializing the whole document after every edit is expensive on
+        # large PDFs, so a burst of edits collapses into a single re-copy.
+        self._resync_timer = QTimer()
+        self._resync_timer.setSingleShot(True)
+        self._resync_timer.timeout.connect(self._resync_render_worker)
+
     def _setup_ui(self):
         """Setup the viewer UI"""
         self.setWidgetResizable(True)
@@ -462,6 +469,8 @@ class PDFViewer(QScrollArea):
         self._filepath = filepath
         self._current_page = 0
         self._page_cache.clear()
+        # Cancel any debounced re-serialize queued for the previous document.
+        self._resync_timer.stop()
 
         # Hand the render worker its own private copy (see PageRenderWorker) so
         # the background thread never touches this editable document.
@@ -498,18 +507,35 @@ class PDFViewer(QScrollArea):
             logger.exception("Could not serialize document for the render worker")
             return None
 
+    def _schedule_worker_resync(self, delay_ms: int = 350):
+        """Debounce re-serializing the document for the background render worker.
+
+        ``doc.tobytes()`` over the whole document is the dominant per-edit cost
+        on large PDFs. Callers render the current page synchronously for instant
+        feedback, so the worker's copy can be refreshed lazily — a burst of edits
+        then costs a single serialize once the user pauses.
+        """
+        self._resync_timer.start(delay_ms)
+
+    def _resync_render_worker(self):
+        """Hand the worker a fresh copy of the (mutated) document, then re-render."""
+        if self._doc is None:
+            return
+        self._render_worker.set_document(
+            self._render_source(self._doc), self._render_dpi)
+        self._request_visible_pages()
+
     def invalidate_render_copy(self, page_num: int = -1):
         """Refresh the worker's document copy after an in-place edit.
 
-        Re-serializes the (mutated) document for the worker and, when a page is
-        given, renders it synchronously from the editable document for instant
-        feedback and queues a background re-render.
+        Renders the given page synchronously from the editable document for
+        instant feedback, then schedules a debounced re-serialize of the worker
+        copy (which also re-requests the visible pages).
         """
-        self._render_worker.set_document(self._render_source(self._doc), self._render_dpi)
         if 0 <= page_num < len(self._page_widgets):
             self._page_cache.pop(page_num, None)
             self._render_page_sync(page_num)
-            self._render_worker.request_page(page_num, self._zoom)
+        self._schedule_worker_resync()
 
     def _clear_pages(self):
         """Clear all page widgets"""
@@ -1345,20 +1371,20 @@ class PDFViewer(QScrollArea):
     def refresh(self):
         """Refresh the view - re-render pages to show document changes"""
         self._page_cache.clear()
-        # The document may have changed in place — refresh the worker's copy
-        # (this also clears its pending tasks).
-        self._render_worker.set_document(self._render_source(self._doc), self._render_dpi)
 
         # Mark all page widgets as needing re-render
         for page_widget in self._page_widgets:
             page_widget._is_loading = True
 
-        # Request visible pages to be rendered with high priority
-        self._request_visible_pages()
-
-        # Also do an immediate synchronous render of the current page for instant feedback
+        # Immediate synchronous render of the current page for instant feedback,
+        # straight from the editable document.
         if self._doc and 0 <= self._current_page < len(self._page_widgets):
             self._render_page_sync(self._current_page)
+
+        # The document may have changed in place — refresh the worker's copy
+        # lazily (debounced). _resync_render_worker() re-requests visible pages
+        # once the fresh copy is ready, avoiding a stale-render flash.
+        self._schedule_worker_resync()
 
     def _render_page_sync(self, page_num: int):
         """Synchronously render a single page (for immediate feedback)"""
@@ -1389,6 +1415,7 @@ class PDFViewer(QScrollArea):
 
     def cleanup(self):
         """Clean up resources (call before closing)"""
+        self._resync_timer.stop()
         self._render_worker.stop()
 
     # ==================== Event Handlers ====================
