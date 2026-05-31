@@ -56,7 +56,7 @@ implements the fix.
   **Fix:** debounce the worker re-serialize (the synchronous current-page render
   already gives instant feedback).
 
-- [ ] **#C2 — Snapshot undo can balloon memory.**
+- [x] **#C2 — Snapshot undo can balloon memory.**
   `DocumentSnapshotCommand` keeps full `_before` and `_after` PDF bytes, up to
   `UNDO_HISTORY_SIZE = 100` commands. **Fix:** add a total-bytes budget that
   evicts the oldest snapshot commands.

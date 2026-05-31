@@ -66,6 +66,10 @@ class AppConfig:
     MAX_RECENT_FILES: int = 20
     AUTOSAVE_INTERVAL: int = 300  # seconds (5 minutes)
     UNDO_HISTORY_SIZE: int = 100
+    # Cap on total memory held by undo snapshots (full before/after PDF bytes).
+    # On large documents the snapshot-based undo history would otherwise grow
+    # unbounded; the oldest entries are evicted past this budget.
+    UNDO_MEMORY_BUDGET: int = 512 * 1024 * 1024  # 512 MB
 
     # Thumbnail Settings
     THUMBNAIL_WIDTH: int = 150

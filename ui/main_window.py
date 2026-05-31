@@ -73,7 +73,8 @@ class MainWindow(
         self._current_file: Optional[Path] = None
 
         # Undo/Redo history manager
-        self._history_manager = HistoryManager(config.UNDO_HISTORY_SIZE)
+        self._history_manager = HistoryManager(
+            config.UNDO_HISTORY_SIZE, config.UNDO_MEMORY_BUDGET)
 
         # Auto-save / crash-recovery timer (configured from settings below)
         self._autosave_timer = QTimer(self)

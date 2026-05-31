@@ -108,6 +108,33 @@ def test_history_max_size_evicts_oldest(doc):
     assert hm.get_undo_count() == 3
 
 
+def test_snapshot_command_reports_memory(doc):
+    hm = HistoryManager()
+    cmd = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op")
+    assert cmd.memory_bytes() == 0  # nothing captured until executed
+    hm.execute(cmd)
+    assert cmd.memory_bytes() > 0   # before + after snapshots now held
+
+
+def test_history_memory_budget_evicts_oldest(doc):
+    # A tiny budget forces eviction down to the single most-recent command.
+    hm = HistoryManager(max_size=100, max_bytes=1)
+    for _ in range(3):
+        assert hm.execute(
+            DocumentSnapshotCommand(
+                doc, lambda: doc.add_blank_page(), description="op"))
+    assert hm.get_undo_count() == 1
+
+
+def test_no_memory_budget_keeps_all_within_count(doc):
+    hm = HistoryManager(max_size=100, max_bytes=None)
+    for _ in range(3):
+        hm.execute(
+            DocumentSnapshotCommand(
+                doc, lambda: doc.add_blank_page(), description="op"))
+    assert hm.get_undo_count() == 3
+
+
 def test_descriptions_present(doc):
     hm = HistoryManager()
     hm.execute(PageAddCommand(doc, 1))

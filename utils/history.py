@@ -49,6 +49,15 @@ class Command(ABC):
         """Redo the command (default: re-execute)"""
         return self.execute()
 
+    def memory_bytes(self) -> int:
+        """Approximate heap held by this command, for the history memory budget.
+
+        Most commands hold only a few scalars; commands that capture document
+        or page snapshots override this so the :class:`HistoryManager` can cap
+        total snapshot memory.
+        """
+        return 0
+
 
 class PageAddCommand(Command):
     """Command for adding a page"""
@@ -122,6 +131,9 @@ class PageDeleteCommand(Command):
         except Exception:
             logger.exception("PageDeleteCommand.undo failed")
             return False
+
+    def memory_bytes(self) -> int:
+        return len(self._page_pdf) if self._page_pdf else 0
 
 
 class PageRotateCommand(Command):
@@ -372,15 +384,36 @@ class DocumentSnapshotCommand(Command):
             logger.exception("Redo of '%s' failed", self.description)
             return False
 
+    def memory_bytes(self) -> int:
+        before = len(self._before) if self._before else 0
+        after = len(self._after) if self._after else 0
+        return before + after
+
 
 class HistoryManager:
     """Manages undo/redo history"""
 
-    def __init__(self, max_size: int = 100):
+    def __init__(self, max_size: int = 100, max_bytes: Optional[int] = None):
         self._undo_stack: List[Command] = []
         self._redo_stack: List[Command] = []
         self._max_size = max_size
+        # Optional cap on total snapshot memory held by the undo stack. Snapshot
+        # commands keep full before/after PDF bytes, so on large documents the
+        # undo history can otherwise grow to hundreds of MB.
+        self._max_bytes = max_bytes
         self._is_executing = False
+
+    def _enforce_limits(self) -> None:
+        """Evict the oldest undo entries to honour the count and memory caps."""
+        while len(self._undo_stack) > self._max_size:
+            self._undo_stack.pop(0)
+
+        if self._max_bytes is not None:
+            total = sum(cmd.memory_bytes() for cmd in self._undo_stack)
+            # Keep at least the most recent command so one undo is always possible.
+            while total > self._max_bytes and len(self._undo_stack) > 1:
+                evicted = self._undo_stack.pop(0)
+                total -= evicted.memory_bytes()
 
     def execute(self, command: Command) -> bool:
         """Execute a command and add it to history"""
@@ -392,11 +425,7 @@ class HistoryManager:
             if command.execute():
                 self._undo_stack.append(command)
                 self._redo_stack.clear()  # Clear redo stack on new action
-
-                # Limit history size
-                while len(self._undo_stack) > self._max_size:
-                    self._undo_stack.pop(0)
-
+                self._enforce_limits()
                 return True
             return False
         finally:
