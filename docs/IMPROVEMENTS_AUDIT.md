@@ -67,7 +67,7 @@ implements the fix.
 
 ## 🟢 Dead code / maintainability
 
-- [ ] **#D1 — ~240 lines of dead annotation code in the viewer.**
+- [x] **#D1 — ~240 lines of dead annotation code in the viewer.**
   `_create_text_markup_annotation`, `_create_shape_annotation`,
   `_create_line_annotation`, `_create_freehand_annotation_from_points` have no
   callers — superseded by the undoable `_request_annotation` →
