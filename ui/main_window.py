@@ -593,6 +593,13 @@ class MainWindow(
         """Write a recovery copy of the current document if it has unsaved edits."""
         if not self._document.is_open or not self._is_modified:
             return
+        # Never write an *unencrypted* recovery copy of a protected document:
+        # save_copy() has no password, so this would leak its plaintext to
+        # AUTOSAVE_DIR. Skip auto-save for protected files instead.
+        if self._document.is_protected:
+            self._statusbar.showMessage(
+                "Auto-save skipped for password-protected document", 2000)
+            return
         try:
             self._document.save_copy(config.AUTOSAVE_DIR / "recovery.pdf")
             meta = {

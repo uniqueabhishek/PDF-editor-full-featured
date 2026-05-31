@@ -36,7 +36,7 @@ implements the fix.
 
 ## 🟠 Security / privacy
 
-- [ ] **#B1 — Autosave writes decrypted copies of encrypted PDFs to disk.**
+- [x] **#B1 — Autosave writes decrypted copies of encrypted PDFs to disk.**
   `_autosave` → `save_copy(AUTOSAVE_DIR/recovery.pdf)` and `save_copy` saves with
   no encryption, so editing a password-protected PDF leaks plaintext to
   `~/.ultra_pdf_editor/autosave/`. **Fix:** skip the unencrypted recovery write

@@ -221,6 +221,31 @@ def test_encrypt_then_save_requires_password(opened, tmp_path):
         raw.close()
 
 
+def test_plain_document_is_not_protected(opened):
+    assert opened.is_protected is False
+
+
+def test_is_protected_after_encrypt_request(opened):
+    opened.encrypt(user_password="pw123")
+    # Encryption is queued (pending) before save — already counts as protected
+    # so auto-save won't write a plaintext copy.
+    assert opened.is_protected is True
+
+
+def test_is_protected_for_password_protected_file(make_pdf):
+    src = make_pdf("secret.pdf", pages=1)
+    doc = PDFDocument()
+    assert doc.open(src) is True
+    doc.encrypt(user_password="pw123")
+    assert doc.save() is True
+    doc.close()
+
+    reopened = PDFDocument()
+    assert reopened.open(src, password="pw123") is True
+    assert reopened.is_protected is True
+    reopened.close()
+
+
 def test_encrypt_save_in_place_overwrites_with_encrypted(make_pdf):
     src = make_pdf("plain.pdf", pages=2)
     doc = PDFDocument()

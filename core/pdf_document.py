@@ -116,6 +116,22 @@ class PDFDocument:
         """Check if document needs password to open"""
         return self._doc.needs_pass if self._doc else False
 
+    @property
+    def is_protected(self) -> bool:
+        """True if the document is password-protected, encrypted, or has
+        encryption queued for the next save.
+
+        Used to avoid writing an *unencrypted* recovery/auto-save copy of a
+        protected document to disk, which would leak its plaintext. Errs toward
+        True (``needs_pass`` stays True after authentication, ``is_encrypted``
+        covers owner-password-only files, and ``_pending_encryption`` covers a
+        just-requested encrypt that hasn't been saved yet).
+        """
+        if self._doc is None:
+            return False
+        return bool(self._doc.needs_pass or self._doc.is_encrypted
+                    or self._pending_encryption)
+
     def open(self, filepath: Union[str, Path], password: Optional[str] = None) -> bool:
         """
         Open a PDF file
