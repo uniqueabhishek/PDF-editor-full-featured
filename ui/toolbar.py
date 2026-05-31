@@ -628,10 +628,17 @@ class AnnotationToolbar(QToolBar):
             btn.setChecked(True)
 
     def _on_tool_selected(self, mode: ToolMode):
-        """Handle tool selection"""
+        """Handle tool selection.
+
+        Clicking the active tool again toggles it off, reverting to the default
+        Select tool so dragging no longer creates annotations.
+        """
+        if mode == self._current_tool and mode != ToolMode.SELECT:
+            mode = ToolMode.SELECT
+
         self._current_tool = mode
 
-        # Update button states
+        # Update button states (only the active tool stays checked)
         for tool_mode, btn in self._tool_buttons.items():
             btn.setChecked(tool_mode == mode.value)
 
