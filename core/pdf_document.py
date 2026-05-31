@@ -522,7 +522,29 @@ class PDFDocument:
         """
         if self._doc is None:
             raise ValueError("No document is open")
-        self._doc.select(list(new_order))
+        new_order = list(new_order)
+        # Document.select() discards the table of contents entirely, so capture
+        # it first and remap each entry's page through the permutation, then
+        # restore it after the reorder (otherwise every bookmark is lost).
+        old_toc = self._doc.get_toc()
+        self._doc.select(new_order)
+        if old_toc:
+            # old page index (0-based) -> new position (0-based)
+            remap = {old_idx: new_pos for new_pos, old_idx in enumerate(new_order)}
+            new_toc = []
+            for entry in old_toc:
+                level, title, page = entry[0], entry[1], entry[2]
+                old_idx = page - 1
+                if old_idx in remap:
+                    new_toc.append([level, title, remap[old_idx] + 1])
+            if new_toc:
+                try:
+                    self._doc.set_toc(new_toc)
+                except Exception:
+                    # Dropping entries can break the level hierarchy; skip
+                    # rather than fail the whole reorder.
+                    logger.warning(
+                        "Could not restore TOC after reorder", exc_info=True)
         self._is_modified = True
         return True
 

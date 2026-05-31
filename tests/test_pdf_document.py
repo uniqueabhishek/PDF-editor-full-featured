@@ -379,6 +379,15 @@ def test_reorder_pages_changes_order(opened):
     assert opened.page_count == 3
 
 
+def test_reorder_pages_remaps_bookmarks(opened):
+    # Bookmark each page, then reorder so page 3 -> 1, page 1 -> 2, page 2 -> 3.
+    opened.set_toc([[1, "BM1", 1], [1, "BM2", 2], [1, "BM3", 3]])
+    opened.reorder_pages([2, 0, 1])
+    toc = {title: page for _level, title, page in opened.get_toc()}
+    # The bookmark that pointed at old page 3 now points at new page 1, etc.
+    assert toc == {"BM1": 2, "BM2": 3, "BM3": 1}
+
+
 def test_reorder_pages_requires_open_document():
     doc = PDFDocument()
     with pytest.raises(ValueError):

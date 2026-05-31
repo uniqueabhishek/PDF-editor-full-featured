@@ -29,10 +29,11 @@ implements the fix.
   PyMuPDF `search_for` is case-insensitive regardless. **Fix:** post-filter
   matches against extracted span text when case-sensitive is requested.
 
-- [ ] **#A3 — Page reorder/move can strand bookmarks.**
-  `reorder_pages` (`doc.select`) and `move_page` don't remap the TOC, so the
-  outline can point at the wrong pages after a drag-reorder. **Fix:** remap TOC
-  page targets through the permutation.
+- [x] **#A3 — Page reorder strands bookmarks.**
+  `reorder_pages` used `doc.select`, which discards the TOC entirely, so a
+  drag-reorder lost every bookmark. (`move_page` was verified to already remap
+  the TOC correctly, so it needed no change.) **Fixed:** capture the TOC before
+  `select` and remap each entry's page through the permutation.
 
 ## 🟠 Security / privacy
 
