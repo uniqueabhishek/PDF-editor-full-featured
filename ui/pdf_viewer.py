@@ -238,7 +238,15 @@ class PageWidget(QLabel):
         self.setFixedSize(pixmap.size())
 
     def set_placeholder(self, width: int, height: int):
-        """Set a white placeholder of the given size"""
+        """Reserve space for a not-yet-rendered page without allocating a pixmap.
+
+        This used to fill a full-resolution white ``QPixmap`` per page (~8 MB for a
+        Letter page at 150 DPI). On a large document that allocated gigabytes of
+        placeholder bitmaps that are never shown once the real render arrives. The
+        widget's stylesheet already paints a white background with a light border,
+        so clearing the pixmap and fixing the size gives the same look at zero
+        pixel cost.
+        """
         self._is_loading = True
         self._pixmap = None
 
@@ -246,17 +254,8 @@ class PageWidget(QLabel):
         width = max(1, width)
         height = max(1, height)
 
-        # Create a proper white pixmap
-        placeholder = QPixmap(width, height)
-        placeholder.fill(Qt.GlobalColor.white)
-
-        # Draw a subtle loading indicator
-        painter = QPainter(placeholder)
-        painter.setPen(QPen(QColor(200, 200, 200), 1))
-        painter.drawRect(0, 0, width - 1, height - 1)
-        painter.end()
-
-        self.setPixmap(placeholder)
+        # Drop any previous pixmap; the stylesheet draws the white page + border.
+        self.clear()
         self.setFixedSize(width, height)
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
