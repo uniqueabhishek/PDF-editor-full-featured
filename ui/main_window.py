@@ -76,6 +76,10 @@ class MainWindow(
         self._history_manager = HistoryManager(
             config.UNDO_HISTORY_SIZE, config.UNDO_MEMORY_BUDGET)
 
+        # Live background workers (OCR, export); kept referenced so they aren't
+        # garbage-collected mid-run.
+        self._active_workers: set = set()
+
         # Auto-save / crash-recovery timer (configured from settings below)
         self._autosave_timer = QTimer(self)
         self._autosave_timer.timeout.connect(self._autosave)
@@ -784,6 +788,49 @@ class MainWindow(
         self._load_document_to_viewer()
         return None
 
+    def _run_background(self, work, progress, on_success, error_title: str = "Error"):
+        """Run ``work`` on a background :class:`FunctionWorker` with a progress UI.
+
+        ``work(progress_cb, is_cancelled)`` runs off the GUI thread and must only
+        touch its own data (PyMuPDF is not thread-safe — see ``ui.workers``).
+        ``on_success(result)`` runs on the GUI thread when the work finishes
+        without being cancelled. The (modal) ``progress`` dialog reports progress
+        and offers Cancel.
+        """
+        from ui.workers import FunctionWorker
+
+        worker = FunctionWorker(work, self)
+
+        def _on_progress(done: int, total: int):
+            if total:
+                progress.setMaximum(total)
+            progress.setValue(done)
+
+        def _finish():
+            progress.close()
+            self._active_workers.discard(worker)
+
+        def _on_ok(result):
+            _finish()
+            if worker.is_cancelled():
+                self._statusbar.showMessage("Cancelled", 2000)
+            else:
+                on_success(result)
+
+        def _on_fail(message: str):
+            _finish()
+            QMessageBox.critical(self, error_title, f"Operation failed:\n{message}")
+
+        worker.progress.connect(_on_progress)
+        worker.succeeded.connect(_on_ok)
+        worker.failed.connect(_on_fail)
+        worker.finished.connect(worker.deleteLater)
+        progress.canceled.connect(worker.cancel)
+
+        self._active_workers.add(worker)
+        worker.start()
+        progress.show()
+
     # ==================== Bookmarks ====================
 
     def _apply_toc(self, toc: list):
@@ -872,6 +919,11 @@ class MainWindow(
             self._autosave_timer.stop()
             self._clear_autosave()  # clean exit — no recovery needed
             self._save_settings()
+            # Stop any running background workers (OCR/export) before teardown.
+            for worker in list(self._active_workers):
+                worker.cancel()
+                worker.wait(3000)
+            self._active_workers.clear()
             self._viewer.cleanup()  # Stop background render thread
             self._document.close()
             event.accept()

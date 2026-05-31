@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         _find_dialog: Optional[FindDialog]
         _replace_dialog: Optional[FindReplaceDialog]
         _clean_pdf_dlg: Optional[QDialog]
+        _active_workers: set
 
         # --- shared helpers (MainWindow) ---
         def _load_document_to_viewer(self) -> None: ...
@@ -71,6 +72,10 @@ if TYPE_CHECKING:
         def _run_snapshot_op(
             self, description: str, operation: "Callable[[], Any]",
             command_type: "Optional[CommandType]" = None) -> "Any": ...
+        def _run_background(
+            self, work: "Callable[[Callable[[int, int], None], Callable[[], bool]], Any]",
+            progress: "Any", on_success: "Callable[[Any], None]",
+            error_title: str = "Error") -> None: ...
 
         # --- cross-mixin handlers ---
         def _open_file(self, filepath: str) -> None: ...

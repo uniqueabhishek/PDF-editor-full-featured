@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import fitz
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFileDialog, QMessageBox, QInputDialog, QProgressDialog, QApplication
+    QFileDialog, QMessageBox, QInputDialog, QProgressDialog
 )
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -113,14 +113,20 @@ class ToolsHandlerMixin(_MixinBase):
         self._compress_pdf()
 
     def _run_ocr(self):
-        """Run OCR on document"""
-        if not self._document.is_open:
+        """Add a searchable text layer to every page via OCR, off the GUI thread.
+
+        Tesseract is CPU-bound and PyMuPDF is not thread-safe, so the work runs
+        on a :class:`FunctionWorker` against a *private copy* of the document
+        (opened from serialized bytes). The OCR'd bytes are applied back on the
+        GUI thread through an undoable snapshot. A modal progress dialog keeps
+        the user from editing the live document while the worker runs.
+        """
+        if not self._document.is_open or not self._document.doc:
             return
 
         try:
-            import pytesseract
-            from PIL import Image
-            import io
+            import pytesseract  # noqa: F401  (presence check)
+            from PIL import Image  # noqa: F401
         except ImportError:
             QMessageBox.warning(
                 self,
@@ -134,67 +140,72 @@ class ToolsHandlerMixin(_MixinBase):
             )
             return
 
-        # Confirm with user
-        result = QMessageBox.question(
+        if QMessageBox.question(
             self,
             "Run OCR",
             f"This will add a searchable text layer to all {self._document.page_count} pages.\n\n"
             "This process may take some time. Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if result != QMessageBox.StandardButton.Yes:
+        ) != QMessageBox.StandardButton.Yes:
             return
 
-        # Create progress dialog
+        # Serialize a decrypted copy for the worker's private document.
+        try:
+            src_bytes = self._document.doc.tobytes(
+                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE)
+        except Exception as e:
+            QMessageBox.critical(self, "OCR Error", f"Could not prepare document:\n{e}")
+            return
+        total = self._document.page_count
+
         progress = QProgressDialog(
-            "Running OCR...", "Cancel", 0, self._document.page_count, self)
+            "Running OCR...", "Cancel", 0, total, self)
         progress.setWindowTitle("OCR Processing")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
 
-        def _do():
-            doc = self._document.doc
-            for i in range(self._document.page_count):
-                if progress.wasCanceled():
-                    break
+        def work(progress_cb, is_cancelled):
+            import io
+            import pytesseract
+            from PIL import Image
+            wdoc = fitz.open(stream=src_bytes, filetype="pdf")
+            try:
+                for i in range(len(wdoc)):
+                    if is_cancelled():
+                        break
+                    progress_cb(i, total)
+                    page = wdoc[i]
+                    zoom = 2  # higher resolution for better OCR
+                    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    # Position each recognised word so the invisible text layer
+                    # lines up with the page.
+                    data = pytesseract.image_to_data(
+                        img, output_type=pytesseract.Output.DICT)
+                    for j, word in enumerate(data["text"]):
+                        if not word.strip():
+                            continue
+                        x = data["left"][j] / zoom
+                        y = (data["top"][j] + data["height"][j]) / zoom
+                        fontsize = max(1.0, data["height"][j] / zoom)
+                        page.insert_text(
+                            fitz.Point(x, y), word, fontsize=fontsize,
+                            color=(1, 1, 1), render_mode=3)
+                return wdoc.tobytes()
+            finally:
+                wdoc.close()
 
-                progress.setValue(i)
-                progress.setLabelText(
-                    f"Processing page {i + 1} of {self._document.page_count}...")
-                QApplication.processEvents()
+        def apply_result(new_bytes):
+            # Apply the OCR'd bytes back on the GUI thread, undoably.
+            if self._run_snapshot_op(
+                    "OCR", lambda: self._document.restore(new_bytes)) is not None:
+                self._statusbar.showMessage(
+                    "OCR completed - document is now searchable", 3000)
+            else:
+                QMessageBox.critical(
+                    self, "OCR Error",
+                    "Failed to apply OCR result. See log for details.")
 
-                # Render page to image (the zoom must match the coordinate
-                # scaling applied to the OCR word boxes below).
-                page = doc[i]
-                zoom = 2  # higher resolution for better OCR
-                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-
-                # Position each recognised word individually so the invisible
-                # text layer lines up with the page (image_to_string would put
-                # the whole page's text at a single point).
-                data = pytesseract.image_to_data(
-                    img, output_type=pytesseract.Output.DICT)
-                for j, word in enumerate(data["text"]):
-                    if not word.strip():
-                        continue
-                    x = data["left"][j] / zoom
-                    y = (data["top"][j] + data["height"][j]) / zoom
-                    fontsize = max(1.0, data["height"][j] / zoom)
-                    page.insert_text(
-                        fitz.Point(x, y), word, fontsize=fontsize,
-                        color=(1, 1, 1), render_mode=3)
-
-            progress.setValue(self._document.page_count)
-
-        cmd = self._run_snapshot_op("OCR", _do)
-        progress.close()
-        if cmd is not None:
-            self._statusbar.showMessage(
-                "OCR completed - document is now searchable", 3000)
-        else:
-            QMessageBox.critical(
-                self, "OCR Error", "Failed to run OCR. See log for details.")
+        self._run_background(work, progress, apply_result, error_title="OCR Error")
 
     def _add_watermark(self):
         """Add watermark to document"""

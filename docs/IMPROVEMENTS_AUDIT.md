@@ -73,10 +73,13 @@ implements the fix.
   callers — superseded by the undoable `_request_annotation` →
   `AnnotationAddCommand` pipeline. **Fix:** remove them.
 
-- [ ] **#D2 — Long operations run on the GUI thread.** OCR, Word export and print
-  loop with manual `QApplication.processEvents()`, freezing the window.
-  **Fix:** move them to `QThread` workers following the `PageRenderWorker`
-  pattern.
+- [x] **#D2 — Long operations run on the GUI thread.** OCR and Word export looped
+  with manual `QApplication.processEvents()`, freezing the window. **Fixed:**
+  both now run on a `FunctionWorker` (`ui/workers.py`) against a *private copy*
+  of the document (PyMuPDF is not thread-safe), with a cancellable progress
+  dialog; OCR's result is applied back via an undoable snapshot. **Print stays
+  on the GUI thread by design** — Qt requires `QPainter`/`QPrinter` painting on
+  the GUI thread — and keeps its existing cancellable progress dialog.
 
 - [x] **#D3 — The mixin contract is invisible to type checkers.** All six handler
   mixins reference `self._document`, `self._viewer`, … defined on `MainWindow`.

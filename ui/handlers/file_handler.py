@@ -7,6 +7,7 @@ MainWindow; relies on ``self._document``, ``self._viewer``, ``self._sidebar``,
 ``self._update_title`` / ``self._update_actions_state`` /
 ``self._update_recent_files_menu`` / ``self._format_size``.
 """
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -341,13 +342,17 @@ Encrypted: {metadata.encryption}
                 QMessageBox.critical(self, "Error", f"Failed to export:\n{e}")
 
     def _export_as_word(self):
-        """Export as Word document"""
-        if not self._document.is_open:
+        """Export page text to a Word document, off the GUI thread.
+
+        Reading text doesn't mutate the document, but PyMuPDF is not thread-safe,
+        so the worker reads from its own copy (serialized bytes) rather than the
+        live document.
+        """
+        if not self._document.is_open or not self._document.doc:
             return
 
         try:
-            from docx import Document as WordDocument
-            from docx.shared import Inches, Pt  # noqa: F401
+            import docx  # noqa: F401  (presence check)
         except ImportError:
             QMessageBox.warning(
                 self,
@@ -363,67 +368,68 @@ Encrypted: {metadata.encryption}
         if not filepath:
             return
 
-        # Create progress dialog
+        try:
+            src_bytes = self._document.doc.tobytes(
+                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE)
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
+            return
+        total = self._document.page_count
+
         progress = QProgressDialog(
-            "Exporting to Word...", "Cancel", 0, self._document.page_count, self)
+            "Exporting to Word...", "Cancel", 0, total, self)
         progress.setWindowTitle("Exporting")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
 
-        try:
-            doc = WordDocument()
+        def work(progress_cb, is_cancelled):
+            from docx import Document as WordDocument
+            wdoc = fitz.open(stream=src_bytes, filetype="pdf")
+            try:
+                out = WordDocument()
+                for i in range(len(wdoc)):
+                    if is_cancelled():
+                        break
+                    progress_cb(i, total)
+                    text = wdoc[i].get_text("text")
+                    if text.strip():
+                        for line in text.split("\n"):
+                            if line.strip():
+                                out.add_paragraph(line)
+                    if i < len(wdoc) - 1:
+                        out.add_page_break()
+                out.save(filepath)
+                return filepath
+            finally:
+                wdoc.close()
 
-            for i in range(self._document.page_count):
-                if progress.wasCanceled():
-                    break
-
-                progress.setValue(i)
-                progress.setLabelText(
-                    f"Processing page {i + 1} of {self._document.page_count}...")
-                QApplication.processEvents()
-
-                # Get text from page
-                text = self._document.get_page_text(i)
-
-                if text.strip():
-                    # Add text paragraphs
-                    for line in text.split('\n'):
-                        if line.strip():
-                            doc.add_paragraph(line)
-
-                # Add page break between pages (except last page)
-                if i < self._document.page_count - 1:
-                    doc.add_page_break()
-
-            progress.setValue(self._document.page_count)
-            doc.save(filepath)
+        def on_success(saved_path):
             self._statusbar.showMessage(
-                f"Exported to {Path(filepath).name}", 3000)
-
+                f"Exported to {Path(saved_path).name}", 3000)
             if QMessageBox.question(
                 self, "Open Word Document",
                 "Export complete. Do you want to open the Word document?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             ) == QMessageBox.StandardButton.Yes:
-                # Open with the OS default application (cross-platform).
-                import os
-                import sys
-                import subprocess
-                try:
-                    if sys.platform.startswith("win"):
-                        os.startfile(filepath)  # type: ignore[attr-defined]
-                    elif sys.platform == "darwin":
-                        subprocess.Popen(["open", filepath])
-                    else:
-                        subprocess.Popen(["xdg-open", filepath])
-                except Exception as e:
-                    QMessageBox.warning(
-                        self, "Open Failed",
-                        f"Saved, but couldn't open the file automatically:\n{e}")
+                self._open_with_default_app(saved_path)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Export Error",
-                                 f"Failed to export:\n{e}")
+        self._run_background(work, progress, on_success, error_title="Export Error")
+
+    @staticmethod
+    def _open_with_default_app(filepath: str):
+        """Open a file with the OS default application (cross-platform)."""
+        import os
+        import sys
+        import subprocess
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(filepath)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", filepath])
+            else:
+                subprocess.Popen(["xdg-open", filepath])
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Could not open %s with the default app", filepath, exc_info=True)
 
     def _export_as_text(self):
         """Export as plain text"""
