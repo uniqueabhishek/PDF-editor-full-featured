@@ -15,7 +15,7 @@ implements the fix.
 
 ## 🔴 Correctness bugs
 
-- [ ] **#A1 — "Find & Replace" is a no-op.** `_do_replace` / `_do_replace_all`
+- [x] **#A1 — "Find & Replace" is a no-op.** `_do_replace` / `_do_replace_all`
   (`ui/handlers/edit_handler.py`) only show an info dialog, yet Ctrl+H and a full
   `FindReplaceDialog` are wired to them. Either implement redaction-based
   replacement (redact the found rect, re-insert the replacement text) or remove

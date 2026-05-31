@@ -799,6 +799,82 @@ class PDFDocument:
 
         return results
 
+    # ---- text replacement (redaction-based) ----
+
+    @staticmethod
+    def _estimate_fontsize(page: fitz.Page, rect: fitz.Rect) -> float:
+        """Best-effort font size of the text inside ``rect``.
+
+        Falls back to a height-based estimate when no spans are found, so the
+        replacement text roughly matches the original.
+        """
+        try:
+            d = page.get_text("dict", clip=rect)
+            sizes = [s["size"]
+                     for b in d.get("blocks", []) if b.get("type") == 0
+                     for line in b.get("lines", [])
+                     for s in line.get("spans", [])]
+            if sizes:
+                return max(1.0, min(sizes))
+        except Exception:
+            logger.debug("Could not estimate font size; using height", exc_info=True)
+        return max(1.0, rect.height * 0.8)
+
+    def _redact_replace_rect(self, page: fitz.Page, rect: fitz.Rect,
+                             replacement: str) -> None:
+        """Queue a redaction that erases ``rect`` and draws ``replacement`` in it.
+
+        Caller must invoke ``page.apply_redactions()`` afterwards. The replaced
+        text is re-typeset in Helvetica at the original's estimated size, so the
+        original font/styling is not preserved — the honest limitation of PDF
+        text replacement.
+        """
+        fontsize = self._estimate_fontsize(page, rect)
+        page.add_redact_annot(
+            rect, text=replacement, fontname="helv", fontsize=fontsize,
+            text_color=(0, 0, 0), fill=(1, 1, 1), align=fitz.TEXT_ALIGN_LEFT)
+
+    def replace_text_all(self, search: str, replacement: str,
+                         case_sensitive: bool = False) -> int:
+        """Replace every occurrence of ``search`` with ``replacement``.
+
+        Uses redaction: the original text is removed and the replacement drawn
+        in its place. Returns the number of occurrences replaced.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        if not search:
+            return 0
+
+        count = 0
+        for page_num in range(self.page_count):
+            page = self._doc[page_num]
+            rects = page.search_for(search, flags=fitz.TEXT_PRESERVE_WHITESPACE)
+            if case_sensitive and rects:
+                rects = [r for r in rects if search in page.get_textbox(r)]
+            if not rects:
+                continue
+            for r in rects:
+                self._redact_replace_rect(page, r, replacement)
+                count += 1
+            page.apply_redactions()
+
+        if count:
+            self._is_modified = True
+        return count
+
+    def replace_text_one(self, page_num: int,
+                         rect: Tuple[float, float, float, float],
+                         replacement: str) -> bool:
+        """Replace a single occurrence located at ``rect`` on ``page_num``."""
+        if self._doc is None:
+            raise ValueError("No document is open")
+        page = self._doc[page_num]
+        self._redact_replace_rect(page, fitz.Rect(rect), replacement)
+        page.apply_redactions()
+        self._is_modified = True
+        return True
+
     def add_text(self, page_num: int, text: str, position: Tuple[float, float],
                  font_size: float = 12, font_name: str = "helv",
                  color: Tuple[float, float, float] = (0, 0, 0)) -> bool:

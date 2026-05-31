@@ -244,25 +244,66 @@ class EditHandlerMixin(_MixinBase):
                     return
                 current += 1
 
+    def _replace_search_params(self):
+        """The (search_text, case_sensitive) currently entered in the dialog."""
+        dlg = self._replace_dialog
+        if dlg is None:
+            return "", False
+        return dlg.get_search_text(), dlg.is_case_sensitive()
+
+    def _occurrence_at(self, index: int):
+        """Map a flat search-result index to (page_num, rect tuple), or None."""
+        current = 0
+        for result in self._search_results:
+            for rect in result["rects"]:
+                if current == index:
+                    return result["page"], rect
+                current += 1
+        return None
+
     def _do_replace(self, replacement: str):
-        """Replace current occurrence"""
-        # PDF text replacement is complex - using redaction approach
-        QMessageBox.information(
-            self,
-            "Replace",
-            "Direct text replacement in PDFs is limited.\n"
-            "Consider using the Redaction tool to remove text and then add new text."
-        )
+        """Replace the current occurrence (redaction-based), then re-search."""
+        if not self._document.is_open:
+            return
+        search, case_sensitive = self._replace_search_params()
+        if not self._search_results:
+            self._statusbar.showMessage("Find some text first", 2000)
+            return
+        target = self._occurrence_at(self._current_search_index)
+        if target is None:
+            return
+        page_num, rect = target
+        if self._run_snapshot_op(
+                "Replace text",
+                lambda: self._document.replace_text_one(
+                    page_num, rect, replacement)) is not None:
+            # Positions changed; re-run the search to refresh highlights/count.
+            self._do_search(search, case_sensitive)
+            self._statusbar.showMessage("Replaced 1 occurrence", 2000)
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to replace text. See log for details.")
 
     def _do_replace_all(self, replacement: str):
-        """Replace all occurrences"""
-        QMessageBox.information(
-            self,
-            "Replace All",
-            "Direct text replacement in PDFs is limited.\n"
-            "PDF files store text as rendered graphics, not editable text.\n"
-            "Consider exporting to Word format for text editing."
-        )
+        """Replace all occurrences of the search term (redaction-based)."""
+        if not self._document.is_open:
+            return
+        search, case_sensitive = self._replace_search_params()
+        if not search:
+            self._statusbar.showMessage("Find some text first", 2000)
+            return
+        cmd = self._run_snapshot_op(
+            "Replace all",
+            lambda: self._document.replace_text_all(
+                search, replacement, case_sensitive))
+        if cmd is not None:
+            count = cmd.result
+            self._do_search(search, case_sensitive)  # matches are gone now
+            self._statusbar.showMessage(
+                f"Replaced {count} occurrence(s)", 3000)
+        else:
+            QMessageBox.critical(
+                self, "Error", "Failed to replace text. See log for details.")
 
     def _on_find_closed(self):
         """Handle find dialog closed"""

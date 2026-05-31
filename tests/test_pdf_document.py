@@ -114,6 +114,64 @@ def test_search_case_sensitive_filters(tmp_path):
         doc.close()
 
 
+def test_replace_text_all(tmp_path):
+    p = tmp_path / "rep.pdf"
+    d = fitz.open()
+    for _ in range(2):
+        pg = d.new_page(width=400, height=200)
+        pg.insert_text((50, 100), "alpha beta alpha", fontsize=12)
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        assert doc.replace_text_all("alpha", "gamma") == 4  # 2 per page x 2 pages
+        assert doc.search_text("alpha") == []
+        assert sum(len(r["rects"]) for r in doc.search_text("gamma")) == 4
+        assert doc.is_modified is True
+    finally:
+        doc.close()
+
+
+def test_replace_text_all_case_sensitive(tmp_path):
+    p = tmp_path / "repc.pdf"
+    d = fitz.open()
+    pg = d.new_page(width=400, height=200)
+    pg.insert_text((50, 80), "Foo foo", fontsize=12)
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        assert doc.replace_text_all("foo", "bar", case_sensitive=True) == 1
+        # The capitalised "Foo" is untouched.
+        assert sum(len(r["rects"])
+                   for r in doc.search_text("Foo", case_sensitive=True)) == 1
+    finally:
+        doc.close()
+
+
+def test_replace_text_one(tmp_path):
+    p = tmp_path / "rep1.pdf"
+    d = fitz.open()
+    pg = d.new_page(width=400, height=200)
+    pg.insert_text((50, 100), "one two one", fontsize=12)
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        rects = doc.search_text("one")[0]["rects"]
+        assert len(rects) == 2
+        assert doc.replace_text_one(0, rects[0], "xyz") is True
+        assert sum(len(r["rects"]) for r in doc.search_text("one")) == 1
+    finally:
+        doc.close()
+
+
 def test_metadata_round_trip(opened):
     opened.set_metadata({"title": "My Title", "author": "Tester"})
     meta = opened.get_metadata()
