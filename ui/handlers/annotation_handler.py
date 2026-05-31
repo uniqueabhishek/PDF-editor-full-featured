@@ -6,15 +6,21 @@ requests from the viewer through the undo/redo history, and performs area
 redaction. Mixed into MainWindow; relies on ``self._document``, ``self._viewer``,
 ``self._history_manager`` and ``self._statusbar``.
 """
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
 from PyQt6.QtWidgets import QMessageBox
 
 from ..pdf_viewer import ToolMode
 from utils.history import AnnotationAddCommand
 
+if TYPE_CHECKING:
+    from ._context import MainWindowContext
+    _MixinBase = MainWindowContext
+else:
+    _MixinBase = object
 
-class AnnotationHandlerMixin:
+
+class AnnotationHandlerMixin(_MixinBase):
     """Annotation toolbar and redaction handling for MainWindow."""
 
     def _on_tool_changed(self, tool: str):

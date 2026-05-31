@@ -8,6 +8,7 @@ MainWindow; relies on ``self._document``, ``self._viewer``, ``self._sidebar``,
 ``self._update_recent_files_menu`` / ``self._format_size``.
 """
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import fitz
 from PyQt6.QtCore import Qt
@@ -16,8 +17,14 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QImage, QPixmap, QPageLayout
 
+if TYPE_CHECKING:
+    from ._context import MainWindowContext
+    _MixinBase = MainWindowContext
+else:
+    _MixinBase = object
 
-class FileHandlerMixin:
+
+class FileHandlerMixin(_MixinBase):
     """File-menu operations (open/save/print/export) for MainWindow."""
 
     # ==================== File Operations ====================

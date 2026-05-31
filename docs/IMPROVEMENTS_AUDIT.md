@@ -78,7 +78,7 @@ implements the fix.
   **Fix:** move them to `QThread` workers following the `PageRenderWorker`
   pattern.
 
-- [ ] **#D3 — The mixin contract is invisible to type checkers.** All six handler
+- [x] **#D3 — The mixin contract is invisible to type checkers.** All six handler
   mixins reference `self._document`, `self._viewer`, … defined on `MainWindow`.
   **Fix:** add a `typing.Protocol` documenting the shared surface.
 

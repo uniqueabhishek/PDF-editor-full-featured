@@ -7,12 +7,20 @@ Mixed into MainWindow; relies on ``self._history_manager``, ``self._viewer``,
 (``self._search_results``, ``self._current_search_index``, ``self._find_dialog``,
 ``self._replace_dialog``).
 """
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from ..dialogs import FindDialog, FindReplaceDialog
 
+if TYPE_CHECKING:
+    from ._context import MainWindowContext
+    _MixinBase = MainWindowContext
+else:
+    _MixinBase = object
 
-class EditHandlerMixin:
+
+class EditHandlerMixin(_MixinBase):
     """Edit-menu operations and document search for MainWindow."""
 
     # ==================== Edit Operations ====================

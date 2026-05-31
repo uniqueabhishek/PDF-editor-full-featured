@@ -5,7 +5,7 @@ Insert, delete, extract, rotate and crop pages. Mixed into MainWindow; relies on
 ``self._document``, ``self._viewer``, ``self._history_manager`` and the shared
 ``self._load_document_to_viewer`` / ``self._update_title`` helpers.
 """
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import fitz
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
@@ -14,8 +14,14 @@ from PyQt6.QtGui import QImage, QPixmap
 from ..dialogs import ExtractPagesDialog, CropDialog
 from utils.history import PageAddCommand, PageDeleteCommand, PageRotateCommand
 
+if TYPE_CHECKING:
+    from ._context import MainWindowContext
+    _MixinBase = MainWindowContext
+else:
+    _MixinBase = object
 
-class PageHandlerMixin:
+
+class PageHandlerMixin(_MixinBase):
     """Page-menu operations for MainWindow."""
 
     def _insert_blank_page(self):

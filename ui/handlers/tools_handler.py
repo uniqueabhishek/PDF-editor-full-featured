@@ -8,6 +8,7 @@ smart-clean), encryption and batch processing. Mixed into MainWindow; relies on
 ``self._save_document`` helpers.
 """
 import datetime
+from typing import TYPE_CHECKING
 
 import fitz
 from PyQt6.QtCore import Qt
@@ -21,8 +22,14 @@ from ..dialogs import (
     MergeDialog, SplitDialog,
 )
 
+if TYPE_CHECKING:
+    from ._context import MainWindowContext
+    _MixinBase = MainWindowContext
+else:
+    _MixinBase = object
 
-class ToolsHandlerMixin:
+
+class ToolsHandlerMixin(_MixinBase):
     """Tools-menu and header/footer operations for MainWindow."""
 
     def _merge_pdfs(self):
