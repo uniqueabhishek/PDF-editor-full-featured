@@ -2,14 +2,14 @@
 Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QScrollArea, QLabel, QApplication,
+    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QApplication,
     QListWidget, QListWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem,
-    QMenu, QInputDialog, QLineEdit, QFrame
+    QMenu, QInputDialog, QLineEdit, QFrame, QToolButton, QPushButton
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QPoint, QMimeData, QTimer
 )
-from PyQt6.QtGui import QPixmap, QImage, QDrag
+from PyQt6.QtGui import QPixmap, QImage, QDrag, QColor, QPainter, QPen
 import fitz
 from typing import Optional, List, Dict
 from dataclasses import dataclass
@@ -26,17 +26,59 @@ class ThumbnailData:
     label: str = ""
 
 
+class _DeleteOverlay(QWidget):
+    """Translucent red overlay with a big X, shown over a page marked for deletion.
+
+    Drawn on top of the thumbnail image; clicking it un-marks the page (this is how
+    the small corner ✕ "becomes" a full page-wide X and back again).
+    """
+
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Non-opaque child: Qt repaints the thumbnail image beneath it first, so
+        # the translucent red fill blends over the page rather than over a base colour.
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Click to keep this page (cancel deletion)")
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect()
+        # Translucent red tint over the whole page.
+        painter.fillRect(rect, QColor(220, 40, 40, 70))
+        # Thick red X corner-to-corner.
+        pen = QPen(QColor(200, 25, 25), 5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        m = 6
+        painter.drawLine(rect.left() + m, rect.top() + m,
+                         rect.right() - m, rect.bottom() - m)
+        painter.drawLine(rect.right() - m, rect.top() + m,
+                         rect.left() + m, rect.bottom() - m)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class ThumbnailWidget(QFrame):
     """Widget displaying a single page thumbnail"""
 
     clicked = pyqtSignal(int)  # page number
     double_clicked = pyqtSignal(int)
     context_menu_requested = pyqtSignal(int, QPoint)
+    mark_toggled = pyqtSignal(int, bool)  # page number, is now marked for deletion
 
     def __init__(self, page_num: int, parent=None):
         super().__init__(parent)
         self.page_num = page_num
         self._selected = False
+        self._marked = False        # marked for deletion
+        self._delete_mode = False   # delete-selection mode active (badges visible)
         self._pixmap: Optional[QPixmap] = None
         self._drag_start_pos: Optional[QPoint] = None
 
@@ -59,11 +101,51 @@ class ThumbnailWidget(QFrame):
         self._page_label.setStyleSheet("color: #666; font-size: 11px;")
         layout.addWidget(self._page_label)
 
+        # Big red X overlay shown when the page is marked for deletion.
+        self._overlay = _DeleteOverlay(self)
+        self._overlay.clicked.connect(lambda: self._toggle_mark(False))
+        self._overlay.hide()
+
+        # Small corner ✕ badge — only visible while in delete-selection mode.
+        self._mark_btn = QToolButton(self)
+        self._mark_btn.setText("✕")
+        self._mark_btn.setFixedSize(20, 20)
+        self._mark_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mark_btn.setToolTip("Mark this page for deletion")
+        self._mark_btn.setStyleSheet("""
+            QToolButton {
+                background-color: rgba(255, 255, 255, 235);
+                color: #c81e1e;
+                border: 1px solid #c81e1e;
+                border-radius: 10px;
+                font-weight: bold;
+                font-size: 12px;
+                padding: 0px;
+            }
+            QToolButton:hover {
+                background-color: #c81e1e;
+                color: white;
+            }
+        """)
+        self._mark_btn.clicked.connect(lambda: self._toggle_mark(True))
+        self._mark_btn.hide()
+
         self.setFixedWidth(140)
         self._update_style()
 
     def _update_style(self):
-        if self._selected:
+        if self._marked:
+            self.setStyleSheet("""
+                ThumbnailWidget {
+                    background-color: #fdecea;
+                    border: 2px solid #c81e1e;
+                    border-radius: 4px;
+                }
+                QLabel {
+                    color: #c81e1e;
+                }
+            """)
+        elif self._selected:
             self.setStyleSheet("""
                 ThumbnailWidget {
                     background-color: #0078d4;
@@ -84,6 +166,28 @@ class ThumbnailWidget(QFrame):
                 }
             """)
 
+    def _update_badges(self):
+        """Show/hide the corner ✕ and the big-X overlay per the current state."""
+        self._mark_btn.setVisible(self._delete_mode and not self._marked)
+        self._overlay.setVisible(self._marked)
+        self._reposition_badges()
+        if self._marked:
+            self._overlay.raise_()
+        elif self._delete_mode:
+            self._mark_btn.raise_()
+
+    def _reposition_badges(self):
+        """Keep the overlay over the image and the ✕ badge in the top-right corner."""
+        self._overlay.setGeometry(self._image_label.geometry())
+        margin = 6
+        self._mark_btn.move(
+            self.width() - self._mark_btn.width() - margin, margin)
+
+    def _toggle_mark(self, marked: bool):
+        """Set the marked state from a user click and notify listeners."""
+        self.set_marked(marked)
+        self.mark_toggled.emit(self.page_num, marked)
+
     def set_pixmap(self, pixmap: QPixmap):
         """Set the thumbnail image"""
         self._pixmap = pixmap
@@ -94,15 +198,34 @@ class ThumbnailWidget(QFrame):
         )
         self._image_label.setPixmap(scaled)
         self._image_label.setFixedSize(scaled.size())
+        self._reposition_badges()
 
     def set_selected(self, selected: bool):
         """Set selection state"""
         self._selected = selected
         self._update_style()
 
+    def set_delete_mode(self, enabled: bool):
+        """Enter/leave delete-selection mode (controls the corner ✕ badge)."""
+        self._delete_mode = enabled
+        if not enabled:
+            self._marked = False
+        self._update_badges()
+        self._update_style()
+
+    def set_marked(self, marked: bool):
+        """Set whether this page is marked for deletion."""
+        self._marked = marked
+        self._update_badges()
+        self._update_style()
+
     def set_label(self, label: str):
         """Set page label"""
         self._page_label.setText(label)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_badges()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -148,6 +271,8 @@ class ThumbnailPanel(QScrollArea):
     pages_reordered = pyqtSignal(int, int)  # source page, insert-before index
     page_rotate_requested = pyqtSignal(int, int)  # page, degrees
     page_delete_requested = pyqtSignal(int)
+    pages_delete_requested = pyqtSignal(list)  # batch delete of marked pages
+    marked_pages_changed = pyqtSignal(list)  # current set of pages marked for deletion
     page_extract_requested = pyqtSignal(list)
 
     def __init__(self, parent=None):
@@ -156,6 +281,8 @@ class ThumbnailPanel(QScrollArea):
         self._thumbnails: List[ThumbnailWidget] = []
         self._current_page = 0
         self._selected_pages: List[int] = []
+        self._marked_pages: set[int] = set()
+        self._delete_mode = False
         self._render_dpi = 36  # Low DPI for thumbnails
 
         self._setup_ui()
@@ -188,6 +315,46 @@ class ThumbnailPanel(QScrollArea):
         if v_scrollbar:
             v_scrollbar.valueChanged.connect(self._on_scroll)
 
+        # Floating action bar — appears over the bottom of the panel once one or
+        # more pages are marked for deletion. Parented to the scroll area (not the
+        # scrolled container) so it stays pinned while the thumbnails scroll.
+        self._delete_bar = QFrame(self)
+        self._delete_bar.setObjectName("deleteBar")
+        self._delete_bar.setStyleSheet("""
+            QFrame#deleteBar {
+                background-color: #2b2b2b;
+                border-radius: 6px;
+            }
+            QPushButton {
+                color: white;
+                border: none;
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            QPushButton#deleteBtn {
+                background-color: #c81e1e;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton#deleteBtn:hover { background-color: #e23b3b; }
+            QPushButton#clearBtn { color: #dddddd; }
+            QPushButton#clearBtn:hover { color: white; }
+        """)
+        bar_layout = QHBoxLayout(self._delete_bar)
+        bar_layout.setContentsMargins(8, 6, 8, 6)
+        bar_layout.setSpacing(6)
+        self._delete_btn = QPushButton("Delete pages")
+        self._delete_btn.setObjectName("deleteBtn")
+        self._delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_btn.clicked.connect(self._on_delete_clicked)
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setObjectName("clearBtn")
+        self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_btn.clicked.connect(self.clear_marks)
+        bar_layout.addWidget(self._delete_btn)
+        bar_layout.addWidget(self._clear_btn)
+        self._delete_bar.hide()
+
     def set_document(self, doc: Optional[fitz.Document]):
         """Set the document for thumbnail generation"""
         self._doc = doc
@@ -204,6 +371,10 @@ class ThumbnailPanel(QScrollArea):
             thumb.deleteLater()
         self._thumbnails.clear()
         self._selected_pages.clear()
+        # Marks don't survive a reload; the delete-selection mode does.
+        self._marked_pages.clear()
+        self._update_delete_bar()
+        self.marked_pages_changed.emit([])
 
     def _create_thumbnails(self):
         """Create thumbnail widgets for all pages"""
@@ -215,6 +386,9 @@ class ThumbnailPanel(QScrollArea):
             thumb.clicked.connect(self._on_thumbnail_clicked)
             thumb.double_clicked.connect(self._on_thumbnail_double_clicked)
             thumb.context_menu_requested.connect(self._show_context_menu)
+            thumb.mark_toggled.connect(self._on_mark_toggled)
+            if self._delete_mode:
+                thumb.set_delete_mode(True)
             self._layout.addWidget(thumb)
             self._thumbnails.append(thumb)
 
@@ -341,6 +515,70 @@ class ThumbnailPanel(QScrollArea):
         for thumb in self._thumbnails:
             thumb._pixmap = None
         self._render_timer.start(100)
+
+    # ---- Delete-selection mode (corner ✕ badges + batch delete) ----
+
+    def set_delete_mode(self, enabled: bool):
+        """Enter/leave delete-selection mode (shows the corner ✕ on every page)."""
+        self._delete_mode = enabled
+        for thumb in self._thumbnails:
+            thumb.set_delete_mode(enabled)
+        if not enabled:
+            self._marked_pages.clear()
+            self._update_delete_bar()
+            self.marked_pages_changed.emit([])
+
+    def _on_mark_toggled(self, page_num: int, marked: bool):
+        """A thumbnail's ✕/overlay was clicked — track the page and update the bar."""
+        if marked:
+            self._marked_pages.add(page_num)
+        else:
+            self._marked_pages.discard(page_num)
+        self._update_delete_bar()
+        self.marked_pages_changed.emit(sorted(self._marked_pages))
+
+    def _on_delete_clicked(self):
+        if self._marked_pages:
+            self.pages_delete_requested.emit(sorted(self._marked_pages))
+
+    def get_marked_pages(self) -> List[int]:
+        """The pages currently marked for deletion, ascending."""
+        return sorted(self._marked_pages)
+
+    def clear_marks(self):
+        """Un-mark every page (stays in delete-selection mode)."""
+        self._marked_pages.clear()
+        for thumb in self._thumbnails:
+            thumb.set_marked(False)
+        self._update_delete_bar()
+        self.marked_pages_changed.emit([])
+
+    def _update_delete_bar(self):
+        """Show/label/hide the floating delete bar based on the marked count."""
+        count = len(self._marked_pages)
+        if count == 0:
+            self._delete_bar.hide()
+            return
+        self._delete_btn.setText(
+            f"Delete {count} page" + ("s" if count != 1 else ""))
+        self._delete_bar.show()
+        self._delete_bar.raise_()
+        self._reposition_delete_bar()
+
+    def _reposition_delete_bar(self):
+        """Pin the floating bar to the bottom-centre of the viewport."""
+        if not self._delete_bar.isVisible():
+            return
+        self._delete_bar.adjustSize()
+        viewport = self.viewport()
+        area = viewport.rect() if viewport else self.rect()
+        x = area.left() + (area.width() - self._delete_bar.width()) // 2
+        y = area.bottom() - self._delete_bar.height() - 12
+        self._delete_bar.move(max(0, x), max(0, y))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_delete_bar()
 
 
 class BookmarkPanel(QTreeWidget):
@@ -632,6 +870,8 @@ class Sidebar(QTabWidget):
     annotation_deleted = pyqtSignal(int, int)  # page, annotation xref
     page_rotate_requested = pyqtSignal(int, int)
     page_delete_requested = pyqtSignal(int)
+    pages_delete_requested = pyqtSignal(list)  # batch delete of marked pages
+    marked_pages_changed = pyqtSignal(list)  # current set of pages marked for deletion
     page_extract_requested = pyqtSignal(list)
     pages_reordered = pyqtSignal(int, int)  # source page, insert-before index
     toc_changed = pyqtSignal(list)  # full new table of contents
@@ -661,6 +901,8 @@ class Sidebar(QTabWidget):
         self.thumbnail_panel.page_double_clicked.connect(self.page_double_clicked)
         self.thumbnail_panel.page_rotate_requested.connect(self.page_rotate_requested)
         self.thumbnail_panel.page_delete_requested.connect(self.page_delete_requested)
+        self.thumbnail_panel.pages_delete_requested.connect(self.pages_delete_requested)
+        self.thumbnail_panel.marked_pages_changed.connect(self.marked_pages_changed)
         self.thumbnail_panel.page_extract_requested.connect(self.page_extract_requested)
         self.thumbnail_panel.pages_reordered.connect(self.pages_reordered)
 
@@ -695,6 +937,18 @@ class Sidebar(QTabWidget):
     def set_current_page(self, page_num: int):
         """Update current page in thumbnail panel"""
         self.thumbnail_panel.set_current_page(page_num)
+
+    def set_delete_mode(self, enabled: bool):
+        """Toggle delete-selection mode on the thumbnail panel."""
+        self.thumbnail_panel.set_delete_mode(enabled)
+
+    def get_marked_pages(self) -> List[int]:
+        """Pages currently marked for deletion in the thumbnail panel."""
+        return self.thumbnail_panel.get_marked_pages()
+
+    def clear_page_marks(self):
+        """Un-mark every page in the thumbnail panel."""
+        self.thumbnail_panel.clear_marks()
 
     def refresh(self):
         """Refresh all panels"""

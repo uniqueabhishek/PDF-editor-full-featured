@@ -346,8 +346,6 @@ class MainWindow(
             "Insert Pages from File...", self._insert_from_file))
         page_menu.addSeparator()
         page_menu.addAction(self._create_action(
-            "Delete Page", self._delete_current_page))
-        page_menu.addAction(self._create_action(
             "Extract Pages...", self._extract_pages))
         page_menu.addSeparator()
         page_menu.addAction(self._create_action(
@@ -357,6 +355,31 @@ class MainWindow(
         page_menu.addSeparator()
         page_menu.addAction(self._create_action(
             "Crop Page...", self._crop_page))
+
+        # === Delete Pages Menu ===
+        delete_menu = menubar.addMenu("&Delete Pages")
+        assert delete_menu is not None
+
+        self._select_delete_action = self._create_action(
+            "Select Pages to Delete", self._toggle_delete_mode, checkable=True)
+        self._select_delete_action.setStatusTip(
+            "Show a ✕ on each page thumbnail so you can mark pages for deletion")
+        delete_menu.addAction(self._select_delete_action)
+
+        delete_menu.addSeparator()
+
+        delete_menu.addAction(self._create_action(
+            "Delete Current Page", self._delete_current_page))
+
+        self._delete_marked_action = self._create_action(
+            "Delete Marked Pages...", self._delete_marked_pages)
+        self._delete_marked_action.setEnabled(False)
+        delete_menu.addAction(self._delete_marked_action)
+
+        self._clear_marks_action = self._create_action(
+            "Clear Marks", self._sidebar.clear_page_marks)
+        self._clear_marks_action.setEnabled(False)
+        delete_menu.addAction(self._clear_marks_action)
 
         # === Tools Menu ===
         tools_menu = menubar.addMenu("&Tools")
@@ -495,6 +518,8 @@ class MainWindow(
         self._sidebar.bookmark_clicked.connect(self._viewer.go_to_page)
         self._sidebar.page_rotate_requested.connect(self._rotate_page)
         self._sidebar.page_delete_requested.connect(self._delete_page)
+        self._sidebar.pages_delete_requested.connect(self._delete_pages)
+        self._sidebar.marked_pages_changed.connect(self._on_marked_pages_changed)
         self._sidebar.page_extract_requested.connect(
             self._extract_specific_pages)
         self._sidebar.pages_reordered.connect(self._reorder_page)
@@ -652,6 +677,30 @@ class MainWindow(
         self._update_title()
         # Refresh sidebar thumbnails to reflect changes
         self._sidebar.refresh()
+
+    # ==================== Delete-selection mode ====================
+
+    def _toggle_delete_mode(self, checked: bool):
+        """Show/hide the per-page ✕ badges used to mark pages for deletion."""
+        self._sidebar.set_delete_mode(checked)
+        if checked:
+            self._statusbar.showMessage(
+                "Click the ✕ on pages to mark them for deletion", 4000)
+
+    def _delete_marked_pages(self):
+        """Delete the pages currently marked with ✕ in the sidebar."""
+        self._delete_pages(self._sidebar.get_marked_pages())
+
+    def _on_marked_pages_changed(self, pages: list):
+        """Enable/label the Delete-Pages menu actions based on what's marked."""
+        has_marks = bool(pages)
+        if getattr(self, "_delete_marked_action", None):
+            self._delete_marked_action.setEnabled(has_marks)
+            self._delete_marked_action.setText(
+                f"Delete Marked Pages ({len(pages)})..." if has_marks
+                else "Delete Marked Pages...")
+        if getattr(self, "_clear_marks_action", None):
+            self._clear_marks_action.setEnabled(has_marks)
 
     # ==================== Help ====================
 

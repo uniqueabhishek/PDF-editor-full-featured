@@ -74,6 +74,43 @@ class PageHandlerMixin:
                 self._update_title()
                 self._statusbar.showMessage("Deleted page", 2000)
 
+    def _delete_pages(self, page_nums: List[int]):
+        """Delete several pages at once (the pages marked in the sidebar).
+
+        Undoable via a document snapshot; the reload that follows rebuilds the
+        sidebar, which clears the deletion marks. The user saves to disk with Save
+        (Ctrl+S) — consistent with every other edit.
+        """
+        if not self._document.is_open:
+            return
+
+        pages = sorted(set(page_nums))
+        if not pages:
+            return
+
+        if len(pages) >= self._document.page_count:
+            QMessageBox.warning(
+                self, "Cannot Delete",
+                "Cannot delete all pages — at least one page must remain.")
+            return
+
+        # Human-readable, 1-based list (cap the preview so the dialog stays small).
+        labels = [str(p + 1) for p in pages]
+        preview = ", ".join(labels[:12]) + (", …" if len(labels) > 12 else "")
+        noun = "page" if len(pages) == 1 else "pages"
+        result = QMessageBox.question(
+            self, "Delete Pages",
+            f"Delete {len(pages)} {noun} ({preview})?\n\nYou can undo this with Ctrl+Z.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+
+        if self._run_snapshot_op(
+                f"Delete {len(pages)} {noun}",
+                lambda: self._document.delete_pages(pages)) is not None:
+            self._statusbar.showMessage(f"Deleted {len(pages)} {noun}", 2000)
+
     def _rotate_page(self, page_num: int, degrees: int = 90):
         """Rotate a specific page"""
         if not self._document.is_open:
