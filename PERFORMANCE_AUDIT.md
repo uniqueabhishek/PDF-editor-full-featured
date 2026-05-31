@@ -148,12 +148,15 @@ UX/race risk.
 
 ## Status
 
-| # | Issue | Status |
-|---|-------|--------|
-| 1 | Zero-cost page placeholders | Planned |
-| 2 | Skip deflate for render-worker copy | Planned |
-| 3 | Lazy annotation-panel refresh | Planned |
-| 4 | Lighter undo snapshots | Planned |
-| 5 | Offloaded / lighter auto-save | Planned |
-| 6 | Early-exit visible-page/thumbnail scans | Planned |
-| 7 | Background plain-text export | Planned |
+| # | Issue | Status | Commit |
+|---|-------|--------|--------|
+| 1 | Zero-cost page placeholders | Done | `8fc2337` |
+| 2 | Skip deflate for render-worker copy | Done | `8d64f2d` |
+| 3 | Lazy annotation-panel refresh | Done | `95997b7` |
+| 4 | Lighter undo snapshots | Done | `2df6c10` |
+| 5 | Offloaded / lighter auto-save | Done | `a9307dd` |
+| 6 | Early-exit visible-page/thumbnail scans | Done | `9868fca` |
+| 7 | Background plain-text export | Done | `8d4e098` |
+
+All changes verified against the test suite (`pytest`, 93 tests) and linter
+(`ruff check`), both clean.
