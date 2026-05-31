@@ -82,10 +82,12 @@ implements the fix.
   mixins reference `self._document`, `self._viewer`, … defined on `MainWindow`.
   **Fix:** add a `typing.Protocol` documenting the shared surface.
 
-- [ ] **#D4 — Unused declared dependencies.** `pyproject.toml` declares pikepdf,
-  reportlab, pdf2image, openpyxl, python-pptx, beautifulsoup4, lxml, pdfplumber,
-  cryptography, natsort, send2trash — none imported in the runtime tree.
-  **Fix:** drop the unused ones; keep what optional features need.
+- [x] **#D4 — Unused declared dependencies.** Verified by scanning every import
+  in the source tree: dropped pypdf, pikepdf, reportlab, pdf2image, openpyxl,
+  python-pptx, beautifulsoup4, lxml, pdfplumber, cryptography and natsort. Kept
+  only what's actually imported (PyQt6, PyMuPDF, Pillow, pytesseract,
+  python-docx, send2trash, darkdetect). **Note:** regenerate the lock with
+  `uv lock` (or `uv sync`) to prune `uv.lock`.
 
 - [ ] **#D5 — Assorted nits.** `PDFDocument.__del__` calling `close()` is a
   fragile shutdown backstop; `config` creates directories at import time (import
