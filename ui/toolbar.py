@@ -455,7 +455,7 @@ class AnnotationToolbar(QToolBar):
         self.setMovable(False)
         self.setIconSize(QSize(24, 24))
 
-        self._current_tool = ToolMode.SELECT
+        self._current_tool = ToolMode.TEXT_SELECT
         self._tool_buttons: Dict[str, QToolButton] = {}
         self._setup_ui()
 
@@ -624,17 +624,17 @@ class AnnotationToolbar(QToolBar):
         self._tool_buttons[mode.value] = btn
 
         # Set initial state
-        if mode == ToolMode.SELECT:
+        if mode == ToolMode.TEXT_SELECT:
             btn.setChecked(True)
 
     def _on_tool_selected(self, mode: ToolMode):
         """Handle tool selection.
 
         Clicking the active tool again toggles it off, reverting to the default
-        Select tool so dragging no longer creates annotations.
+        Text Select tool so dragging no longer creates annotations.
         """
-        if mode == self._current_tool and mode != ToolMode.SELECT:
-            mode = ToolMode.SELECT
+        if mode == self._current_tool and mode != ToolMode.TEXT_SELECT:
+            mode = ToolMode.TEXT_SELECT
 
         self._current_tool = mode
 

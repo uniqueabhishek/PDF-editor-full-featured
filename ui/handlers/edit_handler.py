@@ -85,15 +85,27 @@ class EditHandlerMixin(_MixinBase):
         self._delete()
 
     def _copy(self):
-        """Copy selected text to the clipboard"""
+        """Copy selected text to the clipboard (Ctrl+C / Edit menu)."""
         selected_text = self._viewer.get_selected_text()
         if selected_text:
             clipboard = QApplication.clipboard()
             if clipboard:
                 clipboard.setText(selected_text)
-            self._statusbar.showMessage("Text copied to clipboard", 2000)
+            self._on_selection_copied(len(selected_text))
         else:
             self._statusbar.showMessage("No text selected", 2000)
+
+    def _on_selection_copied(self, count: int):
+        """Show a status-bar confirmation after text is copied to the clipboard."""
+        noun = "character" if count == 1 else "characters"
+        self._statusbar.showMessage(
+            f"Copied {count} {noun} to clipboard", 2000)
+
+    def _on_selection_needs_ocr(self):
+        """Hint to run OCR when selecting on a page with no text layer (a scan)."""
+        self._statusbar.showMessage(
+            "No selectable text here — run Tools → OCR to make a "
+            "scanned page searchable", 4000)
 
     def _paste(self):
         """Paste clipboard text as a text box on the current page."""

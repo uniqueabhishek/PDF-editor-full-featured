@@ -102,6 +102,10 @@ class MainWindow(
         self._update_title()
         self._update_actions_state()
 
+        # Sync the viewer (cursor + mode) to the toolbar's default tool, which is
+        # Text Select — so text selection works out of the box.
+        self._on_tool_changed(self._annotation_toolbar.get_current_tool().value)
+
         # Start auto-save and, once the window is up, offer to recover any
         # unsaved changes left behind by a previous (crashed) session.
         self._configure_autosave()
@@ -518,6 +522,8 @@ class MainWindow(
         self._viewer.document_modified.connect(self._on_document_modified)
         self._viewer.annotation_create_requested.connect(
             self._create_annotation)
+        self._viewer.selection_copied.connect(self._on_selection_copied)
+        self._viewer.selection_needs_ocr.connect(self._on_selection_needs_ocr)
 
         # Sidebar signals
         self._sidebar.page_selected.connect(self._viewer.go_to_page)

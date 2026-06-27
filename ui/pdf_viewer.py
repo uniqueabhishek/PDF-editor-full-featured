@@ -201,6 +201,12 @@ class PageWidget(QLabel):
     freehand_created = pyqtSignal(int, list)
     # page_num, position in PDF coordinates (for tooltip)
     hover_position = pyqtSignal(int, QPointF)
+    # page_num, selected text, list[QRectF] highlight rects (PDF coords); the
+    # text is "" when a bare click clears the selection.
+    text_selection_made = pyqtSignal(int, str, list)
+    # Emitted when the user drags to select on a page that has no text layer
+    # (e.g. an un-OCR'd scan), so the UI can hint at running OCR.
+    selection_needs_text = pyqtSignal(int)
 
     def __init__(self, page_num: int, render_dpi: int = 150, parent=None):
         super().__init__(parent)
@@ -222,6 +228,17 @@ class PageWidget(QLabel):
         self._tool_mode: Optional[str] = None  # Current tool mode
         # Points for freehand drawing
         self._freehand_points: List[QPointF] = []
+
+        # --- word-based text selection (Text Select tool) ------------------
+        # Provider returns this page's words in reading order, each a tuple
+        # (x0, y0, x1, y1, "word", block_no, line_no, word_no) in PDF coords.
+        self._word_provider = None
+        self._sel_words: Optional[List] = None      # words snapshot for a drag
+        self._text_anchor: Optional[QPointF] = None  # drag start (PDF coords)
+        self._text_press_widget: Optional[QPointF] = None  # drag start (px)
+        self._text_selecting = False
+        # Persistent highlight rectangles (PDF coords) for the active selection.
+        self._text_sel_rects: List[QRectF] = []
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("background-color: white; border: 1px solid #ccc;")
@@ -285,8 +302,93 @@ class PageWidget(QLabel):
             return QPointF(0, 0)
         return QPointF(widget_pos.x() / scale, widget_pos.y() / scale)
 
+    @staticmethod
+    def _nearest_word_index(words: List, p: QPointF) -> Optional[int]:
+        """Index of the word nearest point ``p`` (PDF coords), caret-style.
+
+        Distance to a word's box is the point-to-rectangle distance with the
+        vertical component weighted heavier, so the result prefers a word on the
+        row the pointer is on (mimicking a text caret) rather than the nearest
+        word on an adjacent line.
+        """
+        if not words:
+            return None
+        px, py = p.x(), p.y()
+        best_i = None
+        best_d = None
+        for i, w in enumerate(words):
+            x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
+            dx = max(x0 - px, 0.0, px - x1)
+            dy = max(y0 - py, 0.0, py - y1)
+            d = dy * 3.0 + dx
+            if best_d is None or d < best_d:
+                best_d = d
+                best_i = i
+        return best_i
+
+    def _selection_for(self, a: Optional[QPointF], b: Optional[QPointF]):
+        """Return (highlight rects in PDF coords, selected text) for a drag.
+
+        Selects every word between the words nearest ``a`` and ``b`` in reading
+        order, grouped per text line so the highlight spans whole lines in the
+        middle and partial lines at the ends — like a normal text selection.
+        """
+        words = self._sel_words or []
+        if not words or a is None or b is None:
+            return [], ""
+        ia = self._nearest_word_index(words, a)
+        ib = self._nearest_word_index(words, b)
+        if ia is None or ib is None:
+            return [], ""
+        lo, hi = (ia, ib) if ia <= ib else (ib, ia)
+        selected = words[lo:hi + 1]
+
+        # Group consecutive words that share a (block, line) into lines.
+        groups: List = []
+        for w in selected:
+            key = (w[5], w[6])
+            if groups and groups[-1][0] == key:
+                groups[-1][1].append(w)
+            else:
+                groups.append((key, [w]))
+
+        rects: List[QRectF] = []
+        lines: List[str] = []
+        for _key, line_words in groups:
+            r = QRectF(line_words[0][0], line_words[0][1],
+                       line_words[0][2] - line_words[0][0],
+                       line_words[0][3] - line_words[0][1])
+            for w in line_words[1:]:
+                r = r.united(QRectF(w[0], w[1], w[2] - w[0], w[3] - w[1]))
+            rects.append(r)
+            lines.append(" ".join(w[4] for w in line_words))
+        return rects, "\n".join(lines)
+
+    def clear_text_selection(self):
+        """Drop the current text-selection highlight (no signal emitted)."""
+        if self._text_sel_rects or self._text_selecting:
+            self._text_sel_rects = []
+            self._text_selecting = False
+            self._text_anchor = None
+            self.update()
+
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._tool_mode == ToolMode.TEXT_SELECT.value:
+                # Begin a word-based text selection. Snapshot the page's words
+                # once for the duration of the drag.
+                self._text_selecting = True
+                self._text_press_widget = event.position()
+                self._text_anchor = self.get_page_position(event.pos())
+                self._sel_words = (
+                    self._word_provider(self.page_num)
+                    if self._word_provider else [])
+                self._text_sel_rects = []
+                self.update()
+                self.clicked.emit(
+                    self.page_num, self.get_page_position(event.pos()))
+                event.accept()
+                return
             self._selection_start = event.position()
             # Start collecting freehand points
             self._freehand_points = [event.position()]
@@ -297,6 +399,13 @@ class PageWidget(QLabel):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        if self._text_selecting:
+            current = self.get_page_position(event.pos())
+            rects, _ = self._selection_for(self._text_anchor, current)
+            self._text_sel_rects = rects
+            self.update()
+            event.accept()
+            return
         if self._selection_start is not None:
             current = event.position()
             # Update selection rectangle
@@ -314,6 +423,28 @@ class PageWidget(QLabel):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if self._text_selecting:
+            self._text_selecting = False
+            moved = (
+                (event.position() - self._text_press_widget).manhattanLength()
+                if self._text_press_widget is not None else 0)
+            if moved < 3:
+                # A bare click clears the current selection.
+                self._text_sel_rects = []
+                self.update()
+                self.text_selection_made.emit(self.page_num, "", [])
+                event.accept()
+                return
+            current = self.get_page_position(event.pos())
+            rects, text = self._selection_for(self._text_anchor, current)
+            self._text_sel_rects = rects
+            self.update()
+            self.text_selection_made.emit(self.page_num, text, list(rects))
+            if not text and not self._sel_words:
+                # Real drag but the page has no extractable text (a scan).
+                self.selection_needs_text.emit(self.page_num)
+            event.accept()
+            return
         if self._selection_start is not None:
             scale = self._zoom * self._render_dpi / 72
 
@@ -361,6 +492,16 @@ class PageWidget(QLabel):
                 else:
                     painter.fillRect(wr, QColor(255, 230, 0, 90))
 
+        # Draw the word-based text selection highlight (translucent blue).
+        if self._text_sel_rects:
+            scale = self._zoom * self._render_dpi / 72
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(0, 120, 215, 70)))
+            for r in self._text_sel_rects:
+                wr = QRectF(r.x() * scale, r.y() * scale,
+                            r.width() * scale, r.height() * scale)
+                painter.drawRect(wr)
+
         # Draw freehand stroke while drawing
         if self._tool_mode == "freehand" and len(self._freehand_points) > 1:
             painter.setPen(QPen(QColor(255, 0, 0), 2))
@@ -397,6 +538,8 @@ class PDFViewer(QScrollArea):
         int, str, object, dict)  # page, type, rect/points, data
     document_modified = pyqtSignal()
     text_selected = pyqtSignal(str)  # selected text
+    selection_copied = pyqtSignal(int)  # number of characters copied
+    selection_needs_ocr = pyqtSignal()  # dragged on a page with no text layer
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -424,8 +567,13 @@ class PDFViewer(QScrollArea):
         self._search_results: List[Dict] = []
         self._current_result: Optional[tuple] = None
 
-        # Tool state
-        self._tool_mode = ToolMode.HAND
+        # Tool state — Text Select is the default cursor tool (Acrobat-style).
+        self._tool_mode = ToolMode.TEXT_SELECT
+        self._tool_cursor = Qt.CursorShape.IBeamCursor
+        # Per-page word boxes cache (PDF coords), filled lazily for selection.
+        self._page_words_cache: Dict[int, List] = {}
+        # Active text selection as (page_num, text), or None.
+        self._text_selection: Optional[tuple] = None
         self._annotation_color = QColor(255, 255, 0)  # Yellow
         self._annotation_opacity = 0.5
         self._stroke_width = 2
@@ -515,6 +663,9 @@ class PDFViewer(QScrollArea):
         # Drop highlights from the previous document.
         self._search_results = []
         self._current_result = None
+        # Drop any cached word boxes / text selection from the previous document.
+        self._page_words_cache.clear()
+        self._text_selection = None
         # Cancel any debounced re-serialize queued for the previous document.
         self._resync_timer.stop()
 
@@ -594,7 +745,10 @@ class PDFViewer(QScrollArea):
         """
         if 0 <= page_num < len(self._page_widgets):
             self._page_cache.pop(page_num, None)
+            self._page_words_cache.pop(page_num, None)
             self._render_page_sync(page_num)
+        else:
+            self._page_words_cache.clear()
         self._schedule_worker_resync()
 
     def _clear_pages(self):
@@ -615,8 +769,13 @@ class PDFViewer(QScrollArea):
             page_widget.annotation_created.connect(self._on_annotation_created)
             page_widget.freehand_created.connect(self._on_freehand_created)
             page_widget.hover_position.connect(self._on_hover_position)
+            page_widget.text_selection_made.connect(self._on_text_selection_made)
+            page_widget.selection_needs_text.connect(
+                lambda _p: self.selection_needs_ocr.emit())
+            page_widget._word_provider = self.get_page_words
             page_widget.set_tool_mode(
                 self._tool_mode.value if self._tool_mode else "select")
+            page_widget.setCursor(self._tool_cursor)
 
             # Set initial placeholder size based on page dimensions
             page = self._doc[i]
@@ -989,15 +1148,8 @@ class PDFViewer(QScrollArea):
         if self._tool_mode == ToolMode.SELECT:
             self.selection_changed.emit(page_num, rect)
 
-        elif self._tool_mode == ToolMode.TEXT_SELECT:
-            # Extract text from the selected area
-            text = self._extract_text_from_rect(page_num, rect)
-            if text:
-                self.text_selected.emit(text)
-                # Copy to clipboard
-                clipboard = QApplication.clipboard()
-                if clipboard:
-                    clipboard.setText(text)
+        # Text Select is handled directly in PageWidget (word-based selection),
+        # so it never reaches this rubber-band path.
 
         elif self._tool_mode == ToolMode.HIGHLIGHT:
             self._request_annotation(page_num, "highlight", rect)
@@ -1335,7 +1487,15 @@ class PDFViewer(QScrollArea):
             ToolMode.STAMP: Qt.CursorShape.CrossCursor,
         }
         cursor = cursor_map.get(mode, Qt.CursorShape.ArrowCursor)
+        self._tool_cursor = cursor
         self.setCursor(cursor)
+
+        # Leaving the Text Select tool drops the text-selection highlight so it
+        # doesn't linger while drawing/annotating with another tool.
+        if mode != ToolMode.TEXT_SELECT:
+            self._text_selection = None
+            for page_widget in self._page_widgets:
+                page_widget.clear_text_selection()
 
         # Set cursor and tool mode on all page widgets
         for page_widget in self._page_widgets:
@@ -1436,8 +1596,61 @@ class PDFViewer(QScrollArea):
 
         self._request_visible_pages()
 
+    def get_page_words(self, page_num: int) -> List:
+        """Return ``page_num``'s words in reading order (cached).
+
+        Each word is the PyMuPDF tuple ``(x0, y0, x1, y1, "word", block_no,
+        line_no, word_no)`` in PDF coordinates. Returns ``[]`` if the page has no
+        text layer (e.g. a scan that hasn't been OCR'd).
+        """
+        if not self._doc_live() or page_num < 0 or page_num >= len(self._doc):
+            return []
+        words = self._page_words_cache.get(page_num)
+        if words is None:
+            try:
+                raw = self._doc[page_num].get_text("words")
+            except Exception:
+                logger.exception("Could not extract words for selection")
+                raw = []
+            # Sort into natural reading order: block, then line, then word.
+            words = sorted(raw, key=lambda w: (w[5], w[6], w[7]))
+            self._page_words_cache[page_num] = words
+        return words
+
+    def _on_text_selection_made(self, page_num: int, text: str, _rects: list):
+        """Store the active text selection, copy it, and report the count."""
+        # Only one selection is active at a time — clear highlights elsewhere.
+        for i, pw in enumerate(self._page_widgets):
+            if i != page_num:
+                pw.clear_text_selection()
+
+        if text:
+            self._text_selection = (page_num, text)
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+            self.text_selected.emit(text)
+            self.selection_copied.emit(len(text))
+        else:
+            self._text_selection = None
+
+    def _copy_text_selection(self):
+        """Copy the active text selection to the clipboard (right-click Copy)."""
+        if self._text_selection and self._text_selection[1]:
+            text = self._text_selection[1]
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+            self.selection_copied.emit(len(text))
+
     def get_selected_text(self) -> str:
-        """Get currently selected text from selection rectangle"""
+        """Get the currently selected text.
+
+        Prefers the word-based Text Select selection; falls back to the legacy
+        rubber-band rectangle (used by the Select/erase tools) otherwise.
+        """
+        if self._text_selection is not None:
+            return self._text_selection[1]
         if not self._doc:
             return ""
 
@@ -1488,7 +1701,10 @@ class PDFViewer(QScrollArea):
         return None
 
     def clear_selection(self):
-        """Clear the rubber-band selection on the current page."""
+        """Clear both the rubber-band and the word-based text selection."""
+        self._text_selection = None
+        for page_widget in self._page_widgets:
+            page_widget.clear_text_selection()
         if 0 <= self._current_page < len(self._page_widgets):
             page_widget = self._page_widgets[self._current_page]
             page_widget._selection_rect = None
@@ -1498,6 +1714,11 @@ class PDFViewer(QScrollArea):
     def refresh(self):
         """Refresh the view - re-render pages to show document changes"""
         self._page_cache.clear()
+        # Word positions may have shifted; drop the cache and stale selection.
+        self._page_words_cache.clear()
+        self._text_selection = None
+        for pw in self._page_widgets:
+            pw.clear_text_selection()
 
         # Mark all page widgets as needing re-render
         for page_widget in self._page_widgets:
@@ -1628,6 +1849,13 @@ class PDFViewer(QScrollArea):
     def contextMenuEvent(self, event):
         """Show context menu"""
         menu = QMenu(self)
+
+        # With an active text selection, only Copy is relevant — the view
+        # commands (zoom/navigate/rotate) just get in the way, so show Copy alone.
+        if self._text_selection is not None and self._text_selection[1]:
+            menu.addAction("Copy", self._copy_text_selection)
+            menu.exec(event.globalPos())
+            return
 
         # Zoom options
         zoom_menu = menu.addMenu("Zoom")
