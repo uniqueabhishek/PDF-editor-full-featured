@@ -845,6 +845,15 @@ class MainWindow(
             progress.setValue(done)
 
         def _finish():
+            # Closing the dialog programmatically makes QProgressDialog emit
+            # canceled(); without disconnecting first that would call
+            # worker.cancel() and make a *successful* run look cancelled (the
+            # OCR/export result would then be silently discarded). Drop the
+            # connection before closing so only a real user click cancels.
+            try:
+                progress.canceled.disconnect(worker.cancel)
+            except TypeError:
+                pass
             progress.close()
             self._active_workers.discard(worker)
 
