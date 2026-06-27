@@ -524,6 +524,8 @@ class MainWindow(
             self._create_annotation)
         self._viewer.selection_copied.connect(self._on_selection_copied)
         self._viewer.selection_needs_ocr.connect(self._on_selection_needs_ocr)
+        self._viewer.edit_text_committed.connect(self._on_edit_text_committed)
+        self._viewer.edit_text_unavailable.connect(self._on_edit_text_unavailable)
 
         # Sidebar signals
         self._sidebar.page_selected.connect(self._viewer.go_to_page)

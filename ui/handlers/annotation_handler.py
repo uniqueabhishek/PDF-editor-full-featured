@@ -31,6 +31,37 @@ class AnnotationHandlerMixin(_MixinBase):
         except ValueError:
             pass  # Ignore unknown tool modes
 
+    def _on_edit_text_committed(self, page_num: int, bbox, new_text: str,
+                                style: Dict) -> None:
+        """Apply a committed inline text edit (Edit Text tool), undoably."""
+        if not self._document.is_open:
+            return
+        cmd = self._run_snapshot_op(
+            "Edit text",
+            lambda: self._document.replace_text_block(
+                page_num, bbox, new_text, style))
+        if cmd is None:
+            QMessageBox.critical(
+                self, "Edit Text", "Failed to edit text. See log for details.")
+            return
+        result = getattr(cmd, "result", None) or {}
+        if result.get("truncated"):
+            self._statusbar.showMessage(
+                "Text edited — too long for the box, shrunk to fit and clipped "
+                "(Undo to revert)", 4000)
+        elif str(result.get("font", "")).startswith("base14"):
+            self._statusbar.showMessage(
+                "Text edited — original font lacked some glyphs, used a close "
+                "match (Undo to revert)", 4000)
+        else:
+            self._statusbar.showMessage("Text edited (Undo to revert)", 3000)
+
+    def _on_edit_text_unavailable(self, _page_num: int) -> None:
+        """Hint when the user double-clicks where there is no editable text."""
+        self._statusbar.showMessage(
+            "No editable text there. If this is a scanned page, run "
+            "Tools → OCR first.", 4000)
+
     def _create_annotation(self, page_num: int, annot_type: str, rect: Any, data: Dict):
         """Handle annotation creation request"""
         if not self._document.is_open:

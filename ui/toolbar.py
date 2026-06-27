@@ -463,7 +463,9 @@ class AnnotationToolbar(QToolBar):
         # === Selection Tools ===
         self._add_tool_button("Select", "👆", ToolMode.SELECT, "Select tool")
         self._add_tool_button("Hand", "✋", ToolMode.HAND, "Hand tool (Pan)")
-        self._add_tool_button("Text Select", "I", ToolMode.TEXT_SELECT, "Select text")
+        self._add_tool_button(
+            "Text Select", "I", ToolMode.TEXT_SELECT,
+            "Text: drag to select, double-click a paragraph to edit it")
 
         self.addSeparator()
 

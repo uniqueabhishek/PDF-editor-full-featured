@@ -15,6 +15,16 @@ from collections import defaultdict
 logger = logging.getLogger(__name__)
 
 
+# PyMuPDF text-span "flags" bitfield (used by the inline text editor to detect
+# bold/italic/serif/monospace so replacement text matches the original style).
+_SPAN_FLAG_ITALIC = 1 << 1
+_SPAN_FLAG_SERIF = 1 << 2
+_SPAN_FLAG_MONO = 1 << 3
+_SPAN_FLAG_BOLD = 1 << 4
+# Re-typeset text is shrunk no smaller than this before it is allowed to clip.
+_MIN_EDIT_FONTSIZE = 5.0
+
+
 class PageRotation(Enum):
     NONE = 0
     CW_90 = 90
@@ -893,6 +903,253 @@ class PDFDocument:
         page.apply_redactions()
         self._is_modified = True
         return True
+
+    # ==================== Inline text editing ====================
+    # detect_text_block + replace_text_block power the "Edit Text" tool: pick the
+    # paragraph under a click, then erase it and re-typeset the new text with
+    # reflow, reusing the detected font/size/colour. Fidelity is best-effort —
+    # subsetted embedded fonts may lack newly typed glyphs (then a matched base-14
+    # font is used), and mixed inline styling within a block is flattened to its
+    # dominant style. See replace_text_block for the honest limitations.
+
+    @staticmethod
+    def _int_color_to_rgb(color: Any) -> Tuple[float, float, float]:
+        """Convert a PyMuPDF span colour (an sRGB int) to an (r, g, b) 0-1 triple."""
+        if isinstance(color, (tuple, list)):
+            c = tuple(float(v) for v in color[:3]) or (0.0, 0.0, 0.0)
+            if len(c) < 3:
+                return (0.0, 0.0, 0.0)
+            return tuple(v / 255.0 if v > 1 else v for v in c)  # type: ignore[return-value]
+        try:
+            c = int(color)
+        except (TypeError, ValueError):
+            return (0.0, 0.0, 0.0)
+        return ((c >> 16 & 255) / 255.0, (c >> 8 & 255) / 255.0, (c & 255) / 255.0)
+
+    @staticmethod
+    def _fallback_fontname(flags: int) -> str:
+        """A base-14 font short-name matching the bold/italic/serif/mono of ``flags``."""
+        idx = (1 if flags & _SPAN_FLAG_BOLD else 0) + (2 if flags & _SPAN_FLAG_ITALIC else 0)
+        if flags & _SPAN_FLAG_MONO:
+            family = ("cour", "cobo", "coit", "cobi")
+        elif flags & _SPAN_FLAG_SERIF:
+            family = ("tiro", "tibo", "tiit", "tibi")
+        else:
+            family = ("helv", "hebo", "heit", "hebi")
+        return family[idx]
+
+    @staticmethod
+    def _font_covers(font: "fitz.Font", text: str) -> bool:
+        """True if ``font`` has a glyph for every non-space character in ``text``."""
+        for ch in text:
+            if ch.isspace():
+                continue
+            try:
+                if font.has_glyph(ord(ch)) == 0:   # 0 == .notdef / missing
+                    return False
+            except Exception:
+                return False
+        return True
+
+    def _resolve_font_xref(self, page: "fitz.Page", span_font: str) -> int:
+        """xref of the embedded font whose base name matches ``span_font`` (else 0)."""
+        if not span_font:
+            return 0
+        target = span_font.split("+")[-1].lower()
+        try:
+            for info in page.get_fonts(full=True):
+                xref, basefont = info[0], (info[3] or "")
+                name = basefont.split("+")[-1].lower()
+                if name and (name == target or name in target or target in name):
+                    return xref
+        except Exception:
+            logger.debug("get_fonts failed during font resolution", exc_info=True)
+        return 0
+
+    def _font_for_style(self, style: Dict[str, Any], text: str) -> Tuple["fitz.Font", str]:
+        """Pick a font for re-typesetting: the embedded one if it covers ``text``,
+        otherwise a base-14 font matched to the original's bold/italic/serif/mono.
+
+        Returns ``(fitz.Font, label)`` where label is ``"embedded:<name>"`` or
+        ``"base14:<name>"`` so the UI can tell the user when a fallback was used.
+        """
+        xref = int(style.get("font_xref", 0) or 0)
+        if xref and self._doc is not None:
+            try:
+                info = self._doc.extract_font(xref)
+                buffer = info[3] if info and len(info) >= 4 else None
+                if buffer:
+                    font = fitz.Font(fontbuffer=buffer)
+                    if self._font_covers(font, text):
+                        return font, "embedded:" + (info[0] or "")
+            except Exception:
+                logger.debug("extract_font failed for xref %s", xref, exc_info=True)
+        name = self._fallback_fontname(int(style.get("flags", 0)))
+        return fitz.Font(name), "base14:" + name
+
+    @staticmethod
+    def _infer_align(block: Dict[str, Any]) -> int:
+        """Guess paragraph alignment from how the block's line edges line up."""
+        lines = [ln for ln in block.get("lines", []) if ln.get("spans")]
+        if len(lines) < 2:
+            return fitz.TEXT_ALIGN_LEFT
+
+        def spread(vals: List[float]) -> float:
+            return max(vals) - min(vals)
+
+        x0s = [ln["bbox"][0] for ln in lines]
+        x1s = [ln["bbox"][2] for ln in lines]
+        centers = [(ln["bbox"][0] + ln["bbox"][2]) / 2 for ln in lines]
+        left_aligned = spread(x0s) <= 2.0
+        right_aligned = spread(x1s) <= 2.0
+        if left_aligned and right_aligned:
+            return fitz.TEXT_ALIGN_JUSTIFY
+        if right_aligned and not left_aligned:
+            return fitz.TEXT_ALIGN_RIGHT
+        if spread(centers) <= 2.0 and not left_aligned:
+            return fitz.TEXT_ALIGN_CENTER
+        return fitz.TEXT_ALIGN_LEFT
+
+    def detect_text_block(self, page_num: int,
+                          point: Tuple[float, float]) -> Optional[Dict[str, Any]]:
+        """Find the text paragraph under ``point`` (PDF coords) on ``page_num``.
+
+        Returns ``None`` when the point isn't over a text block (e.g. a scanned
+        page with no text layer). Otherwise returns a dict with the block's
+        ``bbox``, the joined ``text``, the dominant ``style`` (fontsize, rgb
+        colour, flags, fontname, embedded font xref) and an inferred ``align``.
+        """
+        if self._doc is None or not (0 <= page_num < self.page_count):
+            return None
+        try:
+            page = self._doc[page_num]
+            data = page.get_text("dict")
+        except Exception:
+            logger.exception("detect_text_block: get_text failed")
+            return None
+
+        pt = fitz.Point(float(point[0]), float(point[1]))
+        tol = 3.0
+        best = None
+        best_area: Optional[float] = None
+        for blk in data.get("blocks", []):
+            if blk.get("type") != 0:
+                continue
+            x0, y0, x1, y1 = blk["bbox"]
+            if not fitz.Rect(x0 - tol, y0 - tol, x1 + tol, y1 + tol).contains(pt):
+                continue
+            area = (x1 - x0) * (y1 - y0)
+            if best_area is None or area < best_area:
+                best, best_area = blk, area
+        if best is None:
+            return None
+
+        lines_text: List[str] = []
+        spans_all: List[Dict[str, Any]] = []
+        for line in best.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            spans_all.extend(spans)
+            lines_text.append("".join(s.get("text", "") for s in spans))
+        text = " ".join(t.strip() for t in lines_text if t.strip()).strip()
+        if not text or not spans_all:
+            return None
+
+        # Dominant style: the (size, font, flags, colour) carrying the most text.
+        weights: "defaultdict[Tuple, float]" = defaultdict(float)
+        for s in spans_all:
+            key = (round(float(s.get("size", 0.0)), 1), s.get("font", ""),
+                   int(s.get("flags", 0)), s.get("color", 0))
+            weights[key] += max(1, len(s.get("text", "")))
+        size, font_name, flags, color_int = max(weights, key=lambda k: weights[k])
+
+        style = {
+            "fontsize": float(size) if size else 12.0,
+            "color": self._int_color_to_rgb(color_int),
+            "flags": int(flags),
+            "fontname": font_name,
+            "font_xref": self._resolve_font_xref(page, font_name),
+        }
+        return {
+            "page": page_num,
+            "bbox": tuple(float(v) for v in best["bbox"]),
+            "text": text,
+            "style": style,
+            "align": self._infer_align(best),
+        }
+
+    def replace_text_block(self, page_num: int,
+                           bbox: Tuple[float, float, float, float],
+                           new_text: str, style: Dict[str, Any],
+                           bg_color: Optional[Tuple[float, float, float]] = None
+                           ) -> Dict[str, Any]:
+        """Erase the paragraph at ``bbox`` and re-typeset ``new_text`` into it.
+
+        The old text is removed by redaction (filled with ``bg_color`` or white),
+        then the new text is re-flowed into the same rectangle with the detected
+        font/size/colour. The font size is reduced (to a 5pt floor) if the new
+        text doesn't fit; anything still overflowing is clipped and reported.
+
+        Honest limitations: a white/sampled fill can show on non-white
+        backgrounds; subsetted embedded fonts may force a base-14 fallback;
+        justification/kerning/leading aren't reproduced; view rotation isn't
+        handled. Returns ``{overflow, fontsize_used, font, truncated}``.
+        """
+        if self._doc is None:
+            raise ValueError("No document is open")
+        if not (0 <= page_num < self.page_count):
+            raise ValueError("page_num out of range")
+
+        rect = fitz.Rect(bbox)
+        fill = bg_color if bg_color is not None else (1.0, 1.0, 1.0)
+        page = self._doc[page_num]
+
+        # 1) Erase the old text. Keep underlying images intact.
+        page.add_redact_annot(rect, fill=fill)
+        try:
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+        except (TypeError, AttributeError):
+            page.apply_redactions()
+
+        # 2) Re-typeset the new text (a fresh page handle post-redaction).
+        page = self._doc[page_num]
+        text = new_text or ""
+        font, label = self._font_for_style(style, text)
+        color = style.get("color", (0.0, 0.0, 0.0))
+        align = int(style.get("align", fitz.TEXT_ALIGN_LEFT))
+        used = float(style.get("fontsize", 12.0)) or 12.0
+
+        overflow: Any = None
+        truncated = False
+        if text.strip():
+            while True:
+                writer = fitz.TextWriter(page.rect)
+                try:
+                    # fill_textbox returns the (possibly empty) list of lines that
+                    # did not fit; empty means everything fit. It raises if the box
+                    # is too short for even the first line at this size.
+                    overflow = writer.fill_textbox(
+                        rect, text, font=font, fontsize=used, align=align)
+                    started = True
+                except Exception:
+                    overflow = None
+                    started = False
+                too_big = (not started) or bool(overflow)
+                if not too_big or used <= _MIN_EDIT_FONTSIZE:
+                    if started:
+                        writer.write_text(page, color=color)
+                    truncated = too_big
+                    break
+                used = round(used - 0.5, 1)
+
+        self._is_modified = True
+        return {
+            "overflow": overflow if isinstance(overflow, list) else [],
+            "fontsize_used": used,
+            "font": label,
+            "truncated": truncated,
+        }
 
     def add_text(self, page_num: int, text: str, position: Tuple[float, float],
                  font_size: float = 12, font_name: str = "helv",

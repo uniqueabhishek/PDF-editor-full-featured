@@ -108,6 +108,9 @@ class FileHandlerMixin(_MixinBase):
                 self._current_file) if self._current_file else "")
             self._sidebar.set_document(self._document.doc)
             self._main_toolbar.set_page_count(self._document.page_count)
+            # Bind the Edit Text tool's paragraph lookup to the live document
+            # (it's swapped on every snapshot undo/redo, so re-bind each load).
+            self._viewer.set_text_block_provider(self._document.detect_text_block)
             self._update_actions_state()
 
     def _save_document(self):

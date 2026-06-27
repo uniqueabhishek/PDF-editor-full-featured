@@ -207,6 +207,8 @@ class PageWidget(QLabel):
     # Emitted when the user drags to select on a page that has no text layer
     # (e.g. an un-OCR'd scan), so the UI can hint at running OCR.
     selection_needs_text = pyqtSignal(int)
+    # page_num, position in PDF coordinates — request to edit the paragraph there.
+    edit_text_requested = pyqtSignal(int, QPointF)
 
     def __init__(self, page_num: int, render_dpi: int = 150, parent=None):
         super().__init__(parent)
@@ -371,6 +373,17 @@ class PageWidget(QLabel):
             self._text_selecting = False
             self._text_anchor = None
             self.update()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        # In the Text tool, double-clicking a paragraph opens it for editing
+        # (the same tool handles drag-to-select and double-click-to-edit).
+        if (event.button() == Qt.MouseButton.LeftButton
+                and self._tool_mode == ToolMode.TEXT_SELECT.value):
+            self.edit_text_requested.emit(
+                self.page_num, self.get_page_position(event.pos()))
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -540,6 +553,9 @@ class PDFViewer(QScrollArea):
     text_selected = pyqtSignal(str)  # selected text
     selection_copied = pyqtSignal(int)  # number of characters copied
     selection_needs_ocr = pyqtSignal()  # dragged on a page with no text layer
+    # page_num, bbox (PDF coords tuple), new_text, style dict — a committed edit.
+    edit_text_committed = pyqtSignal(int, tuple, str, dict)
+    edit_text_unavailable = pyqtSignal(int)  # double-clicked where there's no text
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -574,6 +590,11 @@ class PDFViewer(QScrollArea):
         self._page_words_cache: Dict[int, List] = {}
         # Active text selection as (page_num, text), or None.
         self._text_selection: Optional[tuple] = None
+        # Inline "Edit Text" state: a provider that finds the paragraph under a
+        # point, the live editor overlay, and its context.
+        self._text_block_provider = None
+        self._inline_editor = None
+        self._edit_ctx: Optional[dict] = None
         self._annotation_color = QColor(255, 255, 0)  # Yellow
         self._annotation_opacity = 0.5
         self._stroke_width = 2
@@ -753,6 +774,8 @@ class PDFViewer(QScrollArea):
 
     def _clear_pages(self):
         """Clear all page widgets"""
+        # The inline editor is parented to a page widget about to be destroyed.
+        self._teardown_inline_editor()
         for widget in self._page_widgets:
             widget.setParent(None)
             widget.deleteLater()
@@ -772,6 +795,7 @@ class PDFViewer(QScrollArea):
             page_widget.text_selection_made.connect(self._on_text_selection_made)
             page_widget.selection_needs_text.connect(
                 lambda _p: self.selection_needs_ocr.emit())
+            page_widget.edit_text_requested.connect(self._on_edit_text_requested)
             page_widget._word_provider = self.get_page_words
             page_widget.set_tool_mode(
                 self._tool_mode.value if self._tool_mode else "select")
@@ -943,6 +967,9 @@ class PDFViewer(QScrollArea):
         """Update zoom level based on zoom mode"""
         if not self._doc_live() or not self._page_widgets:
             return
+
+        # A zoom/resize would leave the inline editor misaligned; finish it first.
+        self._close_inline_editor(commit=True)
 
         viewport_widget = self.viewport()
         if not viewport_widget:
@@ -1465,6 +1492,8 @@ class PDFViewer(QScrollArea):
 
     def set_tool_mode(self, mode: ToolMode):
         """Set the current tool mode"""
+        # Switching tools finishes any in-progress inline edit.
+        self._close_inline_editor(commit=True)
         self._tool_mode = mode
 
         # Update cursor for all tools
@@ -1642,6 +1671,112 @@ class PDFViewer(QScrollArea):
             if clipboard:
                 clipboard.setText(text)
             self.selection_copied.emit(len(text))
+
+    # ==================== Inline text editing (Edit Text tool) ============
+
+    def set_text_block_provider(self, provider):
+        """Set the callback that finds the paragraph under a point.
+
+        ``provider(page_num, (x, y)) -> dict | None`` — see
+        ``PDFDocument.detect_text_block``. Re-set after every document load so it
+        stays bound to the live document.
+        """
+        self._text_block_provider = provider
+
+    def _on_edit_text_requested(self, page_num: int, point: QPointF):
+        """Open an inline editor over the paragraph at ``point`` on ``page_num``."""
+        self._close_inline_editor(commit=True)
+        if self._text_block_provider is None:
+            self.edit_text_unavailable.emit(page_num)
+            return
+        try:
+            block = self._text_block_provider(page_num, (point.x(), point.y()))
+        except Exception:
+            logger.exception("text block provider failed")
+            block = None
+        if not block:
+            self.edit_text_unavailable.emit(page_num)
+            return
+        if 0 <= page_num < len(self._page_widgets):
+            self._open_inline_editor(page_num, block)
+
+    def _open_inline_editor(self, page_num: int, block: dict):
+        from ui.inline_text_editor import InlineTextEditor
+        from PyQt6.QtGui import QFont
+
+        page_widget = self._page_widgets[page_num]
+        scale = page_widget._zoom * page_widget._render_dpi / 72
+        if scale <= 0:
+            return
+        x0, y0, x1, y1 = block["bbox"]
+        style = block["style"]
+
+        editor = InlineTextEditor(page_widget)
+        editor.setPlainText(block["text"])
+
+        # Approximate the original look while editing (pixel size matches the
+        # rendered glyph height at the current zoom).
+        font = QFont()
+        flags = int(style.get("flags", 0))
+        font.setBold(bool(flags & (1 << 4)))
+        font.setItalic(bool(flags & (1 << 1)))
+        px = max(6, int(style.get("fontsize", 12) * scale))
+        font.setPixelSize(px)
+        editor.setFont(font)
+        r, g, b = style.get("color", (0, 0, 0))
+        editor.setStyleSheet(
+            "QTextEdit { background: rgba(255,255,255,235);"
+            " border: 1px solid #0078d4; padding: 0px;"
+            f" color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); }}")
+
+        pad = 2
+        editor.setGeometry(
+            int(x0 * scale) - pad, int(y0 * scale) - pad,
+            max(int((x1 - x0) * scale) + 2 * pad, 60),
+            max(int((y1 - y0) * scale) + 2 * pad, px + 8))
+
+        editor.committed.connect(self._on_inline_committed)
+        editor.cancelled.connect(self._on_inline_cancelled)
+
+        self._inline_editor = editor
+        self._edit_ctx = {
+            "page": page_num,
+            "bbox": tuple(float(v) for v in block["bbox"]),
+            "style": style,
+            "original": block["text"],
+        }
+        editor.show()
+        editor.raise_()
+        editor.setFocus()
+
+    def _on_inline_committed(self, text: str):
+        ctx = self._edit_ctx
+        self._teardown_inline_editor()
+        if ctx is None or text == ctx["original"]:
+            return  # no change -> no undoable op
+        self.edit_text_committed.emit(
+            ctx["page"], ctx["bbox"], text, ctx["style"])
+
+    def _on_inline_cancelled(self):
+        self._teardown_inline_editor()
+
+    def _teardown_inline_editor(self):
+        editor = self._inline_editor
+        self._inline_editor = None
+        self._edit_ctx = None
+        if editor is not None:
+            editor.hide()
+            editor.deleteLater()
+
+    def _close_inline_editor(self, commit: bool = True):
+        """Finish any open inline edit programmatically (tool change / zoom)."""
+        editor = self._inline_editor
+        if editor is None:
+            return
+        if commit:
+            editor.commit()
+        else:
+            editor.cancel()
 
     def get_selected_text(self) -> str:
         """Get the currently selected text.
