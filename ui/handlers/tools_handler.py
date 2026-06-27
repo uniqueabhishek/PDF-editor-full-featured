@@ -140,6 +140,26 @@ class ToolsHandlerMixin(_MixinBase):
             )
             return
 
+        # Locate and wire up the Tesseract engine now, on the GUI thread, so we
+        # fail fast with a clear message instead of letting the worker die with
+        # TesseractNotFoundError (which leaves the document un-OCR'd and makes
+        # search silently find nothing). Configuring tesseract_cmd here also
+        # carries over to the worker thread (same pytesseract module).
+        from utils.tesseract import configure_tesseract
+        if not configure_tesseract():
+            QMessageBox.warning(
+                self,
+                "Tesseract Not Found",
+                "The Tesseract OCR engine could not be found, so OCR cannot run.\n\n"
+                "Tesseract is a separate program (pytesseract only drives it).\n\n"
+                "- Windows: install from\n"
+                "  https://github.com/UB-Mannheim/tesseract/wiki\n"
+                "  then restart the app (or add its folder to PATH).\n"
+                "- macOS: brew install tesseract\n"
+                "- Linux: sudo apt install tesseract-ocr"
+            )
+            return
+
         if QMessageBox.question(
             self,
             "Run OCR",
