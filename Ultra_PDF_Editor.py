@@ -93,7 +93,7 @@ def setup_application():
     """Setup and configure the Qt application"""
     # Import here after path setup and dependency check
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtGui import QFont
+    from PyQt6.QtGui import QFont, QIcon
 
     from config import config, UserSettings
     from ui.theme import apply_theme
@@ -101,10 +101,30 @@ def setup_application():
     # Enable high DPI scaling
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 
+    # Windows: declare an explicit AppUserModelID *before* any window is shown so
+    # the taskbar uses our own icon and groups windows under "Ultra PDF Editor"
+    # instead of the host pythonw.exe.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "UltraPDFTeam.UltraPDFEditor.1")
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName(config.APP_NAME)
     app.setApplicationVersion(config.APP_VERSION)
     app.setOrganizationName(config.APP_AUTHOR)
+
+    # Application icon (window title bar + taskbar). The multi-resolution .ico
+    # gives crisp results at every Windows icon size; fall back to the PNG.
+    assets_dir = project_root / "resources" / "assets"
+    for icon_name in ("UltraPDF.ico", "ultra-pdf-256.png"):
+        icon_file = assets_dir / icon_name
+        if icon_file.exists():
+            app.setWindowIcon(QIcon(str(icon_file)))
+            break
 
     # Set application style
     app.setStyle("Fusion")
