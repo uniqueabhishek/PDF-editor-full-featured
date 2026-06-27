@@ -20,7 +20,10 @@ class InlineTextEditor(QTextEdit):
         super().__init__(parent)
         self._finished = False
         self.setAcceptRichText(False)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Wrap to the box width; show a vertical scrollbar only if the content
+        # still can't fit (the viewer sizes the box to the text, so this is a
+        # safety net rather than the norm).
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
 

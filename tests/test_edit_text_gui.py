@@ -51,6 +51,25 @@ def test_inline_edit_commit_emits_signal(qtbot, tmp_path):
         model.close()
 
 
+def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
+    # A long header would wrap out of a one-line box; the editor must size itself
+    # so the whole paragraph is visible (regression for the clipped-text bug).
+    v, model = _viewer_with_text(
+        qtbot, tmp_path, text="Electronic Reservation Slip (ERS)-Normal User")
+    try:
+        v.resize(900, 600)
+        v._on_edit_text_requested(0, _block_center(model))
+        ed = v._inline_editor
+        assert ed is not None
+        assert ed.toPlainText().endswith("Normal User")
+        content_h = ed.document().size().height()
+        viewport_h = ed.height() - 2 * ed.frameWidth()
+        assert viewport_h + 2 >= content_h      # nothing clipped vertically
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def test_double_click_in_text_tool_requests_edit(qtbot, tmp_path):
     from PyQt6.QtGui import QMouseEvent
     from PyQt6.QtCore import QEvent, Qt

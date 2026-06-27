@@ -1702,7 +1702,7 @@ class PDFViewer(QScrollArea):
 
     def _open_inline_editor(self, page_num: int, block: dict):
         from ui.inline_text_editor import InlineTextEditor
-        from PyQt6.QtGui import QFont
+        from PyQt6.QtGui import QFont, QFontMetricsF
 
         page_widget = self._page_widgets[page_num]
         scale = page_widget._zoom * page_widget._render_dpi / 72
@@ -1712,28 +1712,52 @@ class PDFViewer(QScrollArea):
         style = block["style"]
 
         editor = InlineTextEditor(page_widget)
+        editor.document().setDocumentMargin(2)
         editor.setPlainText(block["text"])
 
-        # Approximate the original look while editing (pixel size matches the
-        # rendered glyph height at the current zoom).
         font = QFont()
         flags = int(style.get("flags", 0))
         font.setBold(bool(flags & (1 << 4)))
         font.setItalic(bool(flags & (1 << 1)))
-        px = max(6, int(style.get("fontsize", 12) * scale))
-        font.setPixelSize(px)
-        editor.setFont(font)
         r, g, b = style.get("color", (0, 0, 0))
         editor.setStyleSheet(
-            "QTextEdit { background: rgba(255,255,255,235);"
+            "QTextEdit { background: rgba(255,255,255,238);"
             " border: 1px solid #0078d4; padding: 0px;"
             f" color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); }}")
 
+        # Geometry. The editor's font metrics don't match the PDF's (the same
+        # text is usually much wider on screen), so forcing the original size
+        # would wrap the text out of the one-line box. Instead: keep the box at
+        # the selection's width and SHRINK the editor font (to a floor) until the
+        # text fits — a one-line header stays one line — then size the height to
+        # whatever the content needs so nothing is clipped.
         pad = 2
-        editor.setGeometry(
-            int(x0 * scale) - pad, int(y0 * scale) - pad,
-            max(int((x1 - x0) * scale) + 2 * pad, 60),
-            max(int((y1 - y0) * scale) + 2 * pad, px + 8))
+        frame = editor.frameWidth()
+        chrome_w = 2 * frame + 2 * int(editor.document().documentMargin())
+        block_w = (x1 - x0) * scale
+        block_h = (y1 - y0) * scale
+        gx = max(0, int(x0 * scale) - pad)
+        gy = max(0, int(y0 * scale) - pad)
+        avail_w = max(120.0, page_widget.width() - gx - 2)
+
+        width = int(min(max(block_w, 120.0), avail_w))
+        text_area = max(20.0, width - chrome_w)
+
+        px = max(8, int(style.get("fontsize", 12) * scale))
+        font.setPixelSize(px)
+        lines = editor.toPlainText().split("\n")
+        widest = max((QFontMetricsF(font).horizontalAdvance(ln) for ln in lines),
+                     default=0.0)
+        if widest > text_area:
+            px = max(9, int(px * text_area / widest))
+            font.setPixelSize(px)
+        editor.setFont(font)
+
+        editor.document().setTextWidth(text_area)
+        content_h = editor.document().size().height()
+        height = int(max(content_h + 2 * frame + 2, block_h + 2 * pad))
+        avail_h = max(40, page_widget.height() - gy - 2)
+        editor.setGeometry(gx, gy, width, min(height, avail_h))
 
         editor.committed.connect(self._on_inline_committed)
         editor.cancelled.connect(self._on_inline_cancelled)
