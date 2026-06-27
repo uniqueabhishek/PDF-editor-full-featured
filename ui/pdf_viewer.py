@@ -213,7 +213,11 @@ class PageWidget(QLabel):
         self._selection_rect: Optional[QRectF] = None
         self._rubber_band: Optional[QRubberBand] = None
         self._annotations: List[Dict] = []
-        self._highlights: List[QRectF] = []
+        # Search-result rectangles in PDF coordinates (72 dpi); scaled to widget
+        # pixels at paint time so they track zoom. _current_search_rect is the
+        # active match, drawn in a stronger colour.
+        self._search_rects: List[QRectF] = []
+        self._current_search_rect: Optional[QRectF] = None
         self._is_loading = True
         self._tool_mode: Optional[str] = None  # Current tool mode
         # Points for freehand drawing
@@ -228,6 +232,20 @@ class PageWidget(QLabel):
     def set_tool_mode(self, mode: str):
         """Set the current tool mode"""
         self._tool_mode = mode
+
+    def set_search_rects(self, rects: List[QRectF],
+                         current: Optional[QRectF] = None):
+        """Show search-result highlights (``rects`` in PDF coordinates)."""
+        self._search_rects = rects
+        self._current_search_rect = current
+        self.update()
+
+    def clear_search_rects(self):
+        """Remove any search-result highlights."""
+        if self._search_rects or self._current_search_rect is not None:
+            self._search_rects = []
+            self._current_search_rect = None
+            self.update()
 
     def set_pixmap(self, pixmap: QPixmap, zoom: float = 1.0):
         """Set the page pixmap"""
@@ -329,6 +347,20 @@ class PageWidget(QLabel):
         super().paintEvent(event)
         painter = QPainter(self)
 
+        # Draw search-result highlights underneath any active tool overlay.
+        if self._search_rects:
+            scale = self._zoom * self._render_dpi / 72
+            for r in self._search_rects:
+                wr = QRectF(r.x() * scale, r.y() * scale,
+                            r.width() * scale, r.height() * scale)
+                if self._current_search_rect is not None and r == self._current_search_rect:
+                    painter.fillRect(wr, QColor(255, 140, 0, 120))
+                    painter.setPen(QPen(QColor(220, 110, 0), 1))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRect(wr)
+                else:
+                    painter.fillRect(wr, QColor(255, 230, 0, 90))
+
         # Draw freehand stroke while drawing
         if self._tool_mode == "freehand" and len(self._freehand_points) > 1:
             painter.setPen(QPen(QColor(255, 0, 0), 2))
@@ -386,6 +418,11 @@ class PDFViewer(QScrollArea):
         # LRU cache keyed by page number; most-recently-used at the end.
         self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
         self._cache_size = 10
+
+        # Search highlighting: results from PDFDocument.search_text plus the
+        # active match (page_num, QRectF in PDF coords).
+        self._search_results: List[Dict] = []
+        self._current_result: Optional[tuple] = None
 
         # Tool state
         self._tool_mode = ToolMode.HAND
@@ -475,6 +512,9 @@ class PDFViewer(QScrollArea):
         self._filepath = filepath
         self._current_page = 0
         self._page_cache.clear()
+        # Drop highlights from the previous document.
+        self._search_results = []
+        self._current_result = None
         # Cancel any debounced re-serialize queued for the previous document.
         self._resync_timer.stop()
 
@@ -1185,6 +1225,63 @@ class PDFViewer(QScrollArea):
         self._page_cache.clear()
         self._update_zoom()
         self._render_all_pages()
+
+    def set_search_results(self, results: List[Dict]):
+        """Highlight search results across pages.
+
+        ``results`` is the list from ``PDFDocument.search_text``: dicts of
+        ``{"page": int, "rects": [(x0, y0, x1, y1), ...]}`` in PDF coordinates.
+        """
+        self._search_results = results or []
+        self._current_result = None
+        self._apply_search_highlights()
+
+    def clear_search_results(self):
+        """Remove all search-result highlights."""
+        self._search_results = []
+        self._current_result = None
+        for pw in self._page_widgets:
+            pw.clear_search_rects()
+
+    def _apply_search_highlights(self):
+        """Push the stored search rects onto each page widget."""
+        by_page: Dict[int, List[QRectF]] = {}
+        for res in self._search_results:
+            page = res.get("page", -1)
+            for (x0, y0, x1, y1) in res.get("rects", []):
+                by_page.setdefault(page, []).append(
+                    QRectF(x0, y0, x1 - x0, y1 - y0))
+
+        cur_page, cur_rect = self._current_result or (-1, None)
+        for i, pw in enumerate(self._page_widgets):
+            rects = by_page.get(i)
+            if rects:
+                pw.set_search_rects(rects, cur_rect if i == cur_page else None)
+            else:
+                pw.clear_search_rects()
+
+    def scroll_to_search_result(self, page_num: int, rect):
+        """Mark ``rect`` (PDF-coord tuple) on ``page_num`` as active and reveal it."""
+        if not (0 <= page_num < len(self._page_widgets)):
+            return
+        x0, y0, x1, y1 = rect
+        self._current_result = (page_num, QRectF(x0, y0, x1 - x0, y1 - y0))
+        self._apply_search_highlights()
+
+        # Scroll so the match is centred in the viewport where possible.
+        pw = self._page_widgets[page_num]
+        scale = self._zoom * self._render_dpi / 72
+        cx = int(((x0 + x1) / 2) * scale)
+        cy = int(((y0 + y1) / 2) * scale)
+        target = pw.mapTo(self._container, QPoint(cx, cy))
+        viewport = self.viewport()
+        ymargin = viewport.height() // 2 if viewport else 0
+        self.ensureVisible(target.x(), target.y(), 50, ymargin)
+
+        self._current_page = page_num
+        self.page_changed.emit(page_num)
+        # The target page may still be a placeholder — make sure it renders.
+        self._request_visible_pages()
 
     def go_to_page(self, page_num: int):
         """Navigate to a specific page"""

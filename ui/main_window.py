@@ -475,6 +475,8 @@ class MainWindow(
         self._main_toolbar.next_page_requested.connect(self._viewer.next_page)
         self._main_toolbar.last_page_requested.connect(self._viewer.last_page)
         self._main_toolbar.search_requested.connect(self._search)
+        self._main_toolbar.search_next.connect(self._find_next)
+        self._main_toolbar.search_prev.connect(self._find_previous)
         self._main_toolbar.clean_pdf_requested.connect(self._clean_pdf)
         self._main_toolbar.remove_header_footer_requested.connect(self._remove_header_footer)
 

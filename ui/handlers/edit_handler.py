@@ -182,24 +182,32 @@ class EditHandlerMixin(_MixinBase):
         """Perform search and update results"""
         if not self._document.is_open or not text:
             self._search_results = []
+            self._viewer.clear_search_results()
+            self._update_search_count(0, 0)
             return
 
         self._search_results = self._document.search_text(text, case_sensitive)
         total = sum(len(r['rects']) for r in self._search_results)
+        self._viewer.set_search_results(self._search_results)
 
         if self._search_results:
             self._current_search_index = 0
             self._go_to_search_result(0)
-
-            if self._find_dialog:
-                self._find_dialog.set_result_count(0, total)
-            if self._replace_dialog:
-                self._replace_dialog.set_result_count(0, total)
+            self._update_search_count(0, total)
         else:
-            if self._find_dialog:
-                self._find_dialog.set_result_count(0, 0)
-            if self._replace_dialog:
-                self._replace_dialog.set_result_count(0, 0)
+            self._update_search_count(0, 0)
+
+    def _update_search_count(self, current: int, total: int):
+        """Reflect the active match position in the toolbar and any open dialogs."""
+        if self._find_dialog:
+            self._find_dialog.set_result_count(current, total)
+        if self._replace_dialog:
+            self._replace_dialog.set_result_count(current, total)
+        toolbar = getattr(self, "_main_toolbar", None)
+        search_widget = getattr(toolbar, "search_widget", None)
+        if search_widget is not None:
+            # The toolbar shows "n/total"; make it 1-based for humans.
+            search_widget.set_result_count(current + 1 if total else 0, total)
 
     def _find_next(self):
         """Go to next search result"""
@@ -209,13 +217,7 @@ class EditHandlerMixin(_MixinBase):
         total = sum(len(r['rects']) for r in self._search_results)
         self._current_search_index = (self._current_search_index + 1) % total
         self._go_to_search_result(self._current_search_index)
-
-        if self._find_dialog:
-            self._find_dialog.set_result_count(
-                self._current_search_index, total)
-        if self._replace_dialog:
-            self._replace_dialog.set_result_count(
-                self._current_search_index, total)
+        self._update_search_count(self._current_search_index, total)
 
     def _find_previous(self):
         """Go to previous search result"""
@@ -225,24 +227,15 @@ class EditHandlerMixin(_MixinBase):
         total = sum(len(r['rects']) for r in self._search_results)
         self._current_search_index = (self._current_search_index - 1) % total
         self._go_to_search_result(self._current_search_index)
-
-        if self._find_dialog:
-            self._find_dialog.set_result_count(
-                self._current_search_index, total)
-        if self._replace_dialog:
-            self._replace_dialog.set_result_count(
-                self._current_search_index, total)
+        self._update_search_count(self._current_search_index, total)
 
     def _go_to_search_result(self, index: int):
-        """Navigate to a specific search result"""
-        current = 0
-        for result in self._search_results:
-            page_num = result['page']
-            for rect in result['rects']:
-                if current == index:
-                    self._viewer.go_to_page(page_num)
-                    return
-                current += 1
+        """Navigate to and highlight a specific search result"""
+        target = self._occurrence_at(index)
+        if target is None:
+            return
+        page_num, rect = target
+        self._viewer.scroll_to_search_result(page_num, rect)
 
     def _replace_search_params(self):
         """The (search_text, case_sensitive) currently entered in the dialog."""
@@ -308,10 +301,12 @@ class EditHandlerMixin(_MixinBase):
     def _on_find_closed(self):
         """Handle find dialog closed"""
         self._search_results = []
+        self._viewer.clear_search_results()
 
     def _on_replace_closed(self):
         """Handle replace dialog closed"""
         self._search_results = []
+        self._viewer.clear_search_results()
 
     def _search(self, text: str):
         """Search for text (from toolbar)"""
