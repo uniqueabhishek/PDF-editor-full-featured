@@ -259,17 +259,31 @@ class PDFDocument:
                 # so go straight to a full rewrite.
                 save_path = self._save_full_via_temp(save_path, save_options)
             else:
+                incremental_ok = False
                 try:
                     # Incremental saves must keep the existing encryption state;
                     # PDF_ENCRYPT_KEEP is 0 (PDF_ENCRYPT_NONE is 1 and would raise
                     # "can't change encryption on an incremental save").
                     self._doc.save(str(save_path), incremental=True,
                                    encryption=fitz.PDF_ENCRYPT_KEEP)
+                    # A structural edit (e.g. deleting a page) can make PyMuPDF's
+                    # incremental append emit a damaged cross-reference table —
+                    # notably a /Prev that points at its own section, an infinite
+                    # xref loop that hides the catalog. The file still opens in
+                    # lenient readers (they rebuild the xref) but is invalid and
+                    # unsafe to share, so verify the output and rewrite if broken.
+                    incremental_ok = self._incremental_output_ok(save_path)
+                    if not incremental_ok:
+                        logger.warning(
+                            "Incremental save of %s produced a damaged cross-"
+                            "reference table; rewriting the file in full.",
+                            save_path)
                 except Exception:
                     # Incremental save not possible; do a full save via temp file.
                     logger.debug(
                         "Incremental save failed for %s; falling back to full save",
                         save_path, exc_info=True)
+                if not incremental_ok:
                     save_path = self._save_full_via_temp(save_path, save_options)
         else:
             self._doc.save(str(save_path), **save_options)
@@ -277,6 +291,37 @@ class PDFDocument:
         self._filepath = save_path
         self._is_modified = False
         self._pending_encryption = None
+        return True
+
+    def _incremental_output_ok(self, save_path: Path) -> bool:
+        """Return True if the just-written incremental save is structurally sound.
+
+        A PDF incremental update appends the changed objects plus a new cross-
+        reference (xref) section whose ``/Prev`` must point back to the previous
+        xref so a reader can walk the chain to the document catalog. After a
+        structural edit (notably deleting a page, which renumbers objects) that
+        append can come out malformed — e.g. a ``/Prev`` that points at its own
+        section, an infinite xref loop in which the catalog is never reached.
+        Lenient readers (MuPDF included) silently rebuild the xref, so the file
+        still *opens* but is invalid for strict readers and unsafe to share.
+
+        MuPDF flags any document whose xref it had to reconstruct via
+        ``Document.is_repaired``; use that as the integrity signal, and also
+        confirm the page count survived the round-trip. Returns False on any
+        problem so the caller can fall back to a clean full rewrite.
+        """
+        expected_pages = len(self._doc) if self._doc else None
+        try:
+            with fitz.open(str(save_path)) as check:
+                if check.is_repaired:
+                    return False
+                if expected_pages is not None and len(check) != expected_pages:
+                    return False
+        except Exception:
+            logger.debug(
+                "Re-opening %s to verify the incremental save failed",
+                save_path, exc_info=True)
+            return False
         return True
 
     def _save_full_via_temp(self, save_path: Path,

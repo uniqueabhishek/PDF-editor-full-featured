@@ -192,6 +192,71 @@ def test_save_round_trip(opened, tmp_path):
     reopened.close()
 
 
+def test_in_place_save_after_page_delete_is_not_corrupt(make_pdf):
+    """A structural edit saved in place must leave a file with a valid xref.
+
+    Regression: a buggy incremental save appended a self-referential /Prev after
+    a page deletion, producing an infinite xref loop. Lenient readers auto-repair
+    it, so it looked fine on screen but was invalid — MuPDF's is_repaired flag
+    catches exactly that.
+    """
+    src = make_pdf("struct.pdf", pages=5)
+    doc = PDFDocument()
+    assert doc.open(src) is True
+    doc.delete_page(2)
+    assert doc.save() is True  # in place
+    doc.close()
+
+    check = fitz.open(str(src))
+    try:
+        assert check.is_repaired is False
+        assert len(check) == 4
+    finally:
+        check.close()
+
+
+def test_incremental_output_ok_accepts_clean_file(opened, tmp_path):
+    good = tmp_path / "good.pdf"
+    opened.doc.save(str(good))
+    assert opened._incremental_output_ok(good) is True
+
+
+def test_incremental_output_ok_rejects_repaired_file(opened, tmp_path):
+    import re
+
+    good = tmp_path / "good.pdf"
+    opened.doc.save(str(good))
+    # Point startxref at a bogus offset so the reader can't find the xref table
+    # and must rebuild it via a full scan — MuPDF sets is_repaired for this.
+    broken = re.sub(rb"startxref\s+\d+", b"startxref\n9999999",
+                    good.read_bytes(), count=1)
+    broken_path = tmp_path / "broken.pdf"
+    broken_path.write_bytes(broken)
+    assert opened._incremental_output_ok(broken_path) is False
+
+
+def test_save_falls_back_to_full_rewrite_when_incremental_is_broken(opened, monkeypatch):
+    """When the incremental output fails its integrity check, save() must redo
+    the write as a clean full rewrite instead of trusting the damaged file."""
+    opened.delete_page(0)
+    before = opened.doc  # the live fitz.Document
+
+    monkeypatch.setattr(opened, "_incremental_output_ok", lambda p: False)
+    assert opened.save() is True
+
+    # A full rewrite via temp closes and reopens the document, so the underlying
+    # fitz object is a fresh instance — proof the fallback path ran.
+    assert opened.doc is not before
+    assert opened.page_count == 2
+
+    check = fitz.open(str(opened.filepath))
+    try:
+        assert check.is_repaired is False
+        assert len(check) == 2
+    finally:
+        check.close()
+
+
 def test_save_copy_keeps_current_path(opened, tmp_path):
     original = opened.filepath
     out = tmp_path / "copy.pdf"
