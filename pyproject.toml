@@ -27,6 +27,13 @@ dependencies = [
 [project.scripts]
 ultra-pdf-editor = "Ultra_PDF_Editor:main"
 
+[tool.uv]
+# Windows Smart App Control blocks unsigned executables. uv's managed CPython
+# builds (python-build-standalone) are NOT code-signed, so their pythonw.exe is
+# blocked when launching the GUI via file association. python.org installers are
+# PSF-signed, so force uv to use the signed system interpreter, never a managed one.
+python-preference = "only-system"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
