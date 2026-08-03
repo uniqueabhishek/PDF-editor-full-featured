@@ -23,6 +23,12 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on how many pages one visibility pass may hand the render worker.
+# A viewport holds only a handful of pages even zoomed fully out, so this is
+# never reached in normal use; it exists so a not-yet-laid-out geometry can't
+# queue an entire document and stall the UI (see _request_visible_pages).
+_MAX_QUEUED_PAGE_RENDERS = 12
+
 
 class ViewMode(Enum):
     SINGLE_PAGE = "single"
@@ -802,15 +808,61 @@ class PDFViewer(QScrollArea):
             page_widget.setCursor(self._tool_cursor)
 
             # Set initial placeholder size based on page dimensions
-            page = self._doc[i]
-            width = int(page.rect.width * self._zoom * self._render_dpi / 72)
-            height = int(page.rect.height * self._zoom * self._render_dpi / 72)
-            if self._rotation in (90, 270):
-                width, height = height, width
+            width, height = self._page_pixel_size(i)
             page_widget.set_placeholder(width, height)
 
             self._layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
+
+    def _page_pixel_size(self, page_num: int) -> tuple:
+        """On-screen size of a page in device pixels at the current zoom.
+
+        Single source of truth for the placeholder sizes and for
+        :meth:`_visible_page_indices`, so predicted page positions always agree
+        with the sizes the layout is given.
+        """
+        page = self._doc[page_num]
+        scale = self._zoom * self._render_dpi / 72
+        width = int(page.rect.width * scale)
+        height = int(page.rect.height * scale)
+        if self._rotation in (90, 270):
+            width, height = height, width
+        return width, height
+
+    def _visible_page_indices(self) -> List[int]:
+        """Indices of the pages intersecting the viewport, in view order.
+
+        Derived from the page sizes and the layout's own margins/spacing rather
+        than from each widget's ``geometry()``. Widget geometry is only valid
+        once the scroll area has sized its container and run the layout, which
+        happens a turn of the event loop *after* set_document() — before that
+        every widget still reports the same position, so a geometry-based test
+        reports the whole document as visible and queues every page for
+        rendering (a multi-second freeze on a long scan). Computing the
+        positions ourselves makes visibility correct on the very first pass.
+        """
+        viewport_widget = self.viewport()
+        v_scrollbar = self.verticalScrollBar()
+        if viewport_widget is None or v_scrollbar is None:
+            return []
+
+        margins = self._layout.contentsMargins()
+        spacing = self._layout.spacing()
+        top = v_scrollbar.value()
+        bottom = top + viewport_widget.height()
+
+        visible: List[int] = []
+        y = margins.top()
+        for i in range(len(self._page_widgets)):
+            height = self._page_pixel_size(i)[1]
+            # Pages stack top-to-bottom, so once one starts past the viewport
+            # every later page is off-screen too.
+            if y > bottom:
+                break
+            if y + height >= top:
+                visible.append(i)
+            y += height + spacing
+        return visible
 
     def _cache_get(self, page_num: int) -> Optional[QPixmap]:
         """Return a cached pixmap, marking it most-recently-used (true LRU)."""
@@ -857,38 +909,38 @@ class PDFViewer(QScrollArea):
         if not self._doc_live() or not self._page_widgets:
             return
 
-        viewport_widget = self.viewport()
-        v_scrollbar = self.verticalScrollBar()
-        if not viewport_widget or not v_scrollbar:
+        visible = self._visible_page_indices()
+        if not visible:
             return
 
-        viewport = viewport_widget.rect()
-        scroll_pos = v_scrollbar.value()
-        viewport_top = viewport.top()
-        viewport_bottom = viewport.bottom()
-        viewport_center_y = viewport.center().y()
+        # Render outwards from the middle of the screen: the page the user is
+        # looking at should arrive first.
+        center = visible[len(visible) // 2]
 
-        for i, page_widget in enumerate(self._page_widgets):
-            widget_rect = page_widget.geometry()
-            widget_rect.translate(0, -scroll_pos)
-
-            # Pages are laid out top-to-bottom, so once one starts below the
-            # viewport every later page is off-screen too — stop scanning.
-            if widget_rect.top() > viewport_bottom:
-                break
-            # Skip pages that sit entirely above the viewport.
-            if widget_rect.bottom() < viewport_top:
-                continue
+        queued = 0
+        for i in visible:
+            page_widget = self._page_widgets[i]
 
             # Check cache first (only if page is not marked for re-render)
             cached = None if page_widget._is_loading else self._cache_get(i)
             if cached is not None:
                 page_widget.set_pixmap(cached, self._zoom)
-            else:
-                # Request background render; priority by distance from center.
-                center_dist = abs(widget_rect.center().y() - viewport_center_y)
-                priority = int(1000 - center_dist)
-                self._render_worker.request_page(i, self._zoom, priority)
+                continue
+
+            # Backstop: never hand the worker more than a screenful at once, so
+            # a single pass can't queue an entire document however the visible
+            # range was computed. Anything dropped here is picked up by the next
+            # scroll/zoom pass.
+            if queued >= _MAX_QUEUED_PAGE_RENDERS:
+                logger.debug(
+                    "Capped page-render queue at %d; deferring page %d onwards",
+                    _MAX_QUEUED_PAGE_RENDERS, i)
+                break
+
+            # Priority by distance from the centre page (higher renders first).
+            self._render_worker.request_page(
+                i, self._zoom, priority=1000 - abs(i - center))
+            queued += 1
 
     def _on_page_rendered(self, page_num: int, image: QImage, zoom: float):
         """Handle page rendered from background worker"""
@@ -926,8 +978,12 @@ class PDFViewer(QScrollArea):
             # Set placeholder with correct size
             page_widget.set_placeholder(width, height)
 
-        # Process events to update layout immediately
-        QApplication.processEvents()
+        # Recompute the layout so the new page sizes are reflected in each
+        # widget's geometry before _request_visible_pages() tests visibility
+        # against it. This used to spin QApplication.processEvents(), which does
+        # the same job only as a side effect while also re-entering the event
+        # loop mid-render; activate() is synchronous and side-effect free.
+        self._layout.activate()
 
         # Request visible pages to be rendered
         self._request_visible_pages()
