@@ -341,17 +341,52 @@ Encrypted: {metadata.encryption}
 
         output_dir = QFileDialog.getExistingDirectory(
             self, "Select Output Directory")
-        if output_dir:
+        if not output_dir:
+            return
+        formats = ["PNG (lossless)", "JPEG (smaller, about 3x faster)"]
+        choice, ok = QInputDialog.getItem(
+            self, "Export as Images", "Image format:", formats, 0, False)
+        if not ok:
+            return
+        ext = "jpg" if choice == formats[1] else "png"
+
+        # Rendering and encoding every page took ~50 s on a 60-page scan with
+        # the window frozen; do it on a private copy in the background.
+        try:
+            data, password = self._document.worker_copy()
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
+            return
+        total = self._document.page_count
+        progress = QProgressDialog("Exporting images...", "Cancel", 0, total, self)
+        progress.setWindowTitle("Exporting")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+
+        def work(progress_cb, is_cancelled):
+            wdoc = fitz.open(stream=data, filetype="pdf")
             try:
-                for i in range(self._document.page_count):
-                    img_bytes = self._document.render_page_to_image(i)
-                    filepath = Path(output_dir) / f"page_{i+1:04d}.png"
-                    with open(filepath, 'wb') as f:
-                        f.write(img_bytes)
-                self._statusbar.showMessage(
-                    f"Exported {self._document.page_count} images", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to export:\n{e}")
+                if wdoc.needs_pass and password:
+                    wdoc.authenticate(password)
+                done = 0
+                for i in range(len(wdoc)):
+                    if is_cancelled():
+                        break
+                    progress_cb(i, total)
+                    pix = wdoc[i].get_pixmap(dpi=150, alpha=False)
+                    out = Path(output_dir) / f"page_{i + 1:04d}.{ext}"
+                    if ext == "jpg":
+                        out.write_bytes(pix.tobytes("jpg", jpg_quality=90))
+                    else:
+                        out.write_bytes(pix.tobytes("png"))
+                    done += 1
+                return done
+            finally:
+                wdoc.close()
+
+        def finished(done):
+            self._statusbar.showMessage(f"Exported {done} images", 3000)
+
+        self._run_background(work, progress, finished, error_title="Export Error")
 
     def _export_as_word(self):
         """Export page text to a Word document, off the GUI thread.
