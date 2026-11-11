@@ -913,6 +913,15 @@ class PDFViewer(QScrollArea):
         """Every page's on-screen rect (rotation applied), to compare layouts."""
         return [tuple(doc[i].rect) for i in range(len(doc))]
 
+    def pages_edited(self, pages: List[int]):
+        """Content of ``pages`` changed in place (page count and order kept)."""
+        self._teardown_inline_editor()
+        self._text_selection = None
+        for p in pages:
+            if 0 <= p < len(self._page_widgets):
+                self._page_widgets[p].clear_text_selection()
+            self.invalidate_render_copy(p)
+
     def release_render_copy(self):
         """Close the render worker's copy (it may hold the file open)."""
         self._resync_timer.stop()

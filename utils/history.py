@@ -454,6 +454,72 @@ class DocumentSnapshotCommand(Command):
         return before + after
 
 
+class PageSnapshotCommand(Command):
+    """Undoable edit confined to a few pages, storing only those pages.
+
+    A :class:`DocumentSnapshotCommand` serializes the whole document twice
+    per edit (~0.4 s and 2 x 36 MB of history on a 60-page scan) and swaps the
+    document object, forcing a reload. This keeps one-page PDFs of the
+    affected pages before and after, and undo swaps those pages back in place.
+    Only used where :meth:`PDFDocument.can_snapshot_pages` allows it.
+    """
+
+    def __init__(self, document: Any, pages: List[int], operation: Callable[[], Any],
+                 command_type: CommandType = CommandType.METADATA_CHANGE,
+                 description: str = ""):
+        super().__init__(command_type, description)
+        self.document = document
+        self.pages = sorted(set(pages))
+        # The viewer refreshes (and re-renders) just this page on undo/redo.
+        self.page_index = self.pages[0]
+        self._operation = operation
+        self._before: Optional[bytes] = None
+        self._after: Optional[bytes] = None
+        self.result: Any = None
+
+    def execute(self) -> bool:
+        count = self.document.page_count
+        try:
+            self._before = self.document.page_snapshot(self.pages)
+        except Exception:
+            logger.exception("Could not snapshot pages for '%s'", self.description)
+            return False
+        try:
+            self.result = self._operation()
+            if self.document.page_count != count:
+                raise RuntimeError("operation changed the page count")
+            self._after = self.document.page_snapshot(self.pages)
+        except Exception:
+            logger.exception("Operation '%s' failed; rolling back", self.description)
+            try:
+                if self.document.page_count == count:
+                    self.document.restore_pages(self.pages, self._before)
+            except Exception:
+                logger.exception("Rollback after '%s' failed", self.description)
+            return False
+        self.document.mark_modified()
+        return True
+
+    def undo(self) -> bool:
+        return self._swap(self._before, "Undo")
+
+    def redo(self) -> bool:
+        return self._swap(self._after, "Redo")
+
+    def _swap(self, data: Optional[bytes], what: str) -> bool:
+        if data is None:
+            return False
+        try:
+            self.document.restore_pages(self.pages, data)
+            return True
+        except Exception:
+            logger.exception("%s of '%s' failed", what, self.description)
+            return False
+
+    def memory_bytes(self) -> int:
+        return len(self._before or b"") + len(self._after or b"")
+
+
 class HistoryManager:
     """Manages undo/redo history"""
 

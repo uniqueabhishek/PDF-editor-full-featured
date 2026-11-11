@@ -70,6 +70,38 @@ def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
     assert win._document.page_count == 4
 
 
+def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, make_pdf):
+    import fitz
+    from utils.history import DocumentSnapshotCommand, PageSnapshotCommand
+    win = main_window
+    pdf = make_pdf("doc.pdf", pages=4)
+    win._open_file(str(pdf))
+    reloads = []
+    real_load = win._load_document_to_viewer
+    win._load_document_to_viewer = lambda *a, **k: (reloads.append(1), real_load(*a, **k))
+    before = win._document.doc[2].get_pixmap(dpi=20).samples
+
+    cmd = win._run_snapshot_op(
+        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 40, 400, 300)),
+        pages=[2])
+    assert isinstance(cmd, PageSnapshotCommand)
+    assert reloads == [], "a one-page edit reloaded the view"
+    _assert_view_matches_document(win)
+    win._undo()
+    assert win._document.doc[2].get_pixmap(dpi=20).samples == before
+    _assert_view_matches_document(win)
+    win._redo()
+    _assert_view_matches_document(win)
+
+    # Where a page swap is unsafe (links), it falls back to a full snapshot.
+    win._document.doc[0].insert_link({"kind": fitz.LINK_GOTO, "page": 2,
+                                      "from": fitz.Rect(10, 10, 60, 30)})
+    cmd = win._run_snapshot_op(
+        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 400, 400, 600)),
+        pages=[2])
+    assert isinstance(cmd, DocumentSnapshotCommand)
+
+
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
     monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",

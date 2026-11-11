@@ -73,7 +73,8 @@ if TYPE_CHECKING:
         def _clear_autosave(self) -> None: ...
         def _run_snapshot_op(
             self, description: str, operation: "Callable[[], Any]",
-            command_type: "Optional[CommandType]" = None) -> "Any": ...
+            command_type: "Optional[CommandType]" = None,
+            pages: "Optional[List[int]]" = None) -> "Any": ...
         def _run_background(
             self, work: "Callable[[Callable[[int, int], None], Callable[[], bool]], Any]",
             progress: "Any", on_success: "Callable[[Any], None]",

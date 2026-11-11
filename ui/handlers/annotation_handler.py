@@ -39,7 +39,7 @@ class AnnotationHandlerMixin(_MixinBase):
         cmd = self._run_snapshot_op(
             "Edit text",
             lambda: self._document.replace_text_block(
-                page_num, bbox, new_text, style))
+                page_num, bbox, new_text, style), pages=[page_num])
         if cmd is None:
             QMessageBox.critical(
                 self, "Edit Text", "Failed to edit text. See log for details.")
@@ -105,7 +105,7 @@ class AnnotationHandlerMixin(_MixinBase):
                     pg.delete_annot(annot)
                     return
 
-        if self._run_snapshot_op("Delete annotation", _do) is not None:
+        if self._run_snapshot_op("Delete annotation", _do, pages=[page_num]) is not None:
             self._statusbar.showMessage("Annotation deleted (Undo to restore)", 2000)
         else:
             QMessageBox.critical(
@@ -141,7 +141,8 @@ class AnnotationHandlerMixin(_MixinBase):
             rect.y() + rect.height(),
         )
         cmd = self._run_snapshot_op(
-            "Erase area", lambda: self._document.redact_area(page_num, fitz_rect))
+            "Erase area", lambda: self._document.redact_area(page_num, fitz_rect),
+            pages=[page_num])
         if cmd is not None:
             self._statusbar.showMessage("Area erased.", 3000)
         else:

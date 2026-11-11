@@ -509,6 +509,67 @@ class PDFDocument:
         return self._doc.tobytes(garbage=1, deflate=True,
                                  encryption=fitz.PDF_ENCRYPT_KEEP)
 
+    # Catalog entries that tie pages to document-level structures a page swap
+    # (delete + re-insert) would break: tags, layers, forms, named targets.
+    _PAGE_SWAP_UNSAFE_CATALOG_KEYS = ("StructTreeRoot", "OCProperties", "AcroForm",
+                                      "Dests", "Names")
+
+    def can_snapshot_pages(self, pages: Sequence[int]) -> bool:
+        """True if undo for an edit to ``pages`` may store just those pages.
+
+        Undo then swaps the page back in (delete + insert), which gives it a
+        new page object; anything pointing at the old one would dangle. So
+        this says no for tagged PDFs, layers, forms, named destinations,
+        bookmarks to these pages, and any document with links (a link on
+        another page may target these). Costs ~10 ms on 300 pages.
+        """
+        doc = self._doc
+        if doc is None or not doc.is_pdf or not pages:
+            return False
+        try:
+            keys = set(doc.xref_get_keys(doc.pdf_catalog()))
+            if keys.intersection(self._PAGE_SWAP_UNSAFE_CATALOG_KEYS):
+                return False
+            targets = {p + 1 for p in pages}
+            if any(entry[2] in targets for entry in doc.get_toc(simple=True)):
+                return False
+            return all(doc[i].first_link is None for i in range(len(doc)))
+        except Exception:
+            logger.debug("Page snapshot eligibility check failed", exc_info=True)
+            return False
+
+    def page_snapshot(self, pages: Sequence[int]) -> bytes:
+        """``pages`` copied, in order, into a small PDF (for page-level undo)."""
+        if self._doc is None:
+            raise ValueError("No document is open")
+        holder = fitz.open()
+        try:
+            for p in pages:
+                holder.insert_pdf(self._doc, from_page=p, to_page=p)
+            # No deflate: streams already compressed stay compressed, but an
+            # image a redaction just rewrote is raw, and deflating a scanned
+            # page took 1.5 s (vs 15 ms) to save a few MB of undo memory.
+            return holder.tobytes(garbage=0, deflate=False)
+        finally:
+            holder.close()
+
+    def restore_pages(self, pages: Sequence[int], data: bytes) -> None:
+        """Swap ``pages`` for the pages of a :meth:`page_snapshot`."""
+        if self._doc is None:
+            raise ValueError("No document is open")
+        holder = fitz.open(stream=data, filetype="pdf")
+        try:
+            if len(holder) != len(pages):
+                raise ValueError("page snapshot does not match the pages")
+            for idx, p in enumerate(pages):
+                if hasattr(self._doc, "Graftmaps"):
+                    self._doc.Graftmaps = {}
+                self._doc.delete_page(p)
+                self._doc.insert_pdf(holder, from_page=idx, to_page=idx, start_at=p)
+        finally:
+            holder.close()
+        self._is_modified = True
+
     def restore(self, data: bytes) -> None:
         """Replace the in-memory document with one rebuilt from snapshot bytes.
 

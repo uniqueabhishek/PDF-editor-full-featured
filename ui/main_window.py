@@ -809,15 +809,35 @@ class MainWindow(
             title = f"*{title}"
         self.setWindowTitle(title)
 
-    def _run_snapshot_op(self, description: str, operation, command_type=None):
+    def _run_snapshot_op(self, description: str, operation, command_type=None,
+                         pages=None):
         """Run a destructive document mutation as an undoable snapshot command.
 
         ``operation`` is a no-argument callable that performs the in-place change
         (and may return a value, available afterwards as ``command.result``). The
         document is snapshotted before/after so the edit can be undone. Returns
         the executed command on success, or None if the operation failed.
+
+        ``pages``: the edit only touches these pages. Undo then stores just
+        those pages and the view refreshes only them, instead of two full
+        snapshots and a reload (~0.4 s on a 36 MB scan), wherever the document
+        allows it (see ``PDFDocument.can_snapshot_pages``).
         """
-        from utils.history import DocumentSnapshotCommand, CommandType
+        from utils.history import (DocumentSnapshotCommand, CommandType,
+                                   PageSnapshotCommand)
+        if pages and self._document.can_snapshot_pages(pages):
+            page_cmd = PageSnapshotCommand(
+                self._document, list(pages), operation,
+                command_type or CommandType.METADATA_CHANGE, description)
+            if not self._history_manager.execute(page_cmd):
+                return None
+            self._viewer.pages_edited(page_cmd.pages)
+            for p in page_cmd.pages:
+                self._sidebar.page_changed_in_place(p)
+            self._is_modified = True
+            self._update_title()
+            return page_cmd
+
         command = DocumentSnapshotCommand(
             self._document, operation,
             command_type or CommandType.METADATA_CHANGE, description)

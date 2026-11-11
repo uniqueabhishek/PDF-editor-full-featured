@@ -82,8 +82,12 @@ class EditHandlerMixin(_MixinBase):
                     reuse_layout=True)
             else:
                 self._viewer._page_cache.clear()
-                # Single-page commands (annotation, rotation) carry page_index.
-                self._viewer.refresh(getattr(command, "page_index", -1))
+                # Single-page commands (annotation, rotation, page snapshots)
+                # carry page_index.
+                page_index = getattr(command, "page_index", -1)
+                self._viewer.refresh(page_index)
+                if page_index >= 0:
+                    self._sidebar.page_changed_in_place(page_index)
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage(success_message, 2000)
@@ -157,7 +161,8 @@ class EditHandlerMixin(_MixinBase):
         page_num, rect = selection
         if self._run_snapshot_op(
                 "Erase selection",
-                lambda: self._document.redact_area(page_num, rect)) is not None:
+                lambda: self._document.redact_area(page_num, rect),
+                pages=[page_num]) is not None:
             self._viewer.clear_selection()
             self._statusbar.showMessage("Erased selection (Undo to restore)", 3000)
 
@@ -299,7 +304,7 @@ class EditHandlerMixin(_MixinBase):
         if self._run_snapshot_op(
                 "Replace text",
                 lambda: self._document.replace_text_one(
-                    page_num, rect, replacement)) is not None:
+                    page_num, rect, replacement), pages=[page_num]) is not None:
             # Positions changed; re-run the search to refresh highlights/count.
             self._do_search(search, case_sensitive)
             self._statusbar.showMessage("Replaced 1 occurrence", 2000)

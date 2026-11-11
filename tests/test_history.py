@@ -1,4 +1,5 @@
 """Tests for the undo/redo history manager and commands (headless)."""
+import fitz
 import pytest
 
 from core.pdf_document import PDFDocument
@@ -151,6 +152,43 @@ def test_snapshot_not_shared_after_an_untracked_change(doc):
     second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
     assert hm.execute(second)
     assert second._before is not first._after
+
+
+def _pixels(document, page):
+    return document.doc[page].get_pixmap(dpi=30).samples
+
+
+def test_page_snapshot_undo_restores_only_that_page(doc):
+    from utils.history import PageSnapshotCommand
+    before = [_pixels(doc, i) for i in range(doc.page_count)]
+    hm = HistoryManager()
+    cmd = PageSnapshotCommand(
+        doc, [1], lambda: doc.redact_area(1, fitz.Rect(50, 50, 400, 300)),
+        description="erase")
+    assert doc.can_snapshot_pages([1])
+    assert hm.execute(cmd)
+    assert _pixels(doc, 1) != before[1]
+    snapshot_size = cmd.memory_bytes()
+    assert snapshot_size < len(doc.snapshot()) * 2 / doc.page_count + 4096
+
+    assert hm.undo()
+    assert [_pixels(doc, i) for i in range(doc.page_count)] == before
+    assert hm.redo()
+    assert _pixels(doc, 1) != before[1]
+    assert [_pixels(doc, i) for i in (0, 2)] == [before[0], before[2]]
+
+
+def test_page_snapshot_refused_where_a_page_swap_would_break_links(doc):
+    assert doc.can_snapshot_pages([0])
+    doc.doc[2].insert_link({"kind": fitz.LINK_GOTO, "page": 0,
+                            "from": fitz.Rect(10, 10, 60, 30)})
+    assert not doc.can_snapshot_pages([0]), "link on another page targets page 0"
+
+
+def test_page_snapshot_refused_for_bookmarked_pages(doc):
+    doc.doc.set_toc([[1, "Chapter", 2]])
+    assert not doc.can_snapshot_pages([1])
+    assert doc.can_snapshot_pages([0])
 
 
 def test_no_memory_budget_keeps_all_within_count(doc):
