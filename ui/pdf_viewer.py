@@ -16,6 +16,7 @@ from PyQt6.QtGui import (
 import bisect
 import fitz
 import logging
+import math
 import os
 import threading
 from collections import OrderedDict
@@ -35,6 +36,15 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 _KEEP_RENDERED_MARGIN = 3
 # Pages render this long after the last zoom step (see set_zoom).
 _ZOOM_RENDER_DELAY_MS = 150
+def _to_device(clip: Optional[tuple], dpr: float) -> Optional[tuple]:
+    """A clip in layout pixels as device pixels (outward-rounded)."""
+    if clip is None:
+        return None
+    x0, y0, x1, y1 = clip
+    return (math.floor(x0 * dpr), math.floor(y0 * dpr),
+            math.ceil(x1 * dpr), math.ceil(y1 * dpr))
+
+
 # Page placement (see PDFViewer._position_pages).
 _PAGE_MARGIN = 20
 _PAGE_SPACING = 10
@@ -130,6 +140,9 @@ class PageRenderWorker(QThread):
         self._tasks: List[RenderTask] = []
         self._render_dpi = 150
         self._rotation = 0
+        # Screen pixels per layout pixel; pages render this much finer so they
+        # stay sharp at 125%/150%/200% Windows scaling.
+        self._dpr = 1.0
         self._running = True
         self._current_zoom = 1.0
         self._lock = threading.Lock()
@@ -233,6 +246,12 @@ class PageRenderWorker(QThread):
         with self._lock:
             return bool(self._call("insert_pages", src, index, count))
 
+    def set_device_pixel_ratio(self, dpr: float):
+        """Render for a screen with ``dpr`` device pixels per logical pixel."""
+        with self._task_cond:
+            self._tasks.clear()
+        self._dpr = dpr
+
     def set_rotation(self, rotation: int):
         """Set rotation angle"""
         with self._lock:
@@ -289,23 +308,26 @@ class PageRenderWorker(QThread):
                 continue
 
             img = None
+            dpr = self._dpr
             with self._lock:
                 try:
                     out = self._call("render", task.page_num,
-                                     task.zoom * self._render_dpi / 72, self._rotation,
-                                     task.clip)
+                                     task.zoom * self._render_dpi / 72 * dpr,
+                                     self._rotation, _to_device(task.clip, dpr))
                     if out is not None:
                         width, height, stride, samples, ox, oy = out
                         # Copy detaches from the samples buffer so the QImage
                         # owns its pixels.
                         img = QImage(samples, width, height, stride,
                                      QImage.Format.Format_RGB888).copy()
+                        img.setDevicePixelRatio(dpr)
                 except Exception:
                     logger.exception("Error rendering page %s", task.page_num)
                     img = None
 
             if img is not None:
-                part = None if task.clip is None else (ox, oy, task.clip)
+                part = (None if task.clip is None
+                        else (round(ox / dpr), round(oy / dpr), task.clip))
                 self.page_rendered.emit(task.page_num, img, task.zoom, part)
 
 
@@ -764,6 +786,8 @@ class PDFViewer(QScrollArea):
         self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
         # Pages whose widget currently holds a bitmap (see _release_offscreen_pixmaps).
         self._shown_pages: set = set()
+        # Device pixel ratio the renders are made for (see _sync_device_pixel_ratio).
+        self._render_dpr = 1.0
         # Page rects the current widgets were built for (see set_document reuse).
         self._page_rects: List[tuple] = []
         self._cache_size = 10
@@ -1280,31 +1304,6 @@ class PDFViewer(QScrollArea):
             # popitem(last=False) drops the least-recently-used entry.
             self._page_cache.popitem(last=False)
 
-    def _render_page(self, page_num: int) -> QPixmap:
-        """Render a single page to pixmap"""
-        if not self._doc_live() or page_num < 0 or page_num >= len(self._doc):
-            return QPixmap()
-
-        # Check cache
-        cached = self._cache_get(page_num)
-        if cached is not None:
-            return cached
-
-        page = self._doc[page_num]
-        zoom_matrix = fitz.Matrix(self._zoom * self._render_dpi / 72,
-                                  self._zoom * self._render_dpi / 72)
-        zoom_matrix = zoom_matrix.prerotate(self._rotation)
-
-        pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
-
-        # Convert to QPixmap
-        img = QImage(pixmap.samples, pixmap.width, pixmap.height,
-                     pixmap.stride, QImage.Format.Format_RGB888)
-        qpixmap = QPixmap.fromImage(img)
-
-        self._cache_put(page_num, qpixmap)
-        return qpixmap
-
     def _request_visible_pages(self):
         """Request visible pages to be rendered in background"""
         if not self._doc_live() or not self._page_widgets:
@@ -1314,6 +1313,7 @@ class PDFViewer(QScrollArea):
         if self._zoom_render_timer.isActive():
             return
 
+        self._sync_device_pixel_ratio()
         visible = self._visible_page_indices()
         if not visible:
             return
@@ -1377,6 +1377,18 @@ class PDFViewer(QScrollArea):
                 self._page_widgets[i].release_pixmap()
             self._shown_pages.discard(i)
 
+    def _sync_device_pixel_ratio(self):
+        """Render for the screen the viewer is on (it may have moved)."""
+        dpr = self.devicePixelRatioF() or 1.0
+        if abs(dpr - self._render_dpr) < 0.001:
+            return
+        self._render_dpr = dpr
+        self._render_worker.set_device_pixel_ratio(dpr)
+        # Renders made for the old screen are too coarse or too fine.
+        self._page_cache.clear()
+        for w in self._page_widgets:
+            w._is_loading = True
+
     def _render_clip_for(self, page_num: int) -> Optional[tuple]:
         """``(clip, visible)`` for a page too large to render whole, else None.
 
@@ -1386,7 +1398,8 @@ class PDFViewer(QScrollArea):
         800% was a 9917x14034 bitmap, 531 MB, several of them cached.
         """
         width, height = self._page_pixel_size(page_num)
-        if width * height <= _MAX_RENDER_PIXELS:
+        # The bitmap is dpr^2 larger than the page's layout size.
+        if width * height * self._render_dpr ** 2 <= _MAX_RENDER_PIXELS:
             return None
         viewport = self.viewport()
         if viewport is None:
@@ -2424,20 +2437,24 @@ class PDFViewer(QScrollArea):
 
         try:
             from core.render_backend import render_page
+            self._sync_device_pixel_ratio()
+            dpr = self._render_dpr
             region = (self._render_clip_for(page_num)
                       if page_num < len(self._page_widgets) else None)
             clip = region[0] if region is not None else None
-            out = render_page(self._doc, page_num, self._zoom * self._render_dpi / 72,
-                              self._rotation, clip)
+            out = render_page(self._doc, page_num,
+                              self._zoom * self._render_dpi / 72 * dpr,
+                              self._rotation, _to_device(clip, dpr))
             if out is None:
                 return
             width, height, stride, samples, ox, oy = out
             img = QImage(samples, width, height, stride, QImage.Format.Format_RGB888)
             qpixmap = QPixmap.fromImage(img)
+            qpixmap.setDevicePixelRatio(dpr)
             if clip is not None:
                 # Huge page: show just the rendered part, never cache it.
                 self._page_widgets[page_num].set_partial_pixmap(
-                    qpixmap, self._zoom, ox, oy, clip)
+                    qpixmap, self._zoom, round(ox / dpr), round(oy / dpr), clip)
                 self._shown_pages.add(page_num)
                 return
 

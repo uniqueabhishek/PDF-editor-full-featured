@@ -199,14 +199,16 @@ class ThumbnailWidget(QFrame):
         cost ~0.5 MB per page ever shown, which nothing needs (the drag image is
         smaller still). The label shares the same pixmap data.
         """
+        dpr = pixmap.devicePixelRatio() or 1.0
         scaled = pixmap.scaled(
-            120, 160,
+            round(120 * dpr), round(160 * dpr),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
+        scaled.setDevicePixelRatio(dpr)
         self._pixmap = scaled
         self._image_label.setPixmap(scaled)
-        self._image_label.setFixedSize(scaled.size())
+        self._image_label.setFixedSize(scaled.deviceIndependentSize().toSize())
         self._reposition_badges()
 
     def set_selected(self, selected: bool):
@@ -540,14 +542,18 @@ class ThumbnailPanel(QScrollArea):
             return QPixmap()
 
         page = self._doc[page_num]
-        zoom = self._render_dpi / 72.0
+        # Finer on high-DPI screens so thumbnails stay sharp there too.
+        dpr = self.devicePixelRatioF() or 1.0
+        zoom = self._render_dpi / 72.0 * dpr
         matrix = fitz.Matrix(zoom, zoom)
 
         pixmap = page.get_pixmap(matrix=matrix, alpha=False)
 
         img = QImage(pixmap.samples, pixmap.width, pixmap.height,
                      pixmap.stride, QImage.Format.Format_RGB888)
-        return QPixmap.fromImage(img)
+        qpixmap = QPixmap.fromImage(img)
+        qpixmap.setDevicePixelRatio(dpr)
+        return qpixmap
 
     def _on_scroll(self):
         """Handle scroll"""

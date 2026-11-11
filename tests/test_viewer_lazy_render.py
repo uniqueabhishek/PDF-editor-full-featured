@@ -329,6 +329,56 @@ def test_thumbnails_render_a_couple_per_pass(qtbot, many_pages):
         doc.close()
 
 
+def test_high_dpi_screens_get_full_resolution_renders(qtbot, many_pages):
+    """At 200% scaling a page renders at twice the pixels, shown at its
+    normal size, instead of being stretched (blurry)."""
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v.devicePixelRatioF = lambda: 2.0
+        v.show()
+        v._render_all_pages()
+        w = v._page_widgets[0]
+        qtbot.waitUntil(lambda: w._pixmap is not None, timeout=5000)
+        lw, lh = v._page_pixel_size(0)
+        assert (w.width(), w.height()) == (lw, lh), "layout size must not change"
+        assert w._pixmap.devicePixelRatio() == 2.0
+        assert abs(w._pixmap.width() - 2 * lw) <= 2
+        assert abs(w._pixmap.deviceIndependentSize().width() - lw) <= 1
+
+        # The sync render after an edit follows the same rule.
+        v._render_page_sync(0)
+        assert w._pixmap.devicePixelRatio() == 2.0
+
+        # Very high zoom: the cap counts device pixels; parts land in place.
+        v.set_zoom(400)
+        qtbot.waitUntil(lambda: w._partial is not None, timeout=10000)
+        clip = w._partial[1]
+        assert w._partial[0].x() == clip[0] and w._partial[0].y() == clip[1]
+        assert abs(w._pixmap.deviceIndependentSize().width() - (clip[2] - clip[0])) <= 1
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_thumbnails_are_sharp_on_high_dpi(qtbot, many_pages):
+    from ui.sidebar import ThumbnailPanel
+    doc = fitz.open(str(many_pages))
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    try:
+        panel.devicePixelRatioF = lambda: 2.0
+        panel.set_document(doc)
+        panel._render_timer.stop()
+        thumb = panel._thumbnails[0]
+        thumb.set_pixmap(panel._render_thumbnail(0))
+        assert thumb._pixmap.devicePixelRatio() == 2.0
+        assert thumb._image_label.height() == 160
+        assert thumb._pixmap.height() == 320
+    finally:
+        panel._render_timer.stop()
+        doc.close()
+
+
 def _worker_pixels(v, page_num):
     return v._render_worker.render_samples(page_num, 40)
 
