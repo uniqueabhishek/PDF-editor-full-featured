@@ -99,9 +99,9 @@ def test_zoomed_out_shows_more_pages_than_zoomed_in(qtbot, many_pages):
     """Sanity-check the geometry maths against zoom."""
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._zoom = 1.0
+        v.set_zoom(100)
         zoomed_in = len(v._visible_page_indices())
-        v._zoom = 0.1
+        v.set_zoom(10)
         zoomed_out = len(v._visible_page_indices())
         assert zoomed_out > zoomed_in
         # Even zoomed far out the request cap must hold.
@@ -208,6 +208,45 @@ def test_very_high_zoom_renders_only_the_visible_part(qtbot, tmp_path):
                         timeout=10000)
         assert widget._partial[1][1] > 0, "still showing the top of the page"
         assert not v._page_cache, "partial renders must not be cached"
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_pages_never_overlap_even_past_qt_layout_limits(qtbot, many_pages):
+    """60 pages at 800% are ~842,000 px tall; a QLayout stops at 524,287 px
+    and used to stack the pages on top of each other."""
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v.set_zoom(800)
+        geos = [w.geometry() for w in v._page_widgets]
+        assert geos[-1].bottom() > 524_287
+        for a, b in zip(geos, geos[1:]):
+            assert b.top() == a.bottom() + 1 + 10, "pages overlap or drift apart"
+        # Visible pages at the very end come from the stored row positions.
+        bar = v.verticalScrollBar()
+        bar.setRange(0, geos[-1].bottom())
+        bar.setValue(geos[-1].top() + 10)
+        assert v._visible_page_indices() == [59]
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_two_page_and_single_page_modes_place_pages(qtbot, many_pages):
+    from ui.pdf_viewer import ViewMode
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v.set_view_mode(ViewMode.TWO_PAGE)
+        g = [w.geometry() for w in v._page_widgets]
+        assert g[0].top() == g[1].top() and g[1].left() > g[0].right()
+        assert g[2].top() > g[0].bottom()
+        assert v._visible_page_indices()[:2] == [0, 1]
+
+        v.set_view_mode(ViewMode.SINGLE_PAGE)
+        v.go_to_page(7)
+        shown = [i for i, w in enumerate(v._page_widgets) if not w.isHidden()]
+        assert shown == [7] and v._visible_page_indices() == [7]
     finally:
         v._render_worker.stop()
         model.close()

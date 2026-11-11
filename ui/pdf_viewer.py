@@ -3,7 +3,7 @@ Ultra PDF Editor - PDF Viewer Widget
 High-performance PDF rendering and interaction widget
 """
 from PyQt6.QtWidgets import (
-    QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QLabel,
+    QWidget, QScrollArea, QLabel,
     QRubberBand, QApplication, QMenu, QSizePolicy
 )
 from PyQt6.QtCore import (
@@ -13,6 +13,7 @@ from PyQt6.QtGui import (
     QPixmap, QImage, QPainter, QColor, QPen, QBrush,
     QWheelEvent, QMouseEvent, QKeyEvent
 )
+import bisect
 import fitz
 import logging
 import os
@@ -34,6 +35,26 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 _KEEP_RENDERED_MARGIN = 3
 # Pages render this long after the last zoom step (see set_zoom).
 _ZOOM_RENDER_DELAY_MS = 150
+# Page placement (see PDFViewer._position_pages).
+_PAGE_MARGIN = 20
+_PAGE_SPACING = 10
+_TWO_PAGE_GAP = 20
+_MAX_CONTAINER_HEIGHT = 16_777_215  # QWIDGETSIZE_MAX
+
+
+class _PageContainer(QWidget):
+    """Holds the page widgets; re-centres them when its width changes."""
+
+    def __init__(self, on_resize):
+        super().__init__()
+        self._on_resize = on_resize
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if event.oldSize().width() != event.size().width():
+            self._on_resize()
+
+
 # A page bigger than this (pixels) renders only its visible part: 8 M pixels is
 # ~24 MB, a fit-width page on a 4K screen; 800% zoom would be 139 M pixels.
 _MAX_RENDER_PIXELS = 8_000_000
@@ -370,8 +391,10 @@ class PageWidget(QLabel):
         self._pixmap = pixmap
         self._zoom = zoom
         self._is_loading = False
+        # The widget keeps the size set by set_placeholder(): the viewer lays
+        # pages out from those sizes, and a render can be a pixel larger
+        # (rounding), which used to shift every page below it.
         self.setPixmap(pixmap)
-        self.setFixedSize(pixmap.size())
 
     def set_partial_pixmap(self, pixmap: QPixmap, zoom: float, x: int, y: int,
                            clip: tuple):
@@ -788,14 +811,16 @@ class PDFViewer(QScrollArea):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Container widget for pages
-        self._container = QWidget()
+        # Container widget for pages. Pages are positioned by
+        # _position_pages(), not a QLayout: Qt layouts can't place anything
+        # beyond 524,287 px, so a long document at high zoom overlapped its
+        # pages, and the row positions kept here make finding the visible
+        # pages a binary search instead of a walk down the document.
+        self._container = _PageContainer(self._position_pages)
         self._container.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self._layout = QVBoxLayout(self._container)
-        self._layout.setSpacing(10)
-        self._layout.setContentsMargins(20, 20, 20, 20)
-        self._layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._rows: List[tuple] = []        # (top, height, [page indices])
+        self._row_bottoms: List[int] = []
 
         self.setWidget(self._container)
 
@@ -902,8 +927,10 @@ class PDFViewer(QScrollArea):
             # Create page widgets with placeholders
             self._create_page_widgets()
 
-            # Calculate initial zoom
+            # Calculate initial zoom, then size the pages for it (widgets no
+            # longer take their size from the first render).
             self._update_zoom()
+            self._apply_page_sizes()
 
             # Request visible pages to be rendered
             QTimer.singleShot(50, self._request_visible_pages)
@@ -1031,6 +1058,7 @@ class PDFViewer(QScrollArea):
         self._page_widgets.clear()
         self._shown_pages.clear()
         self._page_rects = []
+        self._position_pages()
 
     def _create_page_widgets(self):
         """Create widgets for all pages"""
@@ -1039,9 +1067,8 @@ class PDFViewer(QScrollArea):
 
         self._page_rects = self._doc_page_rects(self._doc)
         for i in range(len(self._doc)):
-            page_widget = self._make_page_widget(i)
-            self._layout.addWidget(page_widget)
-            self._page_widgets.append(page_widget)
+            self._page_widgets.append(self._make_page_widget(i))
+        self._position_pages()
 
     def _make_page_widget(self, i: int) -> "PageWidget":
         page_widget = PageWidget(i, self._render_dpi, self._container)
@@ -1080,7 +1107,7 @@ class PDFViewer(QScrollArea):
             w.clear_search_rects()
         self._page_rects = self._doc_page_rects(self._doc)
         self._current_page = min(self._current_page, len(self._page_widgets) - 1)
-        self._layout.activate()
+        self._position_pages()
         QTimer.singleShot(0, self._request_visible_pages)
 
     def pages_inserted(self, index: int, count: int = 1):
@@ -1090,9 +1117,7 @@ class PDFViewer(QScrollArea):
         if not self._render_worker.insert_pages(self._doc, index, count):
             self._schedule_worker_resync()
         for k in range(count):
-            w = self._make_page_widget(index + k)
-            self._layout.insertWidget(index + k, w)
-            self._page_widgets.insert(index + k, w)
+            self._page_widgets.insert(index + k, self._make_page_widget(index + k))
         self._shown_pages = {p + count if p >= index else p for p in self._shown_pages}
         self._after_structure_change()
 
@@ -1119,7 +1144,7 @@ class PDFViewer(QScrollArea):
         self._page_cache.pop(page_num, None)
         self._page_words_cache.pop(page_num, None)
         self._page_widgets[page_num].set_placeholder(*self._page_pixel_size(page_num))
-        self._layout.activate()
+        self._position_pages()
         if not self._patch_render_copy([page_num]):
             self._schedule_worker_resync()
 
@@ -1130,47 +1155,91 @@ class PDFViewer(QScrollArea):
         :meth:`_visible_page_indices`, so predicted page positions always agree
         with the sizes the layout is given.
         """
-        page = self._doc[page_num]
         scale = self._zoom * self._render_dpi / 72
-        width = int(page.rect.width * scale)
-        height = int(page.rect.height * scale)
+        if page_num < len(self._page_rects):
+            # Stored page rects: no page load per call.
+            x0, y0, x1, y1 = self._page_rects[page_num]
+            pw, ph = x1 - x0, y1 - y0
+        else:
+            rect = self._doc[page_num].rect
+            pw, ph = rect.width, rect.height
+        width = int(pw * scale)
+        height = int(ph * scale)
         if self._rotation in (90, 270):
             width, height = height, width
         return width, height
 
+    def _position_pages(self):
+        """Place every page widget and size the container to fit them.
+
+        Rows are one page each (continuous), pairs (two-page) or just the
+        current page (single page); each row is centred horizontally. Uses
+        the widgets' own sizes, which set_placeholder() keeps in step with the
+        zoom, so positions are exact as soon as this returns.
+        """
+        container = self._container
+        if self._view_mode == ViewMode.SINGLE_PAGE:
+            current = min(max(self._current_page, 0), len(self._page_widgets) - 1)
+            rows = [[current]] if self._page_widgets else []
+        elif self._view_mode == ViewMode.TWO_PAGE:
+            rows = [list(range(i, min(i + 2, len(self._page_widgets))))
+                    for i in range(0, len(self._page_widgets), 2)]
+        else:
+            rows = [[i] for i in range(len(self._page_widgets))]
+
+        specs = []
+        y = _PAGE_MARGIN
+        content_w = 0
+        for row in rows:
+            sizes = [self._page_widgets[i].size() for i in row]
+            row_w = sum(s.width() for s in sizes) + _TWO_PAGE_GAP * (len(row) - 1)
+            row_h = max(s.height() for s in sizes)
+            specs.append((y, row_h, row, sizes, row_w))
+            content_w = max(content_w, row_w)
+            y += row_h + _PAGE_SPACING
+        total_h = (y - _PAGE_SPACING if specs else 0) + _PAGE_MARGIN
+        content_w += 2 * _PAGE_MARGIN
+
+        container.setMinimumWidth(content_w)
+        container.setFixedHeight(min(total_h, _MAX_CONTAINER_HEIGHT))
+        width = max(container.width(), content_w)
+
+        placed = set()
+        for top, _h, row, sizes, row_w in specs:
+            x = (width - row_w) // 2
+            for i, size in zip(row, sizes, strict=True):
+                w = self._page_widgets[i]
+                w.move(x, top)
+                if w.isHidden():
+                    w.show()
+                placed.add(i)
+                x += size.width() + _TWO_PAGE_GAP
+        if len(placed) != len(self._page_widgets):
+            for i, w in enumerate(self._page_widgets):
+                if i not in placed and not w.isHidden():
+                    w.hide()
+
+        self._rows = [(top, h, row) for top, h, row, _s, _w in specs]
+        self._row_bottoms = [top + h for top, h, _row in self._rows]
+
     def _visible_page_indices(self) -> List[int]:
         """Indices of the pages intersecting the viewport, in view order.
 
-        Derived from the page sizes and the layout's own margins/spacing rather
-        than from each widget's ``geometry()``. Widget geometry is only valid
-        once the scroll area has sized its container and run the layout, which
-        happens a turn of the event loop *after* set_document() — before that
-        every widget still reports the same position, so a geometry-based test
-        reports the whole document as visible and queues every page for
-        rendering (a multi-second freeze on a long scan). Computing the
-        positions ourselves makes visibility correct on the very first pass.
+        A binary search over the row positions kept by _position_pages(), so
+        the cost no longer grows with how far down the document you are.
         """
         viewport_widget = self.viewport()
         v_scrollbar = self.verticalScrollBar()
-        if viewport_widget is None or v_scrollbar is None:
+        if viewport_widget is None or v_scrollbar is None or not self._rows:
             return []
-
-        margins = self._layout.contentsMargins()
-        spacing = self._layout.spacing()
         top = v_scrollbar.value()
         bottom = top + viewport_widget.height()
-
+        first = bisect.bisect_left(self._row_bottoms, top)
         visible: List[int] = []
-        y = margins.top()
-        for i in range(len(self._page_widgets)):
-            height = self._page_pixel_size(i)[1]
-            # Pages stack top-to-bottom, so once one starts past the viewport
-            # every later page is off-screen too.
-            if y > bottom:
+        for row_top, _h, row in self._rows[first:]:
+            if row_top > bottom:
                 break
-            if y + height >= top:
-                visible.append(i)
-            y += height + spacing
+            visible.extend(row)
         return visible
 
     def _cache_get(self, page_num: int) -> Optional[QPixmap]:
@@ -1338,6 +1407,12 @@ class PDFViewer(QScrollArea):
             self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
             self._shown_pages.add(page_num)
 
+    def _apply_page_sizes(self):
+        """Size every page for the current zoom/rotation, then place them."""
+        for i, page_widget in enumerate(self._page_widgets):
+            page_widget.set_placeholder(*self._page_pixel_size(i))
+        self._position_pages()
+
     def _render_all_pages(self, defer_render: bool = False):
         """Update all page sizes and request rendering (used when zoom changes).
 
@@ -1351,26 +1426,9 @@ class PDFViewer(QScrollArea):
         self._page_cache.clear()
         self._render_worker.clear_tasks()
 
-        # Update all page sizes with white placeholders
-        for i, page_widget in enumerate(self._page_widgets):
-            page = self._doc[i]
-            # Calculate new size based on zoom
-            width = int(page.rect.width * self._zoom * self._render_dpi / 72)
-            height = int(page.rect.height * self._zoom * self._render_dpi / 72)
-
-            # Apply rotation if needed
-            if self._rotation in (90, 270):
-                width, height = height, width
-
-            # Set placeholder with correct size
-            page_widget.set_placeholder(width, height)
-
-        # Recompute the layout so the new page sizes are reflected in each
-        # widget's geometry before _request_visible_pages() tests visibility
-        # against it. This used to spin QApplication.processEvents(), which does
-        # the same job only as a side effect while also re-entering the event
-        # loop mid-render; activate() is synchronous and side-effect free.
-        self._layout.activate()
+        # Update all page sizes with white placeholders, and re-place them so
+        # _request_visible_pages() tests visibility against the new positions.
+        self._apply_page_sizes()
 
         if defer_render:
             self._zoom_render_timer.start()
@@ -1915,8 +1973,12 @@ class PDFViewer(QScrollArea):
             return
 
         page_widget = self._page_widgets[page_num]
-        self.ensureWidgetVisible(page_widget)
         self._current_page = page_num
+        if self._view_mode == ViewMode.SINGLE_PAGE:
+            # Only the current page is laid out; show the new one.
+            self._position_pages()
+            self._request_visible_pages()
+        self.ensureWidgetVisible(page_widget)
         self.page_changed.emit(page_num)
 
     def next_page(self):
@@ -2014,62 +2076,9 @@ class PDFViewer(QScrollArea):
         """Rebuild the page layout based on current view mode"""
         if not self._doc_live() or not self._page_widgets:
             return
-
-        # Clear current layout
-        while self._layout.count():
-            item = self._layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget:
-                widget.setParent(None)
-            else:
-                nested_layout = item.layout()
-                if nested_layout:
-                    # Clear nested layout
-                    while nested_layout.count():
-                        sub_item = nested_layout.takeAt(0)
-                        if sub_item:
-                            sub_widget = sub_item.widget()
-                            if sub_widget:
-                                sub_widget.setParent(None)
-
-        if self._view_mode == ViewMode.CONTINUOUS:
-            # All pages in vertical layout
-            for page_widget in self._page_widgets:
-                page_widget.setParent(self._container)
-                self._layout.addWidget(page_widget)
-
-        elif self._view_mode == ViewMode.SINGLE_PAGE:
-            # Only show current page
-            for i, page_widget in enumerate(self._page_widgets):
-                page_widget.setParent(self._container)
-                if i == self._current_page:
-                    self._layout.addWidget(page_widget)
-                    page_widget.show()
-                else:
-                    page_widget.hide()
-
-        elif self._view_mode == ViewMode.TWO_PAGE:
-            # Show pages in pairs
-            for i in range(0, len(self._page_widgets), 2):
-                row_layout = QHBoxLayout()
-                row_layout.setSpacing(20)
-                row_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-                # Left page
-                self._page_widgets[i].setParent(self._container)
-                row_layout.addWidget(self._page_widgets[i])
-                self._page_widgets[i].show()
-
-                # Right page (if exists)
-                if i + 1 < len(self._page_widgets):
-                    self._page_widgets[i + 1].setParent(self._container)
-                    row_layout.addWidget(self._page_widgets[i + 1])
-                    self._page_widgets[i + 1].show()
-
-                self._layout.addLayout(row_layout)
-
+        # _position_pages() arranges rows per view mode (continuous, pairs,
+        # or only the current page) and hides the pages not shown.
+        self._position_pages()
         self._request_visible_pages()
 
     def get_page_words(self, page_num: int) -> List:
@@ -2342,7 +2351,7 @@ class PDFViewer(QScrollArea):
             self._page_rects[changed_page] = tuple(self._doc[changed_page].rect)
             self._page_widgets[changed_page].set_placeholder(
                 *self._page_pixel_size(changed_page))
-            self._layout.activate()
+            self._position_pages()
 
         # Immediate synchronous render of the current page for instant feedback,
         # straight from the editable document.
@@ -2472,8 +2481,12 @@ class PDFViewer(QScrollArea):
         """Handle resize"""
         super().resizeEvent(event)
         if self._zoom_mode in (ZoomMode.FIT_WIDTH, ZoomMode.FIT_PAGE, ZoomMode.FIT_HEIGHT):
+            old_zoom = self._zoom
             self._update_zoom()
-            self._render_timer.start(100)
+            if abs(self._zoom - old_zoom) > 0.001:
+                # Resize the pages for the new fit zoom now (positions must
+                # match what is drawn) and render once resizing pauses.
+                self._render_all_pages(defer_render=True)
 
     def contextMenuEvent(self, event):
         """Show context menu"""
