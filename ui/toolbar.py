@@ -12,6 +12,8 @@ from PyQt6.QtGui import QIcon, QColor, QFont, QPixmap, QPainter
 from typing import Dict, Any
 from enum import Enum
 
+from .icons import ICON_NAMES, icon
+
 
 class ToolMode(Enum):
     SELECT = "select"
@@ -159,14 +161,14 @@ class PageNavigator(QWidget):
 
         # First page
         self.first_btn = QToolButton()
-        self.first_btn.setText("⏮")
+        self.first_btn.setIcon(icon("first"))
         self.first_btn.setToolTip("First Page (Ctrl+Home)")
         self.first_btn.clicked.connect(self.first_page_clicked)
         layout.addWidget(self.first_btn)
 
         # Previous page
         self.prev_btn = QToolButton()
-        self.prev_btn.setText("◀")
+        self.prev_btn.setIcon(icon("prev"))
         self.prev_btn.setToolTip("Previous Page (Page Up)")
         self.prev_btn.clicked.connect(self.prev_page_clicked)
         layout.addWidget(self.prev_btn)
@@ -185,14 +187,14 @@ class PageNavigator(QWidget):
 
         # Next page
         self.next_btn = QToolButton()
-        self.next_btn.setText("▶")
+        self.next_btn.setIcon(icon("next"))
         self.next_btn.setToolTip("Next Page (Page Down)")
         self.next_btn.clicked.connect(self.next_page_clicked)
         layout.addWidget(self.next_btn)
 
         # Last page
         self.last_btn = QToolButton()
-        self.last_btn.setText("⏭")
+        self.last_btn.setIcon(icon("last"))
         self.last_btn.setToolTip("Last Page (Ctrl+End)")
         self.last_btn.clicked.connect(self.last_page_clicked)
         layout.addWidget(self.last_btn)
@@ -237,14 +239,14 @@ class SearchWidget(QWidget):
 
         # Previous result
         self.prev_btn = QToolButton()
-        self.prev_btn.setText("◀")
+        self.prev_btn.setIcon(icon("prev"))
         self.prev_btn.setToolTip("Previous Result")
         self.prev_btn.clicked.connect(self.search_prev)
         layout.addWidget(self.prev_btn)
 
         # Next result
         self.next_btn = QToolButton()
-        self.next_btn.setText("▶")
+        self.next_btn.setIcon(icon("next"))
         self.next_btn.setToolTip("Next Result")
         self.next_btn.clicked.connect(self.search_next)
         layout.addWidget(self.next_btn)
@@ -319,15 +321,15 @@ class MainToolbar(QToolBar):
 
     def _setup_ui(self):
         # === File Section ===
-        self._add_action("Open", "📂", "Open File (Ctrl+O)", self.open_requested)
-        self._add_action("Save", "💾", "Save (Ctrl+S)", self.save_requested)
-        self._add_action("Save As", "📥", "Save As (Ctrl+Shift+S)", self.save_as_requested)
+        self._add_action("Open", "open", "Open File (Ctrl+O)", self.open_requested)
+        self._add_action("Save", "save", "Save (Ctrl+S)", self.save_requested)
+        self._add_action("Save As", "save_as", "Save As (Ctrl+Shift+S)", self.save_as_requested)
 
         self.addSeparator()
 
         # === Edit Section ===
-        self._add_action("Undo", "↩", "Undo (Ctrl+Z)", self.undo_requested)
-        self._add_action("Redo", "↪", "Redo (Ctrl+Y)", self.redo_requested)
+        self._add_action("Undo", "undo", "Undo (Ctrl+Z)", self.undo_requested)
+        self._add_action("Redo", "redo", "Redo (Ctrl+Y)", self.redo_requested)
 
         self.addSeparator()
 
@@ -354,8 +356,8 @@ class MainToolbar(QToolBar):
         self.addSeparator()
 
         # === Rotation ===
-        self._add_action("Rotate Left", "↺", "Rotate Counter-Clockwise", self.rotate_ccw_requested)
-        self._add_action("Rotate Right", "↻", "Rotate Clockwise", self.rotate_cw_requested)
+        self._add_action("Rotate Left", "rotate_ccw", "Rotate Counter-Clockwise", self.rotate_ccw_requested)
+        self._add_action("Rotate Right", "rotate_cw", "Rotate Clockwise", self.rotate_cw_requested)
 
         self.addSeparator()
 
@@ -369,15 +371,15 @@ class MainToolbar(QToolBar):
         self.addSeparator()
 
         # === Print ===
-        self._add_action("Print", "🖨", "Print (Ctrl+P)", self.print_requested)
+        self._add_action("Print", "print", "Print (Ctrl+P)", self.print_requested)
 
         self.addSeparator()
 
 
-    def _add_action(self, name: str, icon_text: str, tooltip: str, signal: Any):
+    def _add_action(self, name: str, icon_name: str, tooltip: str, signal: Any):
         """Add an action button to the toolbar"""
         btn = QToolButton()
-        btn.setText(icon_text)
+        btn.setIcon(icon(icon_name))
         btn.setToolTip(tooltip)
         btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         btn.clicked.connect(signal.emit)
@@ -461,39 +463,39 @@ class AnnotationToolbar(QToolBar):
 
     def _setup_ui(self):
         # === Selection Tools ===
-        self._add_tool_button("Select", "👆", ToolMode.SELECT, "Select tool")
-        self._add_tool_button("Hand", "✋", ToolMode.HAND, "Hand tool (Pan)")
+        self._add_tool_button("Select", "select", ToolMode.SELECT, "Select tool")
+        self._add_tool_button("Hand", "hand", ToolMode.HAND, "Hand tool (Pan)")
         self._add_tool_button(
-            "Text Select", "I", ToolMode.TEXT_SELECT,
+            "Text Select", "text_select", ToolMode.TEXT_SELECT,
             "Text: drag to select, double-click a paragraph to edit it")
 
         self.addSeparator()
 
         # === Text Markup ===
-        self._add_tool_button("Highlight", "🖍", ToolMode.HIGHLIGHT, "Highlight text")
-        self._add_tool_button("Underline", "U̲", ToolMode.UNDERLINE, "Underline text")
-        self._add_tool_button("Strikethrough", "S̶", ToolMode.STRIKETHROUGH, "Strikethrough text")
+        self._add_tool_button("Highlight", "highlight", ToolMode.HIGHLIGHT, "Highlight text")
+        self._add_tool_button("Underline", "underline", ToolMode.UNDERLINE, "Underline text")
+        self._add_tool_button("Strikethrough", "strikethrough", ToolMode.STRIKETHROUGH, "Strikethrough text")
 
         self.addSeparator()
 
         # === Annotations ===
-        self._add_tool_button("Text Box", "T", ToolMode.TEXT_BOX, "Add text box")
-        self._add_tool_button("Sticky Note", "📝", ToolMode.STICKY_NOTE, "Add sticky note")
+        self._add_tool_button("Text Box", "text_box", ToolMode.TEXT_BOX, "Add text box")
+        self._add_tool_button("Sticky Note", "sticky_note", ToolMode.STICKY_NOTE, "Add sticky note")
 
         self.addSeparator()
 
         # === Shapes ===
-        self._add_tool_button("Rectangle", "▢", ToolMode.RECTANGLE, "Draw rectangle")
-        self._add_tool_button("Circle", "○", ToolMode.CIRCLE, "Draw circle/ellipse")
-        self._add_tool_button("Line", "╱", ToolMode.LINE, "Draw line")
-        self._add_tool_button("Arrow", "→", ToolMode.ARROW, "Draw arrow")
-        self._add_tool_button("Freehand", "✏", ToolMode.FREEHAND, "Freehand drawing")
+        self._add_tool_button("Rectangle", "rectangle", ToolMode.RECTANGLE, "Draw rectangle")
+        self._add_tool_button("Circle", "circle", ToolMode.CIRCLE, "Draw circle/ellipse")
+        self._add_tool_button("Line", "line", ToolMode.LINE, "Draw line")
+        self._add_tool_button("Arrow", "arrow", ToolMode.ARROW, "Draw arrow")
+        self._add_tool_button("Freehand", "freehand", ToolMode.FREEHAND, "Freehand drawing")
 
         self.addSeparator()
 
         # === Redact & Stamp ===
         self._add_tool_button("Erase Selection", "Erase Selection", ToolMode.REDACT, "Draw a rectangle to permanently erase that area")
-        self._add_tool_button("Stamp", "🔖", ToolMode.STAMP, "Add stamp")
+        self._add_tool_button("Stamp", "stamp", ToolMode.STAMP, "Add stamp")
 
         self.addSeparator()
 
@@ -598,9 +600,12 @@ class AnnotationToolbar(QToolBar):
         return line
 
     def _add_tool_button(self, name: str, icon_text: str, mode: ToolMode, tooltip: str):
-        """Add a tool button"""
+        """Add a tool button (``icon_text``: an icon name, or a text label)"""
         btn = QToolButton()
-        btn.setText(icon_text)
+        if icon_text in ICON_NAMES:
+            btn.setIcon(icon(icon_text))
+        else:
+            btn.setText(icon_text)
         btn.setToolTip(tooltip)
         btn.setCheckable(True)
         btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)

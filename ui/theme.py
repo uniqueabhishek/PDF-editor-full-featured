@@ -39,7 +39,21 @@ def resolve_theme(theme: str) -> str:
         return "light"
 
 
+_current = "light"
+
+
+def current_theme() -> str:
+    """The resolved theme last applied: 'light' or 'dark'.
+
+    The stylesheet sets the colours, not the palette (which follows the OS),
+    so drawn icons ask this rather than the palette which colour to use.
+    """
+    return _current
+
+
 def apply_theme(app, theme: str) -> None:
     """Apply the light/dark stylesheet for ``theme`` to the QApplication."""
+    global _current
     resolved = resolve_theme(theme)
+    _current = resolved
     app.setStyleSheet(_load_stylesheet(f"{resolved}_theme.qss"))
