@@ -1,0 +1,49 @@
+# Checks run by git before each commit (ruff, mypy) and before each push (tests).
+#
+#   uv sync
+#   uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+#
+# ruff and mypy run from the project's own environment (`uv run --locked`), so
+# their versions are the ones pinned in uv.lock and mypy can see PyQt6's stubs.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+      - id: check-merge-conflict
+      # Test PDFs and renders belong in the scratch folder, not the repo.
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --locked ruff check --fix
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --locked ruff format
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        # The whole project, not just the staged files: a change in one module
+        # can break the types of another.
+        entry: uv run --locked mypy .
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        # About 1.5 minutes for the full suite, so on push rather than commit.
+        entry: uv run --locked python -m pytest -p no:faulthandler -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

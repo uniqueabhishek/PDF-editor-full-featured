@@ -1,0 +1,24 @@
+{
+    // Use this project's virtualenv, not the global install, so Pylance
+    // resolves PyQt6 and PyMuPDF from the locked environment.
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.analysis.typeCheckingMode": "standard",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll.ruff": "explicit"
+        }
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/.ruff_cache": true,
+        "**/.mypy_cache": true
+    }
+}

@@ -27,7 +27,9 @@ wheels/
 
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
@@ -51,6 +53,8 @@ ehthumbs.db
 
 # Test / coverage
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 
