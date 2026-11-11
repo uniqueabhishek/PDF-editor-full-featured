@@ -149,6 +149,46 @@ def test_autosave_skips_when_nothing_changed(main_window, make_pdf, qtbot):
     assert len(calls) == 3
 
 
+def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
+        main_window, tmp_path, qtbot, monkeypatch):
+    pytesseract = pytest.importorskip("pytesseract")
+    pytest.importorskip("PIL")
+    import fitz
+    import ui.handlers.tools_handler as th
+    import utils.tesseract
+
+    # Page 0 has text; pages 1-2 are "scans" (an image, no text layer).
+    path = tmp_path / "mixed.pdf"
+    d = fitz.open()
+    d.new_page().insert_text((72, 72), "already has text")
+    for _ in range(2):
+        pg = d.new_page()
+        pg.draw_rect(fitz.Rect(72, 72, 300, 120), color=(0, 0, 0), fill=(0, 0, 0))
+    d.save(str(path))
+    d.close()
+
+    seen = []
+
+    def fake_ocr(img, output_type=None, **_k):
+        seen.append(img.size)
+        return {"text": ["scanned"], "left": [144], "top": [144],
+                "height": [30], "width": [100]}
+
+    monkeypatch.setattr(utils.tesseract, "configure_tesseract", lambda: True)
+    monkeypatch.setattr(pytesseract, "image_to_data", fake_ocr)
+    monkeypatch.setattr(th.QMessageBox, "question",
+                        staticmethod(lambda *a, **k: th.QMessageBox.StandardButton.Yes))
+
+    win = main_window
+    win._open_file(str(path))
+    win._run_ocr()
+    _wait_idle(qtbot, win)
+    assert len(seen) == 2, "OCR ran on the page that already had text"
+    assert seen[0] == (int(595 * 2), int(842 * 2))
+    texts = [win._document.doc[i].get_text().strip() for i in range(3)]
+    assert texts == ["already has text", "scanned", "scanned"]
+
+
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
     monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",

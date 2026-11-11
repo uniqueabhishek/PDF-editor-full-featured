@@ -183,8 +183,9 @@ class ToolsHandlerMixin(_MixinBase):
         progress.setWindowTitle("OCR Processing")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
+        skipped = [0]
+
         def work(progress_cb, is_cancelled):
-            import io
             import pytesseract
             from PIL import Image
             wdoc = fitz.open(stream=src_bytes, filetype="pdf")
@@ -194,9 +195,17 @@ class ToolsHandlerMixin(_MixinBase):
                         break
                     progress_cb(i, total)
                     page = wdoc[i]
+                    # A page that already has a text layer (born-digital, or
+                    # OCR'd before) gains nothing but a duplicate layer, which
+                    # doubles every search hit; skip it.
+                    if page.get_text("text").strip():
+                        skipped[0] += 1
+                        continue
                     zoom = 2  # higher resolution for better OCR
-                    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+                    # Hand the pixels straight to PIL; encoding a PNG only to
+                    # decode it again cost ~0.8 s per scanned page.
+                    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                     # Position each recognised word so the invisible text layer
                     # lines up with the page.
                     data = pytesseract.image_to_data(
@@ -215,11 +224,17 @@ class ToolsHandlerMixin(_MixinBase):
                 wdoc.close()
 
         def apply_result(new_bytes):
+            if skipped[0] == total:
+                self._statusbar.showMessage(
+                    "Every page already has text - nothing to OCR", 4000)
+                return
             # Apply the OCR'd bytes back on the GUI thread, undoably.
             if self._run_snapshot_op(
                     "OCR", lambda: self._document.restore(new_bytes)) is not None:
+                note = (f" ({skipped[0]} page(s) already had text and were skipped)"
+                        if skipped[0] else "")
                 self._statusbar.showMessage(
-                    "OCR completed - document is now searchable", 3000)
+                    "OCR completed - document is now searchable" + note, 4000)
             else:
                 QMessageBox.critical(
                     self, "OCR Error",
