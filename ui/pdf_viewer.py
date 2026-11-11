@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # never reached in normal use; it exists so a not-yet-laid-out geometry can't
 # queue an entire document and stall the UI (see _request_visible_pages).
 _MAX_QUEUED_PAGE_RENDERS = 12
+# Pages within this many of the viewport keep their rendered bitmap; the rest
+# are released so memory stays flat however far the user scrolls.
+_KEEP_RENDERED_MARGIN = 3
 
 
 class ViewMode(Enum):
@@ -300,6 +303,20 @@ class PageWidget(QLabel):
         # Drop any previous pixmap; the stylesheet draws the white page + border.
         self.clear()
         self.setFixedSize(width, height)
+
+    def release_pixmap(self):
+        """Free the rendered bitmap of a page that has scrolled far off screen.
+
+        Keeps the widget's size (so the layout does not move) and its zoom, and
+        leaves ``_is_loading`` alone: a page already marked stale stays stale,
+        and a fresh one may be restored from the viewer's LRU cache when it
+        scrolls back. Without this every page ever viewed kept its full-size
+        bitmap (~5 MB at fit-width), so scrolling a 300-page file reached 1.8 GB.
+        """
+        if self._pixmap is None:
+            return
+        self._pixmap = None
+        self.clear()
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
         """Convert widget position to PDF page coordinates (72 DPI)"""
@@ -582,6 +599,8 @@ class PDFViewer(QScrollArea):
         self._page_widgets: List[PageWidget] = []
         # LRU cache keyed by page number; most-recently-used at the end.
         self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
+        # Pages whose widget currently holds a bitmap (see _release_offscreen_pixmaps).
+        self._shown_pages: set = set()
         self._cache_size = 10
 
         # Search highlighting: results from PDFDocument.search_text plus the
@@ -786,6 +805,7 @@ class PDFViewer(QScrollArea):
             widget.setParent(None)
             widget.deleteLater()
         self._page_widgets.clear()
+        self._shown_pages.clear()
 
     def _create_page_widgets(self):
         """Create widgets for all pages"""
@@ -913,6 +933,8 @@ class PDFViewer(QScrollArea):
         if not visible:
             return
 
+        self._release_offscreen_pixmaps(visible)
+
         # Render outwards from the middle of the screen: the page the user is
         # looking at should arrive first.
         center = visible[len(visible) // 2]
@@ -925,6 +947,7 @@ class PDFViewer(QScrollArea):
             cached = None if page_widget._is_loading else self._cache_get(i)
             if cached is not None:
                 page_widget.set_pixmap(cached, self._zoom)
+                self._shown_pages.add(i)
                 continue
 
             # Backstop: never hand the worker more than a screenful at once, so
@@ -942,6 +965,19 @@ class PDFViewer(QScrollArea):
                 i, self._zoom, priority=1000 - abs(i - center))
             queued += 1
 
+    def _release_offscreen_pixmaps(self, visible: List[int]) -> None:
+        """Drop bitmaps of pages more than a few pages away from the viewport.
+
+        Pages just outside the view keep theirs so short scrolls stay instant;
+        released pages come back from the LRU cache or a fresh render.
+        """
+        lo = visible[0] - _KEEP_RENDERED_MARGIN
+        hi = visible[-1] + _KEEP_RENDERED_MARGIN
+        for i in [p for p in self._shown_pages if p < lo or p > hi]:
+            if i < len(self._page_widgets):
+                self._page_widgets[i].release_pixmap()
+            self._shown_pages.discard(i)
+
     def _on_page_rendered(self, page_num: int, image: QImage, zoom: float):
         """Handle page rendered from background worker"""
         # Check if zoom still matches (ignore stale renders)
@@ -954,6 +990,7 @@ class PDFViewer(QScrollArea):
 
             # Update widget
             self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
+            self._shown_pages.add(page_num)
 
     def _render_all_pages(self):
         """Update all page sizes and request rendering (used when zoom changes)"""
@@ -1973,6 +2010,7 @@ class PDFViewer(QScrollArea):
             self._cache_put(page_num, qpixmap)
             if page_num < len(self._page_widgets):
                 self._page_widgets[page_num].set_pixmap(qpixmap, self._zoom)
+                self._shown_pages.add(page_num)
         except Exception:
             logger.exception("Error in sync render of page %s", page_num)
 

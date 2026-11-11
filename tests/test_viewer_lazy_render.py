@@ -131,6 +131,31 @@ def test_request_is_capped_when_geometry_is_degenerate(qtbot, many_pages):
         model.close()
 
 
+def test_scrolling_away_releases_page_bitmaps(qtbot, many_pages):
+    """Pages far from the viewport must drop their bitmap so memory stays flat."""
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        for i in range(10):
+            v._render_page_sync(i)
+        assert all(v._page_widgets[i]._pixmap is not None for i in range(10))
+        size_before = v._page_widgets[0].size()
+
+        page_h = v._page_pixel_size(0)[1]
+        scrollbar = v.verticalScrollBar()
+        scrollbar.setRange(0, page_h * len(v._page_widgets))
+        scrollbar.setValue(page_h * 40)
+        v._request_visible_pages()
+
+        held = [i for i, w in enumerate(v._page_widgets) if w._pixmap is not None]
+        assert not any(i < 30 for i in held), f"pages still holding bitmaps: {held}"
+        # The released page keeps its size so the layout does not jump.
+        assert v._page_widgets[0].size() == size_before
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
     """Selecting a page must not call setStyleSheet on every thumbnail."""
     from ui.sidebar import ThumbnailPanel
