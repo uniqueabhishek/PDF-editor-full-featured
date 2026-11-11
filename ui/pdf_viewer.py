@@ -689,7 +689,7 @@ class PDFViewer(QScrollArea):
     annotation_added = pyqtSignal(int, str, dict)  # page, type, data
     annotation_create_requested = pyqtSignal(
         int, str, object, dict)  # page, type, rect/points, data
-    document_modified = pyqtSignal()
+    document_modified = pyqtSignal(int)  # page changed in place (-1: unknown)
     text_selected = pyqtSignal(str)  # selected text
     selection_copied = pyqtSignal(int)  # number of characters copied
     selection_needs_ocr = pyqtSignal()  # dragged on a page with no text layer
@@ -1563,16 +1563,16 @@ class PDFViewer(QScrollArea):
             # Delete the annotation
             page = self._doc[page_num]
             page.delete_annot(annot)
-            self.document_modified.emit()
-            self.refresh()
+            self.document_modified.emit(page_num)
+            self.refresh(page_num)
         elif result == QDialog.DialogCode.Accepted:
             # Update the annotation text
             new_text = text_edit.toPlainText().strip()
             if new_text:
                 annot.set_info(content=new_text)
                 annot.update()
-                self.document_modified.emit()
-                self.refresh()
+                self.document_modified.emit(page_num)
+                self.refresh(page_num)
 
     def _style_data(self) -> Dict[str, Any]:
         """Current annotation style (color/opacity/width/font) from the toolbar.
@@ -1794,8 +1794,8 @@ class PDFViewer(QScrollArea):
                     deleted = True
 
             if deleted:
-                self.document_modified.emit()
-                self.refresh()
+                self.document_modified.emit(page_num)
+                self.refresh(page_num)
 
         except Exception:
             logger.exception("Error erasing annotation")

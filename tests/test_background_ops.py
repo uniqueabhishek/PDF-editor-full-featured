@@ -102,6 +102,28 @@ def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, ma
     assert isinstance(cmd, DocumentSnapshotCommand)
 
 
+def test_annotation_edit_refreshes_only_that_thumbnail(main_window, make_pdf, qtbot):
+    from PyQt6.QtCore import QRectF
+    win = main_window
+    win.resize(1200, 900)
+    win.show()
+    win._open_file(str(make_pdf("doc.pdf", pages=4)))
+    panel = win._sidebar.thumbnail_panel
+    qtbot.waitUntil(lambda: all(t._pixmap is not None for t in panel._thumbnails),
+                    timeout=5000)
+
+    def stale():
+        return [i for i, t in enumerate(panel._thumbnails) if t._pixmap is None]
+
+    win._create_annotation(1, "rectangle", QRectF(50, 50, 100, 80), {})
+    assert stale() == [1]
+    qtbot.waitUntil(lambda: stale() == [], timeout=5000)
+
+    # An in-place edit reported by the viewer for one page does the same.
+    win._viewer.document_modified.emit(2)
+    assert stale() == [2]
+
+
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
     monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",

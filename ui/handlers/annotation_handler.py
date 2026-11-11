@@ -77,6 +77,7 @@ class AnnotationHandlerMixin(_MixinBase):
             # The edit is in place; refresh the render worker's copy and re-render
             # just this page (no full reload, so the view position is preserved).
             self._viewer.invalidate_render_copy(page_num)
+            self._sidebar.page_changed_in_place(page_num)
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage(f"Added {annot_type} annotation", 2000)

@@ -729,12 +729,16 @@ class MainWindow(
         self._main_toolbar.set_zoom(zoom)
         self._zoom_label.setText(f"{zoom:.0f}%")
 
-    def _on_document_modified(self):
-        """Handle document modification"""
+    def _on_document_modified(self, page_num: int = -1):
+        """Handle an in-place edit made in the viewer (on ``page_num``)."""
         self._is_modified = True
         self._update_title()
-        # Refresh sidebar thumbnails to reflect changes
-        self._sidebar.refresh()
+        # Re-render just that page's thumbnail; throwing all of them away made
+        # every annotation edit re-render a screenful (~180 ms on scans).
+        if page_num >= 0:
+            self._sidebar.page_changed_in_place(page_num)
+        else:
+            self._sidebar.refresh()
 
     # ==================== Delete-selection mode ====================
 
