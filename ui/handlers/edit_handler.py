@@ -9,7 +9,8 @@ Mixed into MainWindow; relies on ``self._history_manager``, ``self._viewer``,
 """
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from ..dialogs import FindDialog, FindReplaceDialog
 
@@ -305,18 +306,40 @@ class EditHandlerMixin(_MixinBase):
         if not search:
             self._statusbar.showMessage("Find some text first", 2000)
             return
-        cmd = self._run_snapshot_op(
-            "Replace all",
-            lambda: self._document.replace_text_all(
-                search, replacement, case_sensitive))
-        if cmd is not None:
-            count = cmd.result
+
+        # Redacting every match took over a minute on a 300-page file with the
+        # window frozen. Run it on a private copy in the background with
+        # progress and Cancel, then swap the result in as one undoable step.
+        try:
+            data, password = self._document.worker_copy()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not prepare document:\n{e}")
+            return
+        progress = QProgressDialog(
+            "Replacing text...", "Cancel", 0, self._document.page_count, self)
+        progress.setWindowTitle("Replace All")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+
+        def work(progress_cb, is_cancelled):
+            return self._document.replace_text_all_in_copy(
+                data, password, search, replacement, case_sensitive,
+                progress_cb, is_cancelled)
+
+        def apply_result(result):
+            new_bytes, count = result
+            if new_bytes is None:
+                self._statusbar.showMessage("No occurrences replaced", 3000)
+                return
+            if self._run_snapshot_op(
+                    "Replace all",
+                    lambda: self._document.restore(new_bytes)) is None:
+                QMessageBox.critical(
+                    self, "Error", "Failed to replace text. See log for details.")
+                return
             self._do_search(search, case_sensitive)  # matches are gone now
-            self._statusbar.showMessage(
-                f"Replaced {count} occurrence(s)", 3000)
-        else:
-            QMessageBox.critical(
-                self, "Error", "Failed to replace text. See log for details.")
+            self._statusbar.showMessage(f"Replaced {count} occurrence(s)", 3000)
+
+        self._run_background(work, progress, apply_result, error_title="Replace All")
 
     def _on_find_closed(self):
         """Handle find dialog closed"""

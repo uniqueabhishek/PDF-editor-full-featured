@@ -160,6 +160,59 @@ def test_replace_text_all(tmp_path):
         doc.close()
 
 
+def test_replace_all_keeps_each_lines_font_size(tmp_path, monkeypatch):
+    """Replacement text takes the size of its own line, not a neighbour's."""
+    queued = []
+    real = PDFDocument._queue_replacement
+    monkeypatch.setattr(PDFDocument, "_queue_replacement", staticmethod(
+        lambda page, rect, text, size: (queued.append(size),
+                                        real(page, rect, text, size))))
+    p = tmp_path / "sizes.pdf"
+    d = fitz.open()
+    pg = d.new_page()
+    y = 80
+    for fs in (8, 11, 14, 20):
+        pg.insert_text((72, y), f"tempor at {fs}", fontsize=fs)
+        y += fs * 1.6
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        assert doc.replace_text_all("tempor", "XX") == 4
+        assert [round(s) for s in queued] == [8, 11, 14, 20]
+    finally:
+        doc.close()
+
+
+def test_replace_all_in_copy_reports_progress_and_cancels(tmp_path):
+    p = tmp_path / "copy.pdf"
+    d = fitz.open()
+    for _ in range(4):
+        d.new_page().insert_text((50, 100), "alpha beta", fontsize=12)
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        data, pw = doc.worker_copy()
+        seen = []
+        new_bytes, count = PDFDocument.replace_text_all_in_copy(
+            data, pw, "alpha", "omega", False, lambda i, n: seen.append((i, n)))
+        assert count == 4 and seen == [(i, 4) for i in range(4)]
+        assert doc.search_text("omega") == [], "the live document was touched"
+        doc.restore(new_bytes)
+        assert len(doc.search_text("omega")) == 4
+
+        cancelled = PDFDocument.replace_text_all_in_copy(
+            data, pw, "alpha", "omega", False, None, lambda: True)
+        assert cancelled == (None, 0)
+    finally:
+        doc.close()
+
+
 def test_replace_text_all_case_sensitive(tmp_path):
     p = tmp_path / "repc.pdf"
     d = fitz.open()

@@ -1007,17 +1007,56 @@ class PDFDocument:
         original font/styling is not preserved — the honest limitation of PDF
         text replacement.
         """
-        fontsize = self._estimate_fontsize(page, rect)
+        self._queue_replacement(page, rect, replacement,
+                                self._estimate_fontsize(page, rect))
+
+    @staticmethod
+    def _queue_replacement(page: fitz.Page, rect: fitz.Rect, replacement: str,
+                           fontsize: float) -> None:
         page.add_redact_annot(
             rect, text=replacement, fontname="helv", fontsize=fontsize,
             text_color=(0, 0, 0), fill=(1, 1, 1), align=fitz.TEXT_ALIGN_LEFT)
 
+    @staticmethod
+    def _page_span_sizes(page: fitz.Page) -> List[Tuple[fitz.Rect, float]]:
+        """Every text span's bbox and font size, from one extraction."""
+        d = page.get_text("dict")
+        return [(fitz.Rect(s["bbox"]), s["size"])
+                for b in d.get("blocks", []) if b.get("type") == 0
+                for line in b.get("lines", [])
+                for s in line.get("spans", [])]
+
+    @staticmethod
+    def _fontsize_from_spans(spans: List[Tuple[fitz.Rect, float]],
+                             rect: fitz.Rect) -> float:
+        """Font size of the text under ``rect``, judged from its middle band.
+
+        Testing only the middle half of the hit's height keeps the line above
+        or below (whose bboxes overlap a little) from being picked up, which
+        the old clip-based estimate did: 11 pt text was re-set at 8 pt.
+        """
+        cy = (rect.y0 + rect.y1) / 2
+        band = fitz.Rect(rect.x0, cy - rect.height * 0.25,
+                         rect.x1, cy + rect.height * 0.25)
+        sizes = [size for bbox, size in spans if bbox.intersects(band)]
+        if sizes:
+            return max(1.0, min(sizes))
+        return max(1.0, rect.height * 0.8)
+
     def replace_text_all(self, search: str, replacement: str,
-                         case_sensitive: bool = False) -> int:
+                         case_sensitive: bool = False,
+                         progress_cb: Optional[Any] = None,
+                         is_cancelled: Optional[Any] = None) -> int:
         """Replace every occurrence of ``search`` with ``replacement``.
 
         Uses redaction: the original text is removed and the replacement drawn
         in its place. Returns the number of occurrences replaced.
+
+        Font sizes come from one text extraction per page (it used to be one
+        per hit), and redaction leaves images and line art alone: replacing
+        text must not erase what is drawn underneath it, and skipping that
+        processing is faster. ``progress_cb(done, total)`` and
+        ``is_cancelled()`` let a background worker report and stop.
         """
         if self._doc is None:
             raise ValueError("No document is open")
@@ -1025,19 +1064,56 @@ class PDFDocument:
             return 0
 
         count = 0
-        for page_num in range(self.page_count):
+        total = self.page_count
+        for page_num in range(total):
+            if is_cancelled is not None and is_cancelled():
+                break
+            if progress_cb is not None:
+                progress_cb(page_num, total)
             page = self._doc[page_num]
             rects = self._find_on_page(page, search, case_sensitive)
             if not rects:
                 continue
+            spans = self._page_span_sizes(page)
             for r in rects:
-                self._redact_replace_rect(page, r, replacement)
+                self._queue_replacement(page, r, replacement,
+                                        self._fontsize_from_spans(spans, r))
                 count += 1
-            page.apply_redactions()
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE,
+                                  graphics=fitz.PDF_REDACT_LINE_ART_NONE)
 
         if count:
             self._is_modified = True
         return count
+
+    def worker_copy(self) -> Tuple[bytes, Optional[str]]:
+        """Snapshot bytes plus the password needed to open them, for a worker."""
+        return self.snapshot(), self._password
+
+    @staticmethod
+    def replace_text_all_in_copy(data: bytes, password: Optional[str],
+                                 search: str, replacement: str,
+                                 case_sensitive: bool,
+                                 progress_cb: Optional[Any] = None,
+                                 is_cancelled: Optional[Any] = None
+                                 ) -> Tuple[Optional[bytes], int]:
+        """Replace All on a private copy, for running off the GUI thread.
+
+        ``data`` is a :meth:`snapshot`. Returns the edited document's snapshot
+        bytes (None if nothing changed or the run was cancelled) and the count.
+        """
+        work = PDFDocument()
+        work._doc = fitz.open(stream=data, filetype="pdf")
+        try:
+            if work._doc.needs_pass and password:
+                work._doc.authenticate(password)
+            count = work.replace_text_all(search, replacement, case_sensitive,
+                                          progress_cb, is_cancelled)
+            if count == 0 or (is_cancelled is not None and is_cancelled()):
+                return None, count
+            return work.snapshot(), count
+        finally:
+            work.close()
 
     def replace_text_one(self, page_num: int,
                          rect: Tuple[float, float, float, float],
