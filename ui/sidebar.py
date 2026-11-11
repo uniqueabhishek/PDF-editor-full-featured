@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 # MIME type used to carry a page index during thumbnail drag-and-drop reorder.
 _PAGE_MIME = "application/x-pdf-page"
+# Thumbnails rendered per UI-thread pass before yielding to the event loop.
+_MAX_THUMBNAILS_PER_PASS = 8
 
 
 @dataclass
@@ -412,16 +414,33 @@ class ThumbnailPanel(QScrollArea):
         """Render thumbnails that are visible"""
         if not self._doc_live() or not self._thumbnails:
             return
+        # Hidden panel (another sidebar tab): showEvent re-arms the timer.
+        if not self.isVisible():
+            return
 
         viewport_widget = self.viewport()
         v_scrollbar = self.verticalScrollBar()
         if not viewport_widget or not v_scrollbar:
             return
+
+        # Right after set_document() the new thumbnails have not been laid out
+        # yet and all report the same position, so every page looked visible and
+        # the whole document was rendered on the UI thread at open (~1.5 s
+        # freeze on 300 pages). Lay out first; if positions are still not
+        # distinct, try again on the next pass.
+        self._layout.activate()
+        if (len(self._thumbnails) > 1
+                and self._thumbnails[1].geometry().top()
+                <= self._thumbnails[0].geometry().top()):
+            self._render_timer.start(50)
+            return
+
         viewport = viewport_widget.rect()
         scroll_pos = v_scrollbar.value()
         viewport_top = viewport.top()
         viewport_bottom = viewport.bottom()
 
+        rendered = 0
         for thumb in self._thumbnails:
             widget_rect = thumb.geometry()
             widget_rect.translate(0, -scroll_pos)
@@ -433,8 +452,18 @@ class ThumbnailPanel(QScrollArea):
             if widget_rect.bottom() < viewport_top:
                 continue
             if thumb._pixmap is None:
+                # Backstop: a screenful at most per pass, then yield to the
+                # event loop so the UI never stalls on a run of thumbnails.
+                if rendered >= _MAX_THUMBNAILS_PER_PASS:
+                    self._render_timer.start(0)
+                    break
                 pixmap = self._render_thumbnail(thumb.page_num)
                 thumb.set_pixmap(pixmap)
+                rendered += 1
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._render_timer.start(50)
 
     def _render_thumbnail(self, page_num: int) -> QPixmap:
         """Render a single thumbnail"""
