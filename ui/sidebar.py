@@ -201,7 +201,14 @@ class ThumbnailWidget(QFrame):
         self._reposition_badges()
 
     def set_selected(self, selected: bool):
-        """Set selection state"""
+        """Set selection state.
+
+        No-op when unchanged: callers loop over every thumbnail on each page
+        change, and ``setStyleSheet`` costs ~0.6 ms a call, so restyling all of
+        them made each page change take 0.2-0.5 s on a 300-page file.
+        """
+        if selected == self._selected:
+            return
         self._selected = selected
         self._update_style()
 

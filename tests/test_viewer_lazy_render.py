@@ -129,3 +129,23 @@ def test_request_is_capped_when_geometry_is_degenerate(qtbot, many_pages):
     finally:
         v._render_worker.stop()
         model.close()
+
+
+def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
+    """Selecting a page must not call setStyleSheet on every thumbnail."""
+    from ui.sidebar import ThumbnailPanel
+
+    doc = fitz.open(str(many_pages))
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    try:
+        panel.set_document(doc)
+        panel.set_current_page(0)
+        calls = []
+        for t in panel._thumbnails:
+            t._update_style = (lambda n=t.page_num: calls.append(n))
+        panel.set_current_page(5)
+        assert sorted(calls) == [0, 5], f"restyled {len(calls)} thumbnails"
+    finally:
+        panel._render_timer.stop()
+        doc.close()
