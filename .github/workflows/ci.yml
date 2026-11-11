@@ -20,7 +20,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # pyproject.toml sets python-preference = "only-system", so uv needs a
       # python.org interpreter on the runner rather than downloading its own.
