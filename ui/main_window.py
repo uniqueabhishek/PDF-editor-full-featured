@@ -822,7 +822,9 @@ class MainWindow(
             self._document, operation,
             command_type or CommandType.METADATA_CHANGE, description)
         if self._history_manager.execute(command):
-            self._load_document_to_viewer()
+            # The after-snapshot already matches the document; reuse it for the
+            # render worker instead of serializing everything a third time.
+            self._load_document_to_viewer(render_source=command.last_restored)
             self._is_modified = True
             self._update_title()
             return command

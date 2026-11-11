@@ -84,7 +84,9 @@ class FileHandlerMixin(_MixinBase):
                 else:
                     return
 
-            self._load_document_to_viewer()
+            # Freshly opened and unmodified, so the render worker can open the
+            # file itself rather than have the whole document re-serialized.
+            self._load_document_to_viewer(render_source=str(path))
             self._current_file = path
             self._is_modified = False
             self._clear_autosave()  # newly opened doc has no pending recovery
@@ -101,11 +103,16 @@ class FileHandlerMixin(_MixinBase):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
 
-    def _load_document_to_viewer(self):
-        """Load the current document into the viewer"""
+    def _load_document_to_viewer(self, render_source=None):
+        """Load the current document into the viewer.
+
+        ``render_source`` (file path or snapshot bytes exactly matching the
+        document) spares the viewer a full re-serialize for its render worker.
+        """
         if self._document.is_open and self._document.doc:
             self._viewer.set_document(self._document.doc, str(
-                self._current_file) if self._current_file else "")
+                self._current_file) if self._current_file else "",
+                render_source=render_source)
             self._sidebar.set_document(self._document.doc)
             self._main_toolbar.set_page_count(self._document.page_count)
             # Bind the Edit Text tool's paragraph lookup to the live document

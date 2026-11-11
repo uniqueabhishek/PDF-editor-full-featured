@@ -17,7 +17,7 @@ import fitz
 import logging
 import threading
 from collections import OrderedDict
-from typing import Optional, List, Dict, cast, Any
+from typing import Optional, List, Dict, Union, cast, Any
 from enum import Enum
 from dataclasses import dataclass
 
@@ -94,20 +94,36 @@ class PageRenderWorker(QThread):
         self._lock = threading.Lock()
         self._task_cond = threading.Condition()
 
-    def set_document(self, data: Optional[bytes], render_dpi: int = 150):
-        """Give the worker its own document, opened from serialized PDF bytes.
+    def set_document(self, data: Optional[Union[bytes, str]],
+                     render_dpi: int = 150) -> bool:
+        """Give the worker its own document copy.
 
-        Passing ``None`` detaches (e.g. when the document is closed). Opening a
-        private copy keeps the render thread fully isolated from the editable
-        document, so rendering can never collide with edits or other reads.
+        ``data`` is serialized PDF bytes, or the path of a file whose content is
+        known to match the editable document (a freshly opened file). Passing
+        ``None`` detaches (e.g. when the document is closed). Opening a private
+        copy keeps the render thread fully isolated from the editable document,
+        so rendering can never collide with edits or other reads.
+
+        Returns False if a source was given but could not be used (unreadable,
+        or password-locked); the worker is then detached and the caller should
+        fall back to serialized bytes.
         """
         new_doc = None
+        ok = True
         if data is not None:
             try:
-                new_doc = fitz.open(stream=data, filetype="pdf")
+                if isinstance(data, str):
+                    new_doc = fitz.open(data)
+                else:
+                    new_doc = fitz.open(stream=data, filetype="pdf")
+                if new_doc.needs_pass:
+                    new_doc.close()
+                    new_doc = None
+                    ok = False
             except Exception:
                 logger.exception("Render worker could not open its document copy")
                 new_doc = None
+                ok = False
         with self._lock:
             old_doc = self._doc
             self._doc = new_doc
@@ -119,6 +135,35 @@ class PageRenderWorker(QThread):
                     logger.debug("Failed to close previous render copy", exc_info=True)
         with self._task_cond:
             self._tasks.clear()
+        return ok
+
+    def patch_pages(self, src: fitz.Document, pages: List[int]) -> bool:
+        """Copy just ``pages`` from the editable document into the worker's copy.
+
+        Runs on the GUI thread (which owns ``src``) while holding the worker's
+        lock, so neither document is touched by two threads at once. About 2 ms
+        a page, against a full re-serialize that grows with file size (~0.2 s on
+        a 36 MB scan). Returns False if the copies no longer line up (no copy,
+        or page count differs); the caller then falls back to a full resync.
+        """
+        with self._task_cond:
+            self._tasks = [t for t in self._tasks if t.page_num not in pages]
+        with self._lock:
+            doc = self._doc
+            if doc is None or doc.is_closed or len(doc) != len(src):
+                return False
+            try:
+                for p in sorted(set(pages)):
+                    # A fresh graft map per insert, so objects copied by an
+                    # earlier patch are never reused in their stale form.
+                    if hasattr(doc, "Graftmaps"):
+                        doc.Graftmaps = {}
+                    doc.delete_page(p)
+                    doc.insert_pdf(src, from_page=p, to_page=p, start_at=p)
+                return len(doc) == len(src)
+            except Exception:
+                logger.exception("Could not patch render copy for pages %s", pages)
+                return False
 
     def set_rotation(self, rotation: int):
         """Set rotation angle"""
@@ -700,8 +745,16 @@ class PDFViewer(QScrollArea):
         if v_scrollbar:
             v_scrollbar.valueChanged.connect(self._on_scroll)
 
-    def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None):
-        """Set the document to display"""
+    def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None,
+                     render_source: Optional[Union[bytes, str]] = None):
+        """Set the document to display.
+
+        ``render_source`` lets the caller hand the render worker a copy it
+        already has instead of re-serializing the whole document: the path of a
+        file just opened unchanged, or the snapshot bytes a document was just
+        restored from / saved into. It must match ``doc`` exactly. If it can't
+        be used (e.g. password-locked) the document is serialized as before.
+        """
         self._doc = doc
         self._filepath = filepath
         self._current_page = 0
@@ -718,7 +771,9 @@ class PDFViewer(QScrollArea):
         # Hand the render worker its own private copy (see PageRenderWorker) so
         # the background thread never touches this editable document.
         self._render_worker.clear_tasks()
-        self._render_worker.set_document(self._render_source(doc), self._render_dpi)
+        if doc is None or render_source is None or not self._render_worker.set_document(
+                render_source, self._render_dpi):
+            self._render_worker.set_document(self._render_source(doc), self._render_dpi)
 
         # Clear existing pages
         self._clear_pages()
@@ -786,16 +841,33 @@ class PDFViewer(QScrollArea):
         """Refresh the worker's document copy after an in-place edit.
 
         Renders the given page synchronously from the editable document for
-        instant feedback, then schedules a debounced re-serialize of the worker
-        copy (which also re-requests the visible pages).
+        instant feedback, then patches just that page into the worker's copy.
+        Only when the page is unknown or the patch fails does it fall back to a
+        debounced full re-serialize (which also re-requests the visible pages).
         """
         if 0 <= page_num < len(self._page_widgets):
             self._page_cache.pop(page_num, None)
             self._page_words_cache.pop(page_num, None)
             self._render_page_sync(page_num)
+            if self._patch_render_copy([page_num]):
+                return
         else:
             self._page_words_cache.clear()
         self._schedule_worker_resync()
+
+    def _patch_render_copy(self, pages: List[int]) -> bool:
+        """Patch ``pages`` into the worker's copy; False means do a full resync.
+
+        Skipped while a full resync is already pending: the worker's copy is
+        then older than the last edit, so patching one page would not bring it
+        up to date — the pending resync will.
+        """
+        if not self._doc_live() or self._resync_timer.isActive():
+            return False
+        if not self._render_worker.patch_pages(self._doc, pages):
+            return False
+        self._request_visible_pages()
+        return True
 
     def _clear_pages(self):
         """Clear all page widgets"""
@@ -1963,8 +2035,13 @@ class PDFViewer(QScrollArea):
             page_widget._selection_start = None
             page_widget.update()
 
-    def refresh(self):
-        """Refresh the view - re-render pages to show document changes"""
+    def refresh(self, changed_page: int = -1):
+        """Refresh the view - re-render pages to show document changes.
+
+        Pass ``changed_page`` when the change is known to be confined to one
+        page (e.g. undoing an annotation); the worker's copy is then patched
+        instead of re-serialized.
+        """
         self._page_cache.clear()
         # Word positions may have shifted; drop the cache and stale selection.
         self._page_words_cache.clear()
@@ -1981,9 +2058,13 @@ class PDFViewer(QScrollArea):
         if self._doc_live() and 0 <= self._current_page < len(self._page_widgets):
             self._render_page_sync(self._current_page)
 
-        # The document may have changed in place — refresh the worker's copy
-        # lazily (debounced). _resync_render_worker() re-requests visible pages
-        # once the fresh copy is ready, avoiding a stale-render flash.
+        # The document may have changed in place — refresh the worker's copy:
+        # patch the one changed page if known, else re-serialize lazily
+        # (debounced). Both re-request the visible pages once the copy is fresh,
+        # avoiding a stale-render flash.
+        if 0 <= changed_page < len(self._page_widgets):
+            if self._patch_render_copy([changed_page]):
+                return
         self._schedule_worker_resync()
 
     def _render_page_sync(self, page_num: int):

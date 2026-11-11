@@ -62,10 +62,15 @@ class EditHandlerMixin(_MixinBase):
 
         if action():
             if requires_reload:
-                self._load_document_to_viewer()
+                # A snapshot step reopened the document from bytes it still
+                # holds; hand those to the render worker instead of
+                # re-serializing the whole document.
+                self._load_document_to_viewer(
+                    render_source=getattr(command, "last_restored", None))
             else:
                 self._viewer._page_cache.clear()
-                self._viewer.refresh()
+                # Single-page commands (annotation, rotation) carry page_index.
+                self._viewer.refresh(getattr(command, "page_index", -1))
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage(success_message, 2000)

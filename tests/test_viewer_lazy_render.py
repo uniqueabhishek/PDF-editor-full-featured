@@ -156,6 +156,84 @@ def test_scrolling_away_releases_page_bitmaps(qtbot, many_pages):
         model.close()
 
 
+def _worker_pixels(v, page_num):
+    with v._render_worker._lock:
+        return v._render_worker._doc[page_num].get_pixmap(dpi=40).samples
+
+
+def test_single_page_edit_patches_render_copy(qtbot, many_pages):
+    """An in-place edit on one page must update the worker copy without a
+    full re-serialize, and the copy must then render exactly like the source."""
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        v._render_source = lambda doc: pytest.fail("full re-serialize on a one-page edit")
+        model.doc[5].add_highlight_annot(fitz.Rect(72, 90, 200, 110))
+        model.doc[5].draw_rect(fitz.Rect(50, 300, 300, 500), color=(1, 0, 0), width=5)
+        v.invalidate_render_copy(5)
+
+        assert not v._resync_timer.isActive(), "fell back to a debounced full resync"
+        assert _worker_pixels(v, 5) == model.doc[5].get_pixmap(dpi=40).samples
+        assert len(v._render_worker._doc) == len(model.doc)
+
+        # Undo-style refresh with a known page takes the same fast path.
+        model.doc[8].set_rotation(90)
+        v.refresh(8)
+        assert not v._resync_timer.isActive()
+        assert v._render_worker._doc[8].rotation == 90
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_patch_falls_back_when_page_count_differs(qtbot, many_pages):
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        model.doc.new_page()
+        v.invalidate_render_copy(0)
+        assert v._resync_timer.isActive(), "a stale copy must trigger a full resync"
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_render_source_is_used_instead_of_serializing(qtbot, many_pages, tmp_path):
+    model = PDFDocument()
+    model.open(many_pages)
+    v = PDFViewer()
+    qtbot.addWidget(v)
+    try:
+        v._render_source = lambda doc: pytest.fail("serialized despite a usable source")
+        v.set_document(model.doc, str(many_pages), render_source=str(many_pages))
+        assert len(v._render_worker._doc) == len(model.doc)
+        snap = model.snapshot()
+        v.set_document(model.doc, str(many_pages), render_source=snap)
+        assert _worker_pixels(v, 3) == model.doc[3].get_pixmap(dpi=40).samples
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_locked_render_source_falls_back_to_serializing(qtbot, many_pages, tmp_path):
+    locked = tmp_path / "locked.pdf"
+    src = fitz.open(str(many_pages))
+    src.save(str(locked), encryption=fitz.PDF_ENCRYPT_AES_256,
+             user_pw="u", owner_pw="o")
+    src.close()
+    model = PDFDocument()
+    model.open(locked, "u")
+    v = PDFViewer()
+    qtbot.addWidget(v)
+    try:
+        v.set_document(model.doc, str(locked), render_source=str(locked))
+        doc = v._render_worker._doc
+        assert doc is not None and not doc.needs_pass
+        assert len(doc) == len(model.doc)
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
     """Selecting a page must not call setStyleSheet on every thumbnail."""
     from ui.sidebar import ThumbnailPanel

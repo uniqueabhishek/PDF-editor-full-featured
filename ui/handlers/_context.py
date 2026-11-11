@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any, Callable, Dict, List, Optional
+    from typing import Any, Callable, Dict, List, Optional, Union
 
     from PyQt6.QtWidgets import QDialog, QLabel, QMainWindow, QStatusBar
 
@@ -62,7 +62,8 @@ if TYPE_CHECKING:
         _active_workers: set
 
         # --- shared helpers (MainWindow) ---
-        def _load_document_to_viewer(self) -> None: ...
+        def _load_document_to_viewer(
+            self, render_source: "Optional[Union[bytes, str]]" = None) -> None: ...
         def _update_title(self) -> None: ...
         def _update_actions_state(self) -> None: ...
         def _update_recent_files_menu(self) -> None: ...

@@ -341,8 +341,13 @@ class DocumentSnapshotCommand(Command):
         self._before: Optional[bytes] = None
         self._after: Optional[bytes] = None
         self.result: Any = None
+        # Bytes that exactly match the document's current state after the last
+        # execute/undo/redo (None if unknown). The viewer hands these to its
+        # render worker instead of serializing the whole document again.
+        self.last_restored: Optional[bytes] = None
 
     def execute(self) -> bool:
+        self.last_restored = None
         try:
             self._before = self.document.snapshot()
         except Exception:
@@ -359,6 +364,7 @@ class DocumentSnapshotCommand(Command):
             return False
         try:
             self._after = self.document.snapshot()
+            self.last_restored = self._after
         except Exception:
             # The mutation succeeded but redo won't be available; not fatal.
             logger.exception("Could not snapshot after '%s'", self.description)
@@ -369,6 +375,7 @@ class DocumentSnapshotCommand(Command):
             return False
         try:
             self.document.restore(self._before)
+            self.last_restored = self._before
             return True
         except Exception:
             logger.exception("Undo of '%s' failed", self.description)
@@ -379,6 +386,7 @@ class DocumentSnapshotCommand(Command):
             return self.execute()
         try:
             self.document.restore(self._after)
+            self.last_restored = self._after
             return True
         except Exception:
             logger.exception("Redo of '%s' failed", self.description)
