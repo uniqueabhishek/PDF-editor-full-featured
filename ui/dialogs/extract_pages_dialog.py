@@ -123,7 +123,7 @@ class ExtractPagesDialog(QDialog):
 
     def _parse_page_range(self, range_str: str) -> list[int]:
         """Parse page range string into list of page numbers (0-indexed)"""
-        pages = []
+        pages: list[int] = []
         range_str = range_str.strip()
 
         if not range_str:

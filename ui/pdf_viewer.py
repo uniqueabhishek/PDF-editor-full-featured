@@ -9,6 +9,7 @@ import math
 import os
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, cast
@@ -398,7 +399,7 @@ class PageWidget(QLabel):
         # --- word-based text selection (Text Select tool) ------------------
         # Provider returns this page's words in reading order, each a tuple
         # (x0, y0, x1, y1, "word", block_no, line_no, word_no) in PDF coords.
-        self._word_provider = None
+        self._word_provider: Callable[[int], list] | None = None
         self._sel_words: list | None = None  # words snapshot for a drag
         self._text_anchor: QPointF | None = None  # drag start (PDF coords)
         self._text_press_widget: QPointF | None = None  # drag start (px)
@@ -787,7 +788,9 @@ class PDFViewer(QScrollArea):
         super().__init__(parent)
 
         # Document reference
-        self._doc: fitz.Document | None = None
+        # fitz.Document or None. Typed Any because the None check is _doc_live(),
+        # which mypy cannot follow (and fitz has no type stubs anyway).
+        self._doc: Any = None
         self._filepath: str | None = None
 
         # View state
@@ -844,7 +847,8 @@ class PDFViewer(QScrollArea):
         # The render process died: hand the in-thread fallback a fresh copy.
         # Queued, because copy_lost is emitted while the worker lock is held.
         self._render_worker.copy_lost.connect(
-            self._resync_render_worker, Qt.ConnectionType.QueuedConnection
+            self._resync_render_worker,  # type: ignore[call-arg]  # stubs omit the type arg
+            Qt.ConnectionType.QueuedConnection,
         )
         self._render_worker.start()
 
@@ -1222,7 +1226,7 @@ class PDFViewer(QScrollArea):
         if not self._patch_render_copy([page_num]):
             self._schedule_worker_resync()
 
-    def _page_pixel_size(self, page_num: int) -> tuple:
+    def _page_pixel_size(self, page_num: int) -> tuple[int, int]:
         """On-screen size of a page in device pixels at the current zoom.
 
         Single source of truth for the placeholder sizes and for
@@ -2261,7 +2265,9 @@ class PDFViewer(QScrollArea):
         style = block["style"]
 
         editor = InlineTextEditor(page_widget)
-        editor.document().setDocumentMargin(2)
+        text_doc = editor.document()
+        assert text_doc is not None  # a QTextEdit always owns a document
+        text_doc.setDocumentMargin(2)
         editor.setPlainText(block["text"])
 
         font = QFont()
@@ -2283,7 +2289,7 @@ class PDFViewer(QScrollArea):
         # whatever the content needs so nothing is clipped.
         pad = 2
         frame = editor.frameWidth()
-        chrome_w = 2 * frame + 2 * int(editor.document().documentMargin())
+        chrome_w = 2 * frame + 2 * int(text_doc.documentMargin())
         block_w = (x1 - x0) * scale
         block_h = (y1 - y0) * scale
         gx = max(0, int(x0 * scale) - pad)
@@ -2302,8 +2308,8 @@ class PDFViewer(QScrollArea):
             font.setPixelSize(px)
         editor.setFont(font)
 
-        editor.document().setTextWidth(text_area)
-        content_h = editor.document().size().height()
+        text_doc.setTextWidth(text_area)
+        content_h = text_doc.size().height()
         height = int(max(content_h + 2 * frame + 2, block_h + 2 * pad))
         avail_h = max(40, page_widget.height() - gy - 2)
         editor.setGeometry(gx, gy, width, min(height, avail_h))

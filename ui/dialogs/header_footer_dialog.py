@@ -78,6 +78,17 @@ class _ColorButton(QPushButton):
 class HeaderFooterDialog(QDialog):
     """Dialog for adding headers and footers to PDF pages."""
 
+    # Text fields and margin spin boxes, created in loops by _setup_ui.
+    _header_left: QLineEdit
+    _header_center: QLineEdit
+    _header_right: QLineEdit
+    _footer_left: QLineEdit
+    _footer_center: QLineEdit
+    _footer_right: QLineEdit
+    _top_margin: QSpinBox
+    _bottom_margin: QSpinBox
+    _side_margin: QSpinBox
+
     def __init__(self, page_count: int, parent=None):
         super().__init__(parent)
         self._page_count = page_count

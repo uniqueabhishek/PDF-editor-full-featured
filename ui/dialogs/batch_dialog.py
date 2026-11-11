@@ -210,7 +210,9 @@ class BatchDialog(QDialog):
         self._file_tree = _DropTree()
         self._file_tree.setColumnCount(2)
         self._file_tree.setHeaderLabels(["File", "Status"])
-        self._file_tree.header().setStretchLastSection(False)
+        header = self._file_tree.header()
+        if header is not None:
+            header.setStretchLastSection(False)
         self._file_tree.setColumnWidth(0, 460)
         self._file_tree.setColumnWidth(1, 110)
         self._file_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)

@@ -253,15 +253,14 @@ class PageHandlerMixin(_MixinBase):
         ref_w, ref_h = rect.width, rect.height
 
         def _do():
-            doc = self._document.doc
-            doc[page_num].set_cropbox(
+            self._document.get_page(page_num).set_cropbox(
                 fitz.Rect(crop_rect[0], crop_rect[1], crop_rect[2], crop_rect[3])
             )
             if apply_all:
                 for i in range(self._document.page_count):
                     if i == page_num:
                         continue
-                    p = doc[i]
+                    p = self._document.get_page(i)
                     p_rect = p.rect
                     # Scale crop proportionally to each page's size.
                     scale_x = p_rect.width / ref_w

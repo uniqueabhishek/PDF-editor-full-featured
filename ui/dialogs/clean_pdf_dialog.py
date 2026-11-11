@@ -65,7 +65,9 @@ class CleanPDFDialog(QDialog):
         self._tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
-        self._tree.header().setStretchLastSection(False)
+        header = self._tree.header()
+        if header is not None:
+            header.setStretchLastSection(False)
         self._tree.setColumnWidth(self._COL_TEXT, 300)
         self._tree.setColumnWidth(self._COL_LOCATION, 70)
         self._tree.setColumnWidth(self._COL_PAGES, 70)
@@ -123,24 +125,28 @@ class CleanPDFDialog(QDialog):
 
     # ------------------------------------------------------------------
 
+    def _items(self) -> list[QTreeWidgetItem]:
+        tree = self._tree
+        items = (tree.topLevelItem(i) for i in range(tree.topLevelItemCount()))
+        return [item for item in items if item is not None]
+
     def _select_all(self) -> None:
         self._tree.blockSignals(True)
-        for i in range(self._tree.topLevelItemCount()):
-            self._tree.topLevelItem(i).setCheckState(self._COL_TEXT, Qt.CheckState.Checked)
+        for item in self._items():
+            item.setCheckState(self._COL_TEXT, Qt.CheckState.Checked)
         self._tree.blockSignals(False)
         self._update_remove_btn()
 
     def _deselect_all(self) -> None:
         self._tree.blockSignals(True)
-        for i in range(self._tree.topLevelItemCount()):
-            self._tree.topLevelItem(i).setCheckState(self._COL_TEXT, Qt.CheckState.Unchecked)
+        for item in self._items():
+            item.setCheckState(self._COL_TEXT, Qt.CheckState.Unchecked)
         self._tree.blockSignals(False)
         self._update_remove_btn()
 
     def _update_remove_btn(self) -> None:
         has_checked = any(
-            self._tree.topLevelItem(i).checkState(self._COL_TEXT) == Qt.CheckState.Checked
-            for i in range(self._tree.topLevelItemCount())
+            item.checkState(self._COL_TEXT) == Qt.CheckState.Checked for item in self._items()
         )
         self._remove_btn.setEnabled(has_checked)
 
@@ -149,8 +155,7 @@ class CleanPDFDialog(QDialog):
     def get_selected_findings(self) -> list[dict[str, Any]]:
         """Return the list of finding dicts the user checked."""
         result = []
-        for i in range(self._tree.topLevelItemCount()):
-            item = self._tree.topLevelItem(i)
+        for item in self._items():
             if item.checkState(self._COL_TEXT) == Qt.CheckState.Checked:
                 finding = item.data(self._COL_TEXT, Qt.ItemDataRole.UserRole)
                 result.append(finding)

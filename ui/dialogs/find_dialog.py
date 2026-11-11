@@ -2,6 +2,8 @@
 Ultra PDF Editor - Find and Replace Dialog
 """
 
+from typing import Any, cast
+
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -29,9 +31,13 @@ class _DebouncedSearchMixin:
     ``find_requested`` / ``find_next`` / ``find_prev`` signals.
     """
 
+    _search_input: QLineEdit
+    _case_sensitive: QCheckBox
+    find_requested: Any  # pyqtSignal(str, bool) on the host class
+
     def _init_live_search(self):
-        self._searched = None  # (text, case) last sent as find_requested
-        self._live_timer = QTimer(self)
+        self._searched: tuple[str, bool] | None = None  # last sent as find_requested
+        self._live_timer = QTimer(cast(QDialog, self))
         self._live_timer.setSingleShot(True)
         self._live_timer.setInterval(_LIVE_SEARCH_DELAY_MS)
         self._live_timer.timeout.connect(self._live_search_due)

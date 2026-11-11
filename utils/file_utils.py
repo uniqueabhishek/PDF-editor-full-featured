@@ -153,7 +153,7 @@ def get_pdf_page_count(filepath: Path) -> int:
 
 def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> list[Path]:
     """List all PDF files in a directory"""
-    pdfs = []
+    pdfs: list[Path] = []
 
     if recursive:
         for root, _dirs, files in os.walk(directory):
@@ -161,9 +161,9 @@ def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> list[Pat
                 if file.lower().endswith(".pdf"):
                     pdfs.append(Path(root) / file)
     else:
-        for file in directory.iterdir():
-            if file.is_file() and file.suffix.lower() == ".pdf":
-                pdfs.append(file)
+        for entry in directory.iterdir():
+            if entry.is_file() and entry.suffix.lower() == ".pdf":
+                pdfs.append(entry)
 
     return sorted(pdfs)
 

@@ -175,6 +175,12 @@ class CropPreview(QLabel):
 class CropDialog(QDialog):
     """Dialog for cropping PDF pages with live drag-to-crop preview."""
 
+    # Margin spin boxes, created in a loop by _setup_ui.
+    _left_spin: QSpinBox
+    _top_spin: QSpinBox
+    _right_spin: QSpinBox
+    _bottom_spin: QSpinBox
+
     def __init__(
         self,
         pixmap: QPixmap,

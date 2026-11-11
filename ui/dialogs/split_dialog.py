@@ -7,6 +7,7 @@ document (so unsaved edits are honoured) and are covered by tests.
 """
 
 from pathlib import Path
+from typing import Any
 
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -161,6 +162,7 @@ class SplitDialog(QDialog):
             QMessageBox.warning(self, "Error", "Please select an output directory.")
             return
 
+        options: dict[str, Any]
         if self._every_n_radio.isChecked():
             mode, options = "every_n", {"pages_per_file": self._pages_spin.value()}
         elif self._ranges_radio.isChecked():

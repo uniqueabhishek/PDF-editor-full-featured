@@ -426,6 +426,7 @@ class PDFDocument:
 
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
         os.close(tmp_fd)
+        assert self._doc is not None, "save() checks a document is open"
         try:
             self._doc.save(tmp_path, **save_options)
             # Close the doc so Windows releases the file lock, then replace.
@@ -1233,10 +1234,10 @@ class PDFDocument:
                 return (0.0, 0.0, 0.0)
             return tuple(v / 255.0 if v > 1 else v for v in c)  # type: ignore[return-value]
         try:
-            c = int(color)
+            n = int(color)
         except (TypeError, ValueError):
             return (0.0, 0.0, 0.0)
-        return ((c >> 16 & 255) / 255.0, (c >> 8 & 255) / 255.0, (c & 255) / 255.0)
+        return ((n >> 16 & 255) / 255.0, (n >> 8 & 255) / 255.0, (n & 255) / 255.0)
 
     @staticmethod
     def _fallback_fontname(flags: int) -> str:

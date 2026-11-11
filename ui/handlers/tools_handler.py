@@ -298,9 +298,8 @@ class ToolsHandlerMixin(_MixinBase):
         today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
         def _do():
-            doc = self._document.doc
             for i in range(page_range[0], page_range[1] + 1):
-                page = doc[i]
+                page = self._document.get_page(i)
                 rect = page.rect
 
                 # Both helpers run within this iteration, so binding i and page late is safe.
@@ -391,9 +390,8 @@ class ToolsHandlerMixin(_MixinBase):
         start, end = dialog.get_page_range()
 
         def _do():
-            d = self._document.doc
             for i in range(start, end + 1):
-                pg = d[i]
+                pg = self._document.get_page(i)
                 pr = pg.rect
 
                 if header_h > 0:

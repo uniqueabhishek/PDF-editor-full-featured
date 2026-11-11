@@ -3,6 +3,7 @@ Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 import fitz
 from PyQt6.QtCore import QMimeData, QPoint, Qt, QTimer, pyqtSignal
@@ -312,7 +313,9 @@ class ThumbnailPanel(QScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._doc: fitz.Document | None = None
+        # fitz.Document or None. Typed Any because the None check is _doc_live(),
+        # which mypy cannot follow (and fitz has no type stubs anyway).
+        self._doc: Any = None
         self._thumbnails: list[ThumbnailWidget] = []
         self._current_page = 0
         self._selected_pages: list[int] = []
@@ -862,6 +865,8 @@ class BookmarkPanel(QTreeWidget):
         def walk(parent: QTreeWidgetItem, level: int):
             for i in range(parent.childCount()):
                 child = parent.child(i)
+                if child is None:
+                    continue
                 page = child.data(0, Qt.ItemDataRole.UserRole)
                 if page is None:
                     continue  # skip the "No bookmarks" placeholder

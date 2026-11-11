@@ -104,7 +104,7 @@ class AnnotationHandlerMixin(_MixinBase):
             return  # already gone (e.g. removed by an earlier undo/redo)
 
         def _do():
-            pg = self._document.doc[page_num]
+            pg = self._document.get_page(page_num)
             for annot in pg.annots():
                 if annot.xref == xref:
                     pg.delete_annot(annot)

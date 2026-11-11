@@ -107,6 +107,8 @@ class MainWindow(
         # Live background workers (OCR, export); kept referenced so they aren't
         # garbage-collected mid-run.
         self._active_workers: set = set()
+        # Edit state of the last recovery copy, so autosave skips an unchanged one.
+        self._autosaved_state: tuple | None = None
 
         # Auto-save / crash-recovery timer (configured from settings below)
         self._autosave_timer = QTimer(self)
@@ -629,7 +631,7 @@ class MainWindow(
         # until a save, so this re-serialized the whole document every interval
         # (~0.2 s hitch on a 36 MB scan) for an identical copy.
         state = self._edit_state()
-        if state == getattr(self, "_autosaved_state", None):
+        if state == self._autosaved_state:
             return
         # Never write an *unencrypted* recovery copy of a protected document:
         # the recovery copy has no password, so this would leak its plaintext to
