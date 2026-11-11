@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Continuous integration on Windows: ruff, mypy and the test suite run on every push and pull request
+- Issue and pull request templates, a security policy and a code of conduct
+
+### Fixed
+- Light theme is readable when Windows is in dark mode (menus and labels were white on white)
+- Status bar shows the page number as soon as a PDF opens, instead of "No document"
+
 ### Planned
 - Multi-tab document support
 - Batch processing wizard
@@ -130,5 +138,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/your-org/ultra-pdf-editor/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/your-org/ultra-pdf-editor/releases/tag/v1.0.0
+[Unreleased]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/tag/v1.0.0

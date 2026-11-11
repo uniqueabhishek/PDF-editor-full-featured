@@ -1,8 +1,22 @@
 [project]
 name = "ultra-pdf-editor"
 version = "1.0.0"
-description = "A powerful yet simple PDF editor with all professional features"
+description = "Free, offline desktop PDF editor: edit text, annotate, merge, split, OCR and protect PDFs"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
+keywords = ["pdf", "pdf-editor", "pyqt6", "pymupdf", "ocr", "annotation", "desktop"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business",
+    "Topic :: Multimedia :: Graphics :: Viewers",
+]
 dependencies = [
     # Core GUI Framework
     "PyQt6>=6.6.0",
@@ -23,6 +37,12 @@ dependencies = [
     "send2trash>=1.8.0",      # Safe file deletion
     "darkdetect>=0.8.0",      # System theme detection
 ]
+
+[project.urls]
+Homepage = "https://github.com/uniqueabhishek/PDF-editor-full-featured"
+Documentation = "https://github.com/uniqueabhishek/PDF-editor-full-featured/blob/main/docs/USER_GUIDE.md"
+Issues = "https://github.com/uniqueabhishek/PDF-editor-full-featured/issues"
+Changelog = "https://github.com/uniqueabhishek/PDF-editor-full-featured/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ultra-pdf-editor = "Ultra_PDF_Editor:main"

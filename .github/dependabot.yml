@@ -1,0 +1,15 @@
+# Monthly pull requests for outdated GitHub Actions and Python packages.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python-packages:
+        patterns: ["*"]

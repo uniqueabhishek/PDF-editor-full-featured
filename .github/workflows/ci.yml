@@ -1,0 +1,48 @@
+# Lint, type-check and test every push and pull request on Windows, the
+# platform the app is built and tested on.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # pyproject.toml sets python-preference = "only-system", so uv needs a
+      # python.org interpreter on the runner rather than downloading its own.
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run --locked ruff check --output-format=github .
+
+      - name: Ruff format
+        run: uv run --locked ruff format --check .
+
+      - name: Mypy
+        run: uv run --locked mypy .
+
+      - name: Tests
+        run: uv run --locked python -m pytest -p no:faulthandler
