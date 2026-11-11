@@ -1961,15 +1961,22 @@ class PDFViewer(QScrollArea):
         for pw in self._page_widgets:
             pw.clear_search_rects()
 
+    def _search_rects_by_page(self) -> Dict[int, List[QRectF]]:
+        """Search rects grouped by page, built once per result list."""
+        if getattr(self, "_by_page_src", None) is not self._search_results:
+            by_page: Dict[int, List[QRectF]] = {}
+            for res in self._search_results:
+                page = res.get("page", -1)
+                by_page.setdefault(page, []).extend(
+                    QRectF(x0, y0, x1 - x0, y1 - y0)
+                    for (x0, y0, x1, y1) in res.get("rects", []))
+            self._by_page = by_page
+            self._by_page_src = self._search_results
+        return self._by_page
+
     def _apply_search_highlights(self):
         """Push the stored search rects onto each page widget."""
-        by_page: Dict[int, List[QRectF]] = {}
-        for res in self._search_results:
-            page = res.get("page", -1)
-            for (x0, y0, x1, y1) in res.get("rects", []):
-                by_page.setdefault(page, []).append(
-                    QRectF(x0, y0, x1 - x0, y1 - y0))
-
+        by_page = self._search_rects_by_page()
         cur_page, cur_rect = self._current_result or (-1, None)
         for i, pw in enumerate(self._page_widgets):
             rects = by_page.get(i)
@@ -1983,8 +1990,17 @@ class PDFViewer(QScrollArea):
         if not (0 <= page_num < len(self._page_widgets)):
             return
         x0, y0, x1, y1 = rect
+        prev_page = self._current_result[0] if self._current_result else None
         self._current_result = (page_num, QRectF(x0, y0, x1 - x0, y1 - y0))
-        self._apply_search_highlights()
+        # Only the pages losing and gaining the active match change; every
+        # page already has its highlights. Re-applying all of them on each
+        # Find Next took ~0.4 s with 130k matches.
+        by_page = self._search_rects_by_page()
+        for p in {prev_page, page_num}:
+            if p is not None and 0 <= p < len(self._page_widgets):
+                self._page_widgets[p].set_search_rects(
+                    by_page.get(p, []),
+                    self._current_result[1] if p == page_num else None)
 
         # Scroll so the match is centred in the viewport where possible.
         pw = self._page_widgets[page_num]

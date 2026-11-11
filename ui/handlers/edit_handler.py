@@ -222,7 +222,7 @@ class EditHandlerMixin(_MixinBase):
             return
 
         self._search_results = self._document.search_text(text, case_sensitive)
-        total = sum(len(r['rects']) for r in self._search_results)
+        total = len(self._search_flat())
         self._viewer.set_search_results(self._search_results)
 
         if self._search_results:
@@ -249,7 +249,7 @@ class EditHandlerMixin(_MixinBase):
         if not self._search_results:
             return
 
-        total = sum(len(r['rects']) for r in self._search_results)
+        total = len(self._search_flat())
         self._current_search_index = (self._current_search_index + 1) % total
         self._go_to_search_result(self._current_search_index)
         self._update_search_count(self._current_search_index, total)
@@ -259,7 +259,7 @@ class EditHandlerMixin(_MixinBase):
         if not self._search_results:
             return
 
-        total = sum(len(r['rects']) for r in self._search_results)
+        total = len(self._search_flat())
         self._current_search_index = (self._current_search_index - 1) % total
         self._go_to_search_result(self._current_search_index)
         self._update_search_count(self._current_search_index, total)
@@ -281,13 +281,17 @@ class EditHandlerMixin(_MixinBase):
 
     def _occurrence_at(self, index: int):
         """Map a flat search-result index to (page_num, rect tuple), or None."""
-        current = 0
-        for result in self._search_results:
-            for rect in result["rects"]:
-                if current == index:
-                    return result["page"], rect
-                current += 1
-        return None
+        flat = self._search_flat()
+        return flat[index] if 0 <= index < len(flat) else None
+
+    def _search_flat(self):
+        """Every match as (page, rect), built once per result list (Find
+        Next/Previous used to walk all results to find the n-th)."""
+        if getattr(self, "_search_flat_src", None) is not self._search_results:
+            self._search_flat_list = [(r["page"], rect) for r in self._search_results
+                                      for rect in r["rects"]]
+            self._search_flat_src = self._search_results
+        return self._search_flat_list
 
     def _do_replace(self, replacement: str):
         """Replace the current occurrence (redaction-based), then re-search."""

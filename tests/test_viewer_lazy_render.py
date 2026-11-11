@@ -274,6 +274,28 @@ def test_zoom_keeps_old_render_visible_until_the_new_one_lands(qtbot, many_pages
         model.close()
 
 
+def test_find_next_updates_only_the_two_affected_pages(qtbot, many_pages):
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        results = [{"page": p, "rects": [(72, 90 + k, 120, 100 + k) for k in range(50)]}
+                   for p in range(60)]
+        v.set_search_results(results)
+        calls = []
+        for w in v._page_widgets:
+            real = w.set_search_rects
+            w.set_search_rects = (lambda rects, cur=None, _w=w, _r=real:
+                                  (calls.append(_w.page_num), _r(rects, cur)))
+        v.scroll_to_search_result(3, results[3]["rects"][7])
+        v.scroll_to_search_result(9, results[9]["rects"][0])
+        assert calls == [3, 3, 9] or sorted(calls) == [3, 3, 9]
+        assert v._page_widgets[9]._current_search_rect is not None
+        assert v._page_widgets[3]._current_search_rect is None
+        assert len(v._page_widgets[3]._search_rects) == 50
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def _worker_pixels(v, page_num):
     return v._render_worker.render_samples(page_num, 40)
 
