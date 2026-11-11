@@ -369,14 +369,35 @@ class ThumbnailPanel(QScrollArea):
         bar_layout.addWidget(self._clear_btn)
         self._delete_bar.hide()
 
-    def set_document(self, doc: Optional[fitz.Document]):
-        """Set the document for thumbnail generation"""
+    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False):
+        """Set the document for thumbnail generation.
+
+        With ``reuse_layout`` (reloading the same document after an edit) and
+        an unchanged page count, the thumbnail widgets are kept and only
+        re-rendered as they come into view; the old image shows until then.
+        """
+        if (reuse_layout and doc is not None and self._thumbnails
+                and len(doc) == len(self._thumbnails)):
+            self._doc = doc
+            self._render_timer.stop()
+            if self._marked_pages:
+                self.clear_marks()
+            for thumb in self._thumbnails:
+                thumb._pixmap = None
+            self._render_timer.start(0)
+            return
+
         self._doc = doc
         self._clear_thumbnails()
 
         if doc:
             self._create_thumbnails()
             self._render_timer.start(100)
+
+    def detach_document(self):
+        """Drop the document reference but keep the widgets (see set_document)."""
+        self._render_timer.stop()
+        self._doc = None
 
     def _clear_thumbnails(self):
         """Clear all thumbnails"""
@@ -1007,11 +1028,17 @@ class Sidebar(QTabWidget):
             }
         """)
 
-    def set_document(self, doc: Optional[fitz.Document]):
+    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False):
         """Set document for all panels"""
-        self.thumbnail_panel.set_document(doc)
+        self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout)
         self.bookmark_panel.set_document(doc)
         self.annotation_panel.set_document(doc)
+
+    def detach_document(self):
+        """Let go of the document before it is swapped, keeping the thumbnails."""
+        self.thumbnail_panel.detach_document()
+        self.bookmark_panel.set_document(None)
+        self.annotation_panel.set_document(None)
 
     def set_current_page(self, page_num: int):
         """Update current page in thumbnail panel"""

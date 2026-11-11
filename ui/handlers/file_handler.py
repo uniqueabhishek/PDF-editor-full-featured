@@ -103,17 +103,19 @@ class FileHandlerMixin(_MixinBase):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
 
-    def _load_document_to_viewer(self, render_source=None):
+    def _load_document_to_viewer(self, render_source=None, reuse_layout=False):
         """Load the current document into the viewer.
 
         ``render_source`` (file path or snapshot bytes exactly matching the
         document) spares the viewer a full re-serialize for its render worker.
+        ``reuse_layout`` marks a reload of the same document after an edit:
+        page and thumbnail widgets are kept when the page layout is unchanged.
         """
         if self._document.is_open and self._document.doc:
             self._viewer.set_document(self._document.doc, str(
                 self._current_file) if self._current_file else "",
-                render_source=render_source)
-            self._sidebar.set_document(self._document.doc)
+                render_source=render_source, reuse_layout=reuse_layout)
+            self._sidebar.set_document(self._document.doc, reuse_layout=reuse_layout)
             self._main_toolbar.set_page_count(self._document.page_count)
             # Bind the Edit Text tool's paragraph lookup to the live document
             # (it's swapped on every snapshot undo/redo, so re-bind each load).

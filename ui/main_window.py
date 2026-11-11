@@ -824,7 +824,8 @@ class MainWindow(
         if self._history_manager.execute(command):
             # The after-snapshot already matches the document; reuse it for the
             # render worker instead of serializing everything a third time.
-            self._load_document_to_viewer(render_source=command.last_restored)
+            self._load_document_to_viewer(render_source=command.last_restored,
+                                          reuse_layout=True)
             self._is_modified = True
             self._update_title()
             return command
@@ -833,7 +834,7 @@ class MainWindow(
         # sidebar still hold. Reattach so they drop that now-closed reference;
         # otherwise the next event that touches the viewer's document raises
         # "document closed".
-        self._load_document_to_viewer()
+        self._load_document_to_viewer(reuse_layout=True)
         return None
 
     def _run_background(self, work, progress, on_success, error_title: str = "Error"):

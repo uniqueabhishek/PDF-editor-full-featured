@@ -55,18 +55,21 @@ class EditHandlerMixin(_MixinBase):
         requires_reload = getattr(command, "requires_reload", False)
 
         if swaps_document:
-            # Release the old document from the viewer/sidebar (and its render
-            # worker) before it is closed and replaced by the snapshot.
-            self._viewer.set_document(None, None)
-            self._sidebar.set_document(None)
+            # Release the old document from the viewer/sidebar before it is
+            # closed and replaced by the snapshot. Detach keeps the page and
+            # thumbnail widgets so the reload below can reuse them.
+            self._viewer.detach_document()
+            self._sidebar.detach_document()
 
         if action():
             if requires_reload:
                 # A snapshot step reopened the document from bytes it still
                 # holds; hand those to the render worker instead of
-                # re-serializing the whole document.
+                # re-serializing the whole document. Page add/delete changes the
+                # page count, so the viewer rebuilds its widgets for those.
                 self._load_document_to_viewer(
-                    render_source=getattr(command, "last_restored", None))
+                    render_source=getattr(command, "last_restored", None),
+                    reuse_layout=True)
             else:
                 self._viewer._page_cache.clear()
                 # Single-page commands (annotation, rotation) carry page_index.
@@ -77,7 +80,7 @@ class EditHandlerMixin(_MixinBase):
         else:
             # Re-attach whatever document is still open so the view isn't blank.
             if swaps_document:
-                self._load_document_to_viewer()
+                self._load_document_to_viewer(reuse_layout=True)
             self._statusbar.showMessage("Action failed", 2000)
 
     def _cut(self):

@@ -234,6 +234,56 @@ def test_locked_render_source_falls_back_to_serializing(qtbot, many_pages, tmp_p
         model.close()
 
 
+def test_reload_after_edit_reuses_page_widgets(qtbot, many_pages):
+    """A snapshot-style reload with the same layout keeps widgets and position;
+    a changed layout rebuilds them."""
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        widgets = list(v._page_widgets)
+        v._current_page = 12
+
+        model.doc[12].draw_rect(fitz.Rect(50, 50, 200, 200), color=(1, 0, 0))
+        model.restore(model.snapshot())          # swaps the document object
+        v.detach_document()
+        v.set_document(model.doc, str(many_pages), reuse_layout=True)
+        assert v._page_widgets == widgets, "page widgets were rebuilt"
+        assert v._current_page == 12, "reload jumped away from the current page"
+        assert v._doc is model.doc
+        assert widgets[12]._pixmap is not None, "current page not re-rendered"
+
+        # A page size change must not reuse the stale layout.
+        model.doc[3].set_cropbox(fitz.Rect(0, 0, 300, 300))
+        v.set_document(model.doc, str(many_pages), reuse_layout=True)
+        assert v._page_widgets != widgets
+        assert v._current_page == 0
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_thumbnails_reused_on_same_page_count(qtbot, many_pages):
+    from ui.sidebar import ThumbnailPanel
+
+    doc = fitz.open(str(many_pages))
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    try:
+        panel.set_document(doc)
+        thumbs = list(panel._thumbnails)
+        doc2 = fitz.open(str(many_pages))
+        panel.detach_document()
+        panel.set_document(doc2, reuse_layout=True)
+        assert panel._thumbnails == thumbs
+        assert all(t._pixmap is None for t in thumbs), "stale thumbnails kept as fresh"
+        doc2.new_page()
+        panel.set_document(doc2, reuse_layout=True)
+        assert len(panel._thumbnails) == len(doc2)
+    finally:
+        panel._render_timer.stop()
+        doc.close()
+
+
 def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
     """Selecting a page must not call setStyleSheet on every thumbnail."""
     from ui.sidebar import ThumbnailPanel

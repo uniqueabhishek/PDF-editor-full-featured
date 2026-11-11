@@ -646,6 +646,8 @@ class PDFViewer(QScrollArea):
         self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
         # Pages whose widget currently holds a bitmap (see _release_offscreen_pixmaps).
         self._shown_pages: set = set()
+        # Page rects the current widgets were built for (see set_document reuse).
+        self._page_rects: List[tuple] = []
         self._cache_size = 10
 
         # Search highlighting: results from PDFDocument.search_text plus the
@@ -746,7 +748,8 @@ class PDFViewer(QScrollArea):
             v_scrollbar.valueChanged.connect(self._on_scroll)
 
     def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None,
-                     render_source: Optional[Union[bytes, str]] = None):
+                     render_source: Optional[Union[bytes, str]] = None,
+                     reuse_layout: bool = False):
         """Set the document to display.
 
         ``render_source`` lets the caller hand the render worker a copy it
@@ -754,10 +757,22 @@ class PDFViewer(QScrollArea):
         file just opened unchanged, or the snapshot bytes a document was just
         restored from / saved into. It must match ``doc`` exactly. If it can't
         be used (e.g. password-locked) the document is serialized as before.
+
+        ``reuse_layout`` is for reloading the *same* document after an edit
+        (snapshot op, undo/redo). If the page count and every page size are
+        unchanged, the existing page widgets are kept and only re-rendered,
+        and the scroll position stays put. Rebuilding them cost ~1 s on a
+        300-page file. Any difference falls back to a full rebuild.
         """
+        reuse = (reuse_layout and doc is not None and not doc.is_closed
+                 and bool(self._page_widgets)
+                 and len(doc) == len(self._page_widgets)
+                 and self._page_rects == self._doc_page_rects(doc))
+
         self._doc = doc
         self._filepath = filepath
-        self._current_page = 0
+        if not reuse:
+            self._current_page = 0
         self._page_cache.clear()
         # Drop highlights from the previous document.
         self._search_results = []
@@ -775,6 +790,19 @@ class PDFViewer(QScrollArea):
                 render_source, self._render_dpi):
             self._render_worker.set_document(self._render_source(doc), self._render_dpi)
 
+        if reuse:
+            self._teardown_inline_editor()
+            for page_widget in self._page_widgets:
+                page_widget.clear_text_selection()
+                page_widget.clear_search_rects()
+                # Keep showing the old bitmap until the fresh render lands
+                # (no blank flash), but never restore it from cache.
+                page_widget._is_loading = True
+            if 0 <= self._current_page < len(self._page_widgets):
+                self._render_page_sync(self._current_page)
+            QTimer.singleShot(0, self._request_visible_pages)
+            return
+
         # Clear existing pages
         self._clear_pages()
 
@@ -787,6 +815,24 @@ class PDFViewer(QScrollArea):
 
             # Request visible pages to be rendered
             QTimer.singleShot(50, self._request_visible_pages)
+
+    @staticmethod
+    def _doc_page_rects(doc: fitz.Document) -> List[tuple]:
+        """Every page's on-screen rect (rotation applied), to compare layouts."""
+        return [tuple(doc[i].rect) for i in range(len(doc))]
+
+    def detach_document(self):
+        """Let go of the document without destroying the page widgets.
+
+        Used before an undo/redo swaps the document object, so nothing touches
+        the old one once it is closed, while the widgets stay for
+        ``set_document(..., reuse_layout=True)`` to pick up again.
+        """
+        self._teardown_inline_editor()
+        self._doc = None
+        self._resync_timer.stop()
+        self._render_timer.stop()
+        self._render_worker.clear_tasks()
 
     def _render_source(self, doc: Optional[fitz.Document]) -> Optional[bytes]:
         """Serialize the document to PDF bytes for the render worker's copy.
@@ -878,12 +924,14 @@ class PDFViewer(QScrollArea):
             widget.deleteLater()
         self._page_widgets.clear()
         self._shown_pages.clear()
+        self._page_rects = []
 
     def _create_page_widgets(self):
         """Create widgets for all pages"""
         if not self._doc:
             return
 
+        self._page_rects = self._doc_page_rects(self._doc)
         for i in range(len(self._doc)):
             page_widget = PageWidget(i, self._render_dpi, self._container)
             page_widget.clicked.connect(self._on_page_clicked)
