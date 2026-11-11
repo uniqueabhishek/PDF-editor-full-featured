@@ -43,6 +43,9 @@ QStatusBar {
     background-color: #007acc;
     color: white;
 }
+QStatusBar QLabel, QStatusBar QWidget {
+    background-color: transparent;
+}
 QScrollBar:vertical {
     background-color: #2d2d2d;
     width: 12px;

@@ -87,6 +87,35 @@ def test_mainwindow_opens_pdf(main_window, make_pdf):
     assert main_window._viewer.get_page_count() == 3
 
 
+def test_status_bar_page_info_follows_document(main_window, make_pdf):
+    assert main_window._page_info_label.text() == "No document"
+    main_window._open_file(str(make_pdf("doc.pdf", pages=3)))
+    assert main_window._page_info_label.text() == "Page 1 of 3"
+    main_window._insert_blank_page()
+    assert main_window._page_info_label.text().endswith("of 4")
+    main_window._close_document()
+    assert main_window._page_info_label.text() == "No document"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_theme_sets_readable_palette(qapp, theme):
+    """Text stays readable whatever the OS colour scheme is."""
+    from PyQt6.QtGui import QPalette
+
+    from ui.theme import apply_theme
+
+    old_palette, old_sheet = qapp.palette(), qapp.styleSheet()
+    try:
+        apply_theme(qapp, theme)
+        pal = qapp.palette()
+        text = pal.color(QPalette.ColorRole.WindowText).lightness()
+        window = pal.color(QPalette.ColorRole.Window).lightness()
+        assert (text < window) if theme == "light" else (text > window)
+    finally:
+        qapp.setPalette(old_palette)
+        qapp.setStyleSheet(old_sheet)
+
+
 def test_mainwindow_search_populates_results(main_window, make_pdf):
     pdf = make_pdf("doc.pdf", pages=2, text="Findme")
     main_window._open_file(str(pdf))

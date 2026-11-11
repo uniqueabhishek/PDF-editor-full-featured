@@ -747,7 +747,7 @@ class MainWindow(
         """Handle page change"""
         self._main_toolbar.set_current_page(page)
         self._sidebar.set_current_page(page)
-        self._page_info_label.setText(f"Page {page + 1} of {self._document.page_count}")
+        self._update_page_info()
 
     def _on_zoom_changed(self, zoom: float):
         """Handle zoom change"""
@@ -984,6 +984,17 @@ class MainWindow(
             self._properties_action.setEnabled(has_doc)
         if self._find_action:
             self._find_action.setEnabled(has_doc)
+        # Opening, closing and page edits change the page count without
+        # emitting page_changed, so the label is refreshed here too.
+        self._update_page_info()
+
+    def _update_page_info(self):
+        """Show "Page n of m" in the status bar, or "No document"."""
+        if self._document.is_open and self._document.page_count:
+            page = min(self._viewer.get_current_page(), self._document.page_count - 1)
+            self._page_info_label.setText(f"Page {page + 1} of {self._document.page_count}")
+        else:
+            self._page_info_label.setText("No document")
 
     def _update_recent_files_menu(self):
         """Update recent files menu"""
