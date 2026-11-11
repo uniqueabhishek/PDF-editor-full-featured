@@ -2,30 +2,30 @@
 Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 
+from dataclasses import dataclass
+
+import fitz
+from PyQt6.QtCore import QMimeData, QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QDrag, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QScrollArea,
-    QLabel,
     QApplication,
+    QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
+    QPushButton,
+    QScrollArea,
     QTabWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QMenu,
-    QInputDialog,
-    QLineEdit,
-    QFrame,
-    QToolButton,
-    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QMimeData, QTimer
-from PyQt6.QtGui import QPixmap, QImage, QDrag, QColor, QPainter, QPen
-import fitz
-from typing import Optional, List
-from dataclasses import dataclass
 
 # MIME type used to carry a page index during thumbnail drag-and-drop reorder.
 _PAGE_MIME = "application/x-pdf-page"
@@ -40,7 +40,7 @@ class ThumbnailData:
     """Data for a page thumbnail"""
 
     page_num: int
-    pixmap: Optional[QPixmap] = None
+    pixmap: QPixmap | None = None
     label: str = ""
 
 
@@ -95,8 +95,8 @@ class ThumbnailWidget(QFrame):
         self._selected = False
         self._marked = False  # marked for deletion
         self._delete_mode = False  # delete-selection mode active (badges visible)
-        self._pixmap: Optional[QPixmap] = None
-        self._drag_start_pos: Optional[QPoint] = None
+        self._pixmap: QPixmap | None = None
+        self._drag_start_pos: QPoint | None = None
 
         self._setup_ui()
 
@@ -312,10 +312,10 @@ class ThumbnailPanel(QScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._doc: Optional[fitz.Document] = None
-        self._thumbnails: List[ThumbnailWidget] = []
+        self._doc: fitz.Document | None = None
+        self._thumbnails: list[ThumbnailWidget] = []
         self._current_page = 0
-        self._selected_pages: List[int] = []
+        self._selected_pages: list[int] = []
         self._marked_pages: set[int] = set()
         self._delete_mode = False
         self._render_dpi = 36  # Low DPI for thumbnails
@@ -391,7 +391,7 @@ class ThumbnailPanel(QScrollArea):
         self._delete_bar.hide()
 
     def set_document(
-        self, doc: Optional[fitz.Document], reuse_layout: bool = False, keep_images: bool = False
+        self, doc: fitz.Document | None, reuse_layout: bool = False, keep_images: bool = False
     ):
         """Set the document for thumbnail generation.
 
@@ -480,7 +480,7 @@ class ThumbnailPanel(QScrollArea):
             self._thumbnails.insert(index + k, thumb)
         self._renumber()
 
-    def pages_removed(self, pages: List[int]):
+    def pages_removed(self, pages: list[int]):
         for p in sorted(set(pages), reverse=True):
             if 0 <= p < len(self._thumbnails):
                 thumb = self._thumbnails.pop(p)
@@ -696,7 +696,7 @@ class ThumbnailPanel(QScrollArea):
         if self._marked_pages:
             self.pages_delete_requested.emit(sorted(self._marked_pages))
 
-    def get_marked_pages(self) -> List[int]:
+    def get_marked_pages(self) -> list[int]:
         """The pages currently marked for deletion, ascending."""
         return sorted(self._marked_pages)
 
@@ -744,8 +744,8 @@ class BookmarkPanel(QTreeWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._doc: Optional[fitz.Document] = None
-        self._toc: List = []
+        self._doc: fitz.Document | None = None
+        self._toc: list = []
 
         self._setup_ui()
 
@@ -775,7 +775,7 @@ class BookmarkPanel(QTreeWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
-    def set_document(self, doc: Optional[fitz.Document]):
+    def set_document(self, doc: fitz.Document | None):
         """Set document and load bookmarks"""
         self._doc = doc
         self.clear()
@@ -790,7 +790,7 @@ class BookmarkPanel(QTreeWidget):
 
         try:
             self._toc = self._doc.get_toc()
-        except Exception:
+        except Exception:  # noqa: BLE001 - a broken outline shows as no bookmarks
             self._toc = []
             return
 
@@ -855,9 +855,9 @@ class BookmarkPanel(QTreeWidget):
 
         menu.exec(self.mapToGlobal(pos))
 
-    def _build_toc_from_tree(self) -> List:
+    def _build_toc_from_tree(self) -> list:
         """Rebuild a PyMuPDF TOC ([level, title, page], 1-indexed) from the tree."""
-        toc: List = []
+        toc: list = []
 
         def walk(parent: QTreeWidgetItem, level: int):
             for i in range(parent.childCount()):
@@ -908,7 +908,7 @@ class AnnotationPanel(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._doc: Optional[fitz.Document] = None
+        self._doc: fitz.Document | None = None
         # Enumerating annotations is a full page-by-page scan, so the list is
         # rebuilt lazily: edits only mark it dirty and the rescan happens when the
         # panel is next shown (see refresh / refresh_if_dirty / showEvent).
@@ -939,7 +939,7 @@ class AnnotationPanel(QListWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
-    def set_document(self, doc: Optional[fitz.Document]):
+    def set_document(self, doc: fitz.Document | None):
         """Set the document; (re)load the annotation list lazily.
 
         Loading scans every page, so on a large document it is deferred until the
@@ -1109,7 +1109,7 @@ class Sidebar(QTabWidget):
         """)
 
     def set_document(
-        self, doc: Optional[fitz.Document], reuse_layout: bool = False, keep_images: bool = False
+        self, doc: fitz.Document | None, reuse_layout: bool = False, keep_images: bool = False
     ):
         """Set document for all panels"""
         self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout, keep_images=keep_images)
@@ -1127,7 +1127,7 @@ class Sidebar(QTabWidget):
         self.bookmark_panel.set_document(doc)  # page numbers shifted
         self.annotation_panel.set_document(doc)
 
-    def pages_removed(self, doc: fitz.Document, pages: List[int]):
+    def pages_removed(self, doc: fitz.Document, pages: list[int]):
         self.thumbnail_panel.pages_removed(pages)
         self.bookmark_panel.set_document(doc)
         self.annotation_panel.set_document(doc)
@@ -1144,7 +1144,7 @@ class Sidebar(QTabWidget):
         """Toggle delete-selection mode on the thumbnail panel."""
         self.thumbnail_panel.set_delete_mode(enabled)
 
-    def get_marked_pages(self) -> List[int]:
+    def get_marked_pages(self) -> list[int]:
         """Pages currently marked for deletion in the thumbnail panel."""
         return self.thumbnail_panel.get_marked_pages()
 

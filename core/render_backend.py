@@ -23,18 +23,18 @@ Both share one interface (all calls are serialized by the caller's lock):
 This module imports only fitz so the render process starts quickly.
 """
 
+import contextlib
 import logging
 import multiprocessing
-from typing import List, Optional, Tuple, Union
 
 import fitz
 
 logger = logging.getLogger(__name__)
 
-Source = Union[bytes, str]
-Clip = Tuple[int, int, int, int]
+Source = bytes | str
+Clip = tuple[int, int, int, int]
 # (width, height, stride, samples, x offset, y offset) - see render_page()
-Rendered = Tuple[int, int, int, bytes, int, int]
+Rendered = tuple[int, int, int, bytes, int, int]
 
 
 def _release_cache() -> None:
@@ -45,7 +45,7 @@ def _release_cache() -> None:
         logger.debug("Could not shrink the MuPDF cache", exc_info=True)
 
 
-def _open_source(source: Source) -> Optional[fitz.Document]:
+def _open_source(source: Source) -> fitz.Document | None:
     doc = fitz.open(source) if isinstance(source, str) else fitz.open(stream=source, filetype="pdf")
     if doc.needs_pass:
         doc.close()
@@ -53,7 +53,7 @@ def _open_source(source: Source) -> Optional[fitz.Document]:
     return doc
 
 
-def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document, pages: List[int]) -> None:
+def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document, pages: list[int]) -> None:
     """Replace ``pages`` of ``doc`` with the pages of ``pages_pdf``, in order."""
     for idx, p in enumerate(pages):
         # A fresh graft map per insert, so objects copied by an earlier patch
@@ -65,8 +65,8 @@ def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document, pages: List[int])
 
 
 def render_page(
-    doc: fitz.Document, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
-) -> Optional[Rendered]:
+    doc: fitz.Document, page_num: int, scale: float, rotation: int, clip: Clip | None = None
+) -> Rendered | None:
     """Render a page, or only the part ``clip`` covers.
 
     ``clip`` is ``(x0, y0, x1, y1)`` in the coordinates of the full rendered
@@ -84,7 +84,8 @@ def render_page(
     # full page at the transformed page rect's top-left, which may be negative
     # once rotated.
     origin = (page.rect * matrix).irect
-    device = fitz.Rect(clip) + (origin.x0, origin.y0, origin.x0, origin.y0)
+    # Rect + tuple shifts the rect; it is not a concatenation.
+    device = fitz.Rect(clip) + (origin.x0, origin.y0, origin.x0, origin.y0)  # noqa: RUF005
     pix = page.get_pixmap(matrix=matrix, clip=device * ~matrix, alpha=False)
     return (pix.width, pix.height, pix.stride, pix.samples, pix.x - origin.x0, pix.y - origin.y0)
 
@@ -93,7 +94,7 @@ class InProcessRenderer:
     """Renders in the calling thread from a private document copy."""
 
     def __init__(self):
-        self._doc: Optional[fitz.Document] = None
+        self._doc: fitz.Document | None = None
 
     def open(self, source: Source) -> bool:
         self.close()
@@ -113,7 +114,7 @@ class InProcessRenderer:
             self._doc = None
             _release_cache()
 
-    def patch(self, src: fitz.Document, pages: List[int]) -> bool:
+    def patch(self, src: fitz.Document, pages: list[int]) -> bool:
         doc = self._doc
         if doc is None or doc.is_closed or len(doc) != len(src):
             return False
@@ -129,7 +130,7 @@ class InProcessRenderer:
             logger.exception("Could not patch render copy for pages %s", pages)
             return False
 
-    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+    def delete_pages(self, pages: list[int], expected_before: int) -> bool:
         doc = self._doc
         if doc is None or len(doc) != expected_before:
             return False
@@ -146,8 +147,8 @@ class InProcessRenderer:
         return len(doc) == len(src)
 
     def render(
-        self, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
-    ) -> Optional[Rendered]:
+        self, page_num: int, scale: float, rotation: int, clip: Clip | None = None
+    ) -> Rendered | None:
         if self._doc is None:
             return None
         return render_page(self._doc, page_num, scale, rotation, clip)
@@ -159,9 +160,9 @@ class InProcessRenderer:
         self.close()
 
 
-def serve(conn) -> None:
+def serve(conn) -> None:  # noqa: PLR0912, PLR0915 - one branch per message the render process accepts
     """Render-process main loop: one request in, one reply out."""
-    doc: Optional[fitz.Document] = None
+    doc: fitz.Document | None = None
 
     def drop():
         nonlocal doc
@@ -269,7 +270,7 @@ class ProcessRenderer:
     def close(self) -> None:
         self._call("close")
 
-    def patch(self, src: fitz.Document, pages: List[int]) -> bool:
+    def patch(self, src: fitz.Document, pages: list[int]) -> bool:
         pages = sorted(set(pages))
         pages_pdf = fitz.open()
         try:
@@ -289,7 +290,7 @@ class ProcessRenderer:
             logger.exception("Render process could not patch pages %s", pages)
             return False
 
-    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+    def delete_pages(self, pages: list[int], expected_before: int) -> bool:
         return bool(self._call("delete", list(pages), expected_before))
 
     def insert_pages(self, src: fitz.Document, index: int, count: int) -> bool:
@@ -302,18 +303,16 @@ class ProcessRenderer:
         return bool(self._call("insert", index, len(src), data))
 
     def render(
-        self, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
-    ) -> Optional[Rendered]:
+        self, page_num: int, scale: float, rotation: int, clip: Clip | None = None
+    ) -> Rendered | None:
         return self._call("render", page_num, scale, rotation, clip)
 
     def page_count(self) -> int:
         return int(self._call("count"))
 
     def shutdown(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._call("quit")
-        except Exception:
-            pass
         self._proc.join(2)
         if self._proc.is_alive():
             self._proc.terminate()

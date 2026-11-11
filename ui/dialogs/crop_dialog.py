@@ -2,21 +2,20 @@
 Ultra PDF Editor - Crop Page Dialog
 """
 
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QCursor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QDialog,
-    QVBoxLayout,
+    QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
-    QGroupBox,
     QRadioButton,
-    QButtonGroup,
-    QFrame,
+    QSpinBox,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QCursor
-from typing import Tuple, Optional
 
 
 class CropPreview(QLabel):
@@ -31,15 +30,15 @@ class CropPreview(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._pixmap: Optional[QPixmap] = None
+        self._pixmap: QPixmap | None = None
         # Normalised crop rect (fraction of page), default = full page
         self._crop_rect = QRectF(0.0, 0.0, 1.0, 1.0)
         # Widget-space rectangle where the scaled page image is drawn
         self._page_rect = QRectF()
 
         self._dragging = False
-        self._drag_start: Optional[QPointF] = None
-        self._drag_current: Optional[QPointF] = None
+        self._drag_start: QPointF | None = None
+        self._drag_current: QPointF | None = None
 
         self.setMinimumSize(320, 420)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -196,7 +195,7 @@ class CropDialog(QDialog):
 
     # ------------------------------------------------------------------
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self) -> None:  # noqa: PLR0915 - widget layout built in order
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
@@ -325,7 +324,7 @@ class CropDialog(QDialog):
 
     # ------------------------------------------------------------------ Public API
 
-    def get_crop_rect(self) -> Tuple[float, float, float, float]:
+    def get_crop_rect(self) -> tuple[float, float, float, float]:
         """Return (x0, y0, x1, y1) in page points."""
         x0 = float(self._left_spin.value())
         y0 = float(self._top_spin.value())

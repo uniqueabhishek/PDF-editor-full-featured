@@ -3,13 +3,12 @@ Ultra PDF Editor - File Utilities
 Helper functions for file operations
 """
 
+import hashlib
 import os
 import shutil
 import tempfile
-from pathlib import Path
-from typing import List, Optional, Tuple
-import hashlib
 from datetime import datetime
+from pathlib import Path
 
 
 def get_temp_dir() -> Path:
@@ -51,7 +50,7 @@ def safe_delete(filepath: Path) -> bool:
             except ImportError:
                 filepath.unlink()
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - failure is reported through the return value
         return False
 
 
@@ -60,7 +59,7 @@ def safe_copy(src: Path, dst: Path) -> bool:
     try:
         shutil.copy2(src, dst)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - failure is reported through the return value
         return False
 
 
@@ -69,7 +68,7 @@ def safe_move(src: Path, dst: Path) -> bool:
     try:
         shutil.move(str(src), str(dst))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - failure is reported through the return value
         return False
 
 
@@ -108,7 +107,7 @@ def get_file_info(filepath: Path) -> dict:
     }
 
 
-def validate_pdf(filepath: Path) -> Tuple[bool, str]:
+def validate_pdf(filepath: Path) -> tuple[bool, str]:
     """Validate if a file is a valid PDF"""
     if not filepath.exists():
         return False, "File does not exist"
@@ -122,7 +121,7 @@ def validate_pdf(filepath: Path) -> Tuple[bool, str]:
             if not header.startswith(b"%PDF-"):
                 return False, "Invalid PDF header"
         return True, "Valid PDF"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - failure is reported through the return value
         return False, str(e)
 
 
@@ -135,7 +134,7 @@ def is_pdf_encrypted(filepath: Path) -> bool:
         encrypted = doc.is_encrypted
         doc.close()
         return encrypted
-    except Exception:
+    except Exception:  # noqa: BLE001 - failure is reported through the return value
         return False
 
 
@@ -148,16 +147,16 @@ def get_pdf_page_count(filepath: Path) -> int:
         count = len(doc)
         doc.close()
         return count
-    except Exception:
+    except Exception:  # noqa: BLE001 - failure is reported through the return value
         return 0
 
 
-def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> List[Path]:
+def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> list[Path]:
     """List all PDF files in a directory"""
     pdfs = []
 
     if recursive:
-        for root, dirs, files in os.walk(directory):
+        for root, _dirs, files in os.walk(directory):
             for file in files:
                 if file.lower().endswith(".pdf"):
                     pdfs.append(Path(root) / file)
@@ -169,7 +168,7 @@ def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> List[Pat
     return sorted(pdfs)
 
 
-def backup_file(filepath: Path, backup_dir: Optional[Path] = None) -> Optional[Path]:
+def backup_file(filepath: Path, backup_dir: Path | None = None) -> Path | None:
     """Create a backup of a file"""
     if not filepath.exists():
         return None
@@ -203,7 +202,7 @@ def clean_temp_files(max_age_hours: int = 24):
                     filepath.unlink()
                 elif filepath.is_dir():
                     shutil.rmtree(filepath)
-        except Exception:
+        except Exception:  # noqa: BLE001 - best-effort cleanup of old temp files
             pass
 
 

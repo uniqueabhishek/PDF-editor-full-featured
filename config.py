@@ -2,12 +2,11 @@
 Ultra PDF Editor - Configuration
 """
 
-import os
 import json
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
-from typing import List, Optional
+import os
+from dataclasses import asdict, dataclass, field
 from enum import Enum
+from pathlib import Path
 
 
 class Theme(Enum):
@@ -84,9 +83,9 @@ class AppConfig:
     THUMBNAIL_QUALITY: int = 2  # DPI multiplier for thumbnails
 
     # Rendering Settings
-    RENDER_DPI: int = field(default_factory=lambda: int(os.environ.get("RENDER_DPI", 150)))
+    RENDER_DPI: int = field(default_factory=lambda: int(os.environ.get("RENDER_DPI", "150")))
     HIGH_QUALITY_DPI: int = field(
-        default_factory=lambda: int(os.environ.get("HIGH_QUALITY_DPI", 300))
+        default_factory=lambda: int(os.environ.get("HIGH_QUALITY_DPI", "300"))
     )
 
     # OCR Settings
@@ -163,8 +162,8 @@ class UserSettings:
     """User-modifiable settings that persist between sessions"""
 
     # Window state
-    window_geometry: Optional[bytes] = None
-    window_state: Optional[bytes] = None
+    window_geometry: bytes | None = None
+    window_state: bytes | None = None
     sidebar_visible: bool = True
     sidebar_width: int = 250
     toolbar_visible: bool = True
@@ -184,7 +183,7 @@ class UserSettings:
     confirm_close_unsaved: bool = True
 
     # Recent files
-    recent_files: List[str] = field(default_factory=list)
+    recent_files: list[str] = field(default_factory=list)
     last_opened_directory: str = ""
     last_saved_directory: str = ""
 
@@ -216,7 +215,7 @@ class UserSettings:
             try:
                 import base64
 
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     data = json.load(f)
                 # Convert base64 strings back to bytes for window geometry/state
                 if data.get("window_geometry") and isinstance(data["window_geometry"], str):

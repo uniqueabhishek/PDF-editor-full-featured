@@ -9,18 +9,18 @@ relocated. MainWindow inherits every mixin, so all ``self`` references continue
 to resolve through the normal method-resolution order.
 """
 
-from .file_handler import FileHandlerMixin
+from .annotation_handler import AnnotationHandlerMixin
 from .edit_handler import EditHandlerMixin
-from .view_handler import ViewHandlerMixin
+from .file_handler import FileHandlerMixin
 from .page_handler import PageHandlerMixin
 from .tools_handler import ToolsHandlerMixin
-from .annotation_handler import AnnotationHandlerMixin
+from .view_handler import ViewHandlerMixin
 
 __all__ = [
-    "FileHandlerMixin",
+    "AnnotationHandlerMixin",
     "EditHandlerMixin",
-    "ViewHandlerMixin",
+    "FileHandlerMixin",
     "PageHandlerMixin",
     "ToolsHandlerMixin",
-    "AnnotationHandlerMixin",
+    "ViewHandlerMixin",
 ]

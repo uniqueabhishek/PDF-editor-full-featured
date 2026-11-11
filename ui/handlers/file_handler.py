@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz
-from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QProgressDialog, QApplication
+from PyQt6.QtCore import QRectF, Qt
 from PyQt6.QtGui import QImage, QPageLayout
+from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox, QProgressDialog
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
@@ -46,7 +46,7 @@ class FileHandlerMixin(_MixinBase):
             self._is_modified = True
             self._clear_autosave()  # discard any prior document's recovery copy
             self._update_title()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to create new document:\n{e}")
 
     def _open_document(self):
@@ -104,7 +104,7 @@ class FileHandlerMixin(_MixinBase):
             size = path.stat().st_size
             self._file_size_label.setText(self._format_size(size))
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to open file:\n{e}")
 
     def _load_document_to_viewer(self, render_source=None, reuse_layout=False):
@@ -172,7 +172,7 @@ class FileHandlerMixin(_MixinBase):
                 self._update_title()
                 saved_name = self._current_file.name if self._current_file else "document"
                 self._statusbar.showMessage(f"Saved as {saved_name}", 4000)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
                 QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
         else:
             self._save_document_as()
@@ -189,7 +189,7 @@ class FileHandlerMixin(_MixinBase):
         if filepath:
             try:
                 path = Path(filepath)
-                if not path.suffix.lower() == ".pdf":
+                if path.suffix.lower() != ".pdf":
                     path = path.with_suffix(".pdf")
 
                 self._settings.last_saved_directory = str(path.parent)
@@ -199,7 +199,7 @@ class FileHandlerMixin(_MixinBase):
                 self._clear_autosave()  # saved — no unsaved changes to recover
                 self._update_title()
                 self._statusbar.showMessage("Document saved", 3000)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
                 QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
 
     def _close_document(self):
@@ -237,10 +237,7 @@ class FileHandlerMixin(_MixinBase):
         if result == QMessageBox.StandardButton.Save:
             self._save_document()
             return not self._is_modified
-        elif result == QMessageBox.StandardButton.Discard:
-            return True
-        else:
-            return False
+        return result == QMessageBox.StandardButton.Discard
 
     def _print_document(self):
         """Print the current document"""
@@ -248,8 +245,8 @@ class FileHandlerMixin(_MixinBase):
             return
 
         try:
-            from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
             from PyQt6.QtGui import QPainter
+            from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
         except ImportError:
             QMessageBox.warning(
                 self, "Print Not Available", "Print support requires PyQt6 print modules."
@@ -315,7 +312,7 @@ class FileHandlerMixin(_MixinBase):
                 progress.setValue(self._document.page_count)
                 self._statusbar.showMessage("Document sent to printer", 3000)
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
                 QMessageBox.critical(self, "Print Error", f"Failed to print:\n{e}")
             finally:
                 painter.end()
@@ -363,7 +360,7 @@ Encrypted: {metadata.encryption}
         # the window frozen; do it on a private copy in the background.
         try:
             data, password = self._document.worker_copy()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
@@ -428,7 +425,7 @@ Encrypted: {metadata.encryption}
             src_bytes = self._document.doc.tobytes(
                 garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
@@ -478,8 +475,8 @@ Encrypted: {metadata.encryption}
     def _open_with_default_app(filepath: str):
         """Open a file with the OS default application (cross-platform)."""
         import os
-        import sys
         import subprocess
+        import sys
 
         try:
             if sys.platform.startswith("win"):
@@ -509,7 +506,7 @@ Encrypted: {metadata.encryption}
             src_bytes = self._document.doc.tobytes(
                 garbage=0, deflate=False, encryption=fitz.PDF_ENCRYPT_NONE
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count

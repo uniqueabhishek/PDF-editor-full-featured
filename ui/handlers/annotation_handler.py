@@ -7,12 +7,13 @@ redaction. Mixed into MainWindow; relies on ``self._document``, ``self._viewer``
 ``self._history_manager`` and ``self._statusbar``.
 """
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtWidgets import QMessageBox
 
-from ..pdf_viewer import ToolMode
 from utils.history import AnnotationAddCommand
+
+from ..pdf_viewer import ToolMode
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
@@ -33,7 +34,7 @@ class AnnotationHandlerMixin(_MixinBase):
         except ValueError:
             pass  # Ignore unknown tool modes
 
-    def _on_edit_text_committed(self, page_num: int, bbox, new_text: str, style: Dict) -> None:
+    def _on_edit_text_committed(self, page_num: int, bbox, new_text: str, style: dict) -> None:
         """Apply a committed inline text edit (Edit Text tool), undoably."""
         if not self._document.is_open:
             return
@@ -66,7 +67,7 @@ class AnnotationHandlerMixin(_MixinBase):
             "No editable text there. If this is a scanned page, run Tools → OCR first.", 4000
         )
 
-    def _create_annotation(self, page_num: int, annot_type: str, rect: Any, data: Dict):
+    def _create_annotation(self, page_num: int, annot_type: str, rect: Any, data: dict):
         """Handle annotation creation request"""
         if not self._document.is_open:
             return

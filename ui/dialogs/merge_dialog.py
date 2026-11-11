@@ -6,21 +6,21 @@ by the caller via ``PDFDocument.merge_pdfs()`` so the tested core logic stays th
 single implementation.
 """
 
+from pathlib import Path
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
-    QVBoxLayout,
+    QFileDialog,
+    QGroupBox,
     QHBoxLayout,
-    QPushButton,
+    QLabel,
     QListWidget,
     QListWidgetItem,
-    QFileDialog,
-    QLabel,
-    QGroupBox,
-    QCheckBox,
+    QPushButton,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
-from pathlib import Path
-from typing import List
 
 
 class MergeDialog(QDialog):
@@ -30,7 +30,7 @@ class MergeDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Merge PDFs")
         self.setMinimumSize(600, 480)
-        self._files: List[str] = []
+        self._files: list[str] = []
         self._output_path: str = ""
         self._options: dict = {}
         self._setup_ui()
@@ -155,7 +155,7 @@ class MergeDialog(QDialog):
     def _update_merge_button(self):
         self._merge_btn.setEnabled(self._file_list.count() >= 2)
 
-    def _ordered_files(self) -> List[str]:
+    def _ordered_files(self) -> list[str]:
         """The files in the order currently shown (reflects drag/move)."""
         files = []
         for i in range(self._file_list.count()):
@@ -185,7 +185,7 @@ class MergeDialog(QDialog):
 
     # ---- Results for the caller ----
 
-    def get_files(self) -> List[str]:
+    def get_files(self) -> list[str]:
         return self._files
 
     def get_output_path(self) -> str:

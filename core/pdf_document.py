@@ -3,15 +3,18 @@ Ultra PDF Editor - PDF Document Model
 Handles PDF loading, manipulation, and saving using PyMuPDF (fitz)
 """
 
-import fitz  # PyMuPDF
-from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any, Union, Sequence
-from dataclasses import dataclass
-from enum import Enum
+import contextlib
 import logging
 import os
 import re
 from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+import fitz  # PyMuPDF
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,7 @@ _MIN_EDIT_FONTSIZE = 5.0
 
 def _char_lines(
     textpage: fitz.TextPage,
-) -> List[Tuple[float, float, List[Tuple[float, float, str]]]]:
+) -> list[tuple[float, float, list[tuple[float, float, str]]]]:
     """Every text line as ``(y0, y1, [(centre_x, centre_y, char), ...])``."""
     out = []
     for block in textpage.extractRAWDICT()["blocks"]:
@@ -112,25 +115,25 @@ class PDFDocument:
         # Bumped on every edit and every document swap; caches derived from
         # page content (see _search_text_of) are valid for one version only.
         self._edit_version = 0
-        self._search_text_cache: Dict[int, str] = {}
+        self._search_text_cache: dict[int, str] = {}
         self._search_text_version = -1
-        self._doc: Optional[fitz.Document] = None
-        self._filepath: Optional[Path] = None
+        self._doc: fitz.Document | None = None
+        self._filepath: Path | None = None
         self._is_modified: bool = False
-        self._password: Optional[str] = None
+        self._password: str | None = None
         # Encryption settings queued by encrypt() and applied on the next save.
-        self._pending_encryption: Optional[Dict[str, Any]] = None
+        self._pending_encryption: dict[str, Any] | None = None
 
     # ``_doc`` and ``_is_modified`` are properties so that every document swap
     # (open, close, restore, reopen after save) and every edit that flags the
     # document modified bumps ``_edit_version`` without each call site having
     # to remember to.
     @property
-    def _doc(self) -> Optional[fitz.Document]:
+    def _doc(self) -> fitz.Document | None:
         return self._doc_obj
 
     @_doc.setter
-    def _doc(self, value: Optional[fitz.Document]) -> None:
+    def _doc(self, value: fitz.Document | None) -> None:
         self._doc_obj = value
         self._edit_version += 1
 
@@ -155,7 +158,7 @@ class PDFDocument:
         return self._doc is not None
 
     @property
-    def doc(self) -> Optional[fitz.Document]:
+    def doc(self) -> fitz.Document | None:
         """The underlying PyMuPDF document, or None when nothing is open.
 
         Public, read-only access for the UI/forms layers that must hand the
@@ -166,7 +169,7 @@ class PDFDocument:
         return self._doc
 
     @property
-    def filepath(self) -> Optional[Path]:
+    def filepath(self) -> Path | None:
         """Get the current file path"""
         return self._filepath
 
@@ -179,7 +182,7 @@ class PDFDocument:
         """Mark the document as having unsaved changes (or clear the flag)."""
         self._is_modified = modified
 
-    def set_filepath(self, filepath: Optional[Union[str, Path]]) -> None:
+    def set_filepath(self, filepath: str | Path | None) -> None:
         """Retarget the document's path without saving.
 
         Used by crash recovery: the content is loaded from a recovery copy, but
@@ -217,7 +220,7 @@ class PDFDocument:
             return False
         return bool(self._doc.needs_pass or self._doc.is_encrypted or self._pending_encryption)
 
-    def open(self, filepath: Union[str, Path], password: Optional[str] = None) -> bool:
+    def open(self, filepath: str | Path, password: str | None = None) -> bool:
         """
         Open a PDF file
 
@@ -276,10 +279,10 @@ class PDFDocument:
         self._password = None
         self._pending_encryption = None
 
-    def save(
+    def save(  # noqa: PLR0912 - one branch per save option
         self,
-        filepath: Optional[Union[str, Path]] = None,
-        encryption: Optional[Dict[str, Any]] = None,
+        filepath: str | Path | None = None,
+        encryption: dict[str, Any] | None = None,
         garbage: int = 4,
         deflate: bool = True,
         deflate_images: bool = True,
@@ -315,7 +318,7 @@ class PDFDocument:
         # (an incremental save can only KEEP the existing encryption state).
         enc = encryption if encryption is not None else self._pending_encryption
 
-        save_options: Dict[str, Any] = {
+        save_options: dict[str, Any] = {
             "garbage": garbage,
             "deflate": deflate,
             "deflate_images": deflate_images,
@@ -406,7 +409,7 @@ class PDFDocument:
             return False
         return True
 
-    def _save_full_via_temp(self, save_path: Path, save_options: Dict[str, Any]) -> Path:
+    def _save_full_via_temp(self, save_path: Path, save_options: dict[str, Any]) -> Path:
         """Full-rewrite save over the file the document already has open.
 
         PyMuPDF cannot full-save onto the file it is currently reading (and
@@ -417,8 +420,8 @@ class PDFDocument:
         Returns the path actually written — normally ``save_path``, but a sibling
         ``*.edited.pdf`` if the original stayed locked by another process.
         """
-        import tempfile
         import gc
+        import tempfile
         import time
 
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", dir=str(save_path.parent))
@@ -475,7 +478,7 @@ class PDFDocument:
                     )
             raise
 
-    def save_copy(self, filepath: Union[str, Path]) -> bool:
+    def save_copy(self, filepath: str | Path) -> bool:
         """Save a copy without changing the current document path"""
         if self._doc is None:
             raise ValueError("No document is open")
@@ -643,7 +646,7 @@ class PDFDocument:
             label=self._get_page_label(page_num),
         )
 
-    def get_all_pages_info(self) -> List[PageInfo]:
+    def get_all_pages_info(self) -> list[PageInfo]:
         """Get information about all pages"""
         return [self.get_page_info(i) for i in range(self.page_count)]
 
@@ -701,7 +704,7 @@ class PDFDocument:
         self._doc.delete_page(page_num)
         self._is_modified = True
 
-    def delete_pages(self, page_nums: List[int]):
+    def delete_pages(self, page_nums: list[int]):
         """Delete multiple pages (in descending order to maintain indices)"""
         for page_num in sorted(page_nums, reverse=True):
             self.delete_page(page_num)
@@ -720,7 +723,7 @@ class PDFDocument:
         page.set_rotation(new_rotation)
         self._is_modified = True
 
-    def rotate_pages(self, page_nums: List[int], rotation: int):
+    def rotate_pages(self, page_nums: list[int], rotation: int):
         """Rotate multiple pages"""
         for page_num in page_nums:
             self.rotate_page(page_num, rotation)
@@ -790,7 +793,7 @@ class PDFDocument:
         self._is_modified = True
         return new_index
 
-    def extract_pages(self, page_nums: List[int], output_path: Union[str, Path]) -> bool:
+    def extract_pages(self, page_nums: list[int], output_path: str | Path) -> bool:
         """Extract specific pages to a new PDF"""
         if self._doc is None:
             raise ValueError("No document is open")
@@ -805,7 +808,7 @@ class PDFDocument:
 
     # ==================== Merge & Split ====================
 
-    def merge_pdf(self, other_path: Union[str, Path], position: int = -1) -> bool:
+    def merge_pdf(self, other_path: str | Path, position: int = -1) -> bool:
         """
         Merge another PDF into this document
 
@@ -828,8 +831,8 @@ class PDFDocument:
 
     def merge_pdfs(
         self,
-        pdf_paths: Sequence[Union[str, Path]],
-        output_path: Union[str, Path],
+        pdf_paths: Sequence[str | Path],
+        output_path: str | Path,
         add_bookmarks: bool = False,
         compress: bool = True,
     ) -> bool:
@@ -842,7 +845,7 @@ class PDFDocument:
             compress: Garbage-collect and deflate the output.
         """
         merged_doc = fitz.open()
-        toc: List = []
+        toc: list = []
 
         for pdf_path in pdf_paths:
             if add_bookmarks:
@@ -861,7 +864,7 @@ class PDFDocument:
         merged_doc.close()
         return True
 
-    def split_by_pages(self, output_dir: Union[str, Path], pages_per_file: int = 1) -> List[str]:
+    def split_by_pages(self, output_dir: str | Path, pages_per_file: int = 1) -> list[str]:
         """
         Split document into multiple files
 
@@ -895,9 +898,7 @@ class PDFDocument:
 
         return created_files
 
-    def split_by_ranges(
-        self, ranges: List[Tuple[int, int]], output_dir: Union[str, Path]
-    ) -> List[str]:
+    def split_by_ranges(self, ranges: list[tuple[int, int]], output_dir: str | Path) -> list[str]:
         """
         Split document by specific page ranges
 
@@ -929,7 +930,7 @@ class PDFDocument:
 
         return created_files
 
-    def split_by_bookmarks(self, output_dir: Union[str, Path]) -> List[str]:
+    def split_by_bookmarks(self, output_dir: str | Path) -> list[str]:
         """
         Split the document at each top-level (level-1) bookmark.
 
@@ -950,7 +951,7 @@ class PDFDocument:
         output_dir.mkdir(parents=True, exist_ok=True)
         base_name = self._filepath.stem if self._filepath else "split"
 
-        created_files: List[str] = []
+        created_files: list[str] = []
         for i, (title, start) in enumerate(points):
             end = points[i + 1][1] - 1 if i < len(points) - 1 else self.page_count - 1
             end = max(end, start)
@@ -990,7 +991,7 @@ class PDFDocument:
             texts.append(self.get_page_text(i))
         return "\n\n".join(texts)
 
-    def search_text(self, text: str, case_sensitive: bool = False) -> List[Dict]:
+    def search_text(self, text: str, case_sensitive: bool = False) -> list[dict]:
         """
         Search for text in the document
 
@@ -1030,7 +1031,7 @@ class PDFDocument:
         return cached
 
     @staticmethod
-    def _find_on_page(page: fitz.Page, text: str, case_sensitive: bool) -> List[fitz.Rect]:
+    def _find_on_page(page: fitz.Page, text: str, case_sensitive: bool) -> list[fitz.Rect]:
         """Rects of ``text`` on ``page``, optionally matching case exactly.
 
         PyMuPDF's search_for is always case-insensitive (its flags only control
@@ -1097,7 +1098,7 @@ class PDFDocument:
         )
 
     @staticmethod
-    def _page_span_sizes(page: fitz.Page) -> List[Tuple[fitz.Rect, float]]:
+    def _page_span_sizes(page: fitz.Page) -> list[tuple[fitz.Rect, float]]:
         """Every text span's bbox and font size, from one extraction."""
         d = page.get_text("dict")
         return [
@@ -1109,7 +1110,7 @@ class PDFDocument:
         ]
 
     @staticmethod
-    def _fontsize_from_spans(spans: List[Tuple[fitz.Rect, float]], rect: fitz.Rect) -> float:
+    def _fontsize_from_spans(spans: list[tuple[fitz.Rect, float]], rect: fitz.Rect) -> float:
         """Font size of the text under ``rect``, judged from its middle band.
 
         Testing only the middle half of the hit's height keeps the line above
@@ -1128,8 +1129,8 @@ class PDFDocument:
         search: str,
         replacement: str,
         case_sensitive: bool = False,
-        progress_cb: Optional[Any] = None,
-        is_cancelled: Optional[Any] = None,
+        progress_cb: Any | None = None,
+        is_cancelled: Any | None = None,
     ) -> int:
         """Replace every occurrence of ``search`` with ``replacement``.
 
@@ -1170,20 +1171,20 @@ class PDFDocument:
             self._is_modified = True
         return count
 
-    def worker_copy(self) -> Tuple[bytes, Optional[str]]:
+    def worker_copy(self) -> tuple[bytes, str | None]:
         """Snapshot bytes plus the password needed to open them, for a worker."""
         return self.snapshot(), self._password
 
     @staticmethod
     def replace_text_all_in_copy(
         data: bytes,
-        password: Optional[str],
+        password: str | None,
         search: str,
         replacement: str,
         case_sensitive: bool,
-        progress_cb: Optional[Any] = None,
-        is_cancelled: Optional[Any] = None,
-    ) -> Tuple[Optional[bytes], int]:
+        progress_cb: Any | None = None,
+        is_cancelled: Any | None = None,
+    ) -> tuple[bytes | None, int]:
         """Replace All on a private copy, for running off the GUI thread.
 
         ``data`` is a :meth:`snapshot`. Returns the edited document's snapshot
@@ -1204,7 +1205,7 @@ class PDFDocument:
             work.close()
 
     def replace_text_one(
-        self, page_num: int, rect: Tuple[float, float, float, float], replacement: str
+        self, page_num: int, rect: tuple[float, float, float, float], replacement: str
     ) -> bool:
         """Replace a single occurrence located at ``rect`` on ``page_num``."""
         if self._doc is None:
@@ -1224,7 +1225,7 @@ class PDFDocument:
     # dominant style. See replace_text_block for the honest limitations.
 
     @staticmethod
-    def _int_color_to_rgb(color: Any) -> Tuple[float, float, float]:
+    def _int_color_to_rgb(color: Any) -> tuple[float, float, float]:
         """Convert a PyMuPDF span colour (an sRGB int) to an (r, g, b) 0-1 triple."""
         if isinstance(color, (tuple, list)):
             c = tuple(float(v) for v in color[:3]) or (0.0, 0.0, 0.0)
@@ -1258,7 +1259,7 @@ class PDFDocument:
             try:
                 if font.has_glyph(ord(ch)) == 0:  # 0 == .notdef / missing
                     return False
-            except Exception:
+            except Exception:  # noqa: BLE001 - any PyMuPDF failure means the check fails
                 return False
         return True
 
@@ -1266,7 +1267,7 @@ class PDFDocument:
         """xref of the embedded font whose base name matches ``span_font`` (else 0)."""
         if not span_font:
             return 0
-        target = span_font.split("+")[-1].lower()
+        target = span_font.rsplit("+", maxsplit=1)[-1].lower()
         try:
             for info in page.get_fonts(full=True):
                 xref, basefont = info[0], (info[3] or "")
@@ -1277,7 +1278,7 @@ class PDFDocument:
             logger.debug("get_fonts failed during font resolution", exc_info=True)
         return 0
 
-    def _font_for_style(self, style: Dict[str, Any], text: str) -> Tuple["fitz.Font", str]:
+    def _font_for_style(self, style: dict[str, Any], text: str) -> tuple["fitz.Font", str]:
         """Pick a font for re-typesetting: the embedded one if it covers ``text``,
         otherwise a base-14 font matched to the original's bold/italic/serif/mono.
 
@@ -1299,13 +1300,13 @@ class PDFDocument:
         return fitz.Font(name), "base14:" + name
 
     @staticmethod
-    def _infer_align(block: Dict[str, Any]) -> int:
+    def _infer_align(block: dict[str, Any]) -> int:
         """Guess paragraph alignment from how the block's line edges line up."""
         lines = [ln for ln in block.get("lines", []) if ln.get("spans")]
         if len(lines) < 2:
             return fitz.TEXT_ALIGN_LEFT
 
-        def spread(vals: List[float]) -> float:
+        def spread(vals: list[float]) -> float:
             return max(vals) - min(vals)
 
         x0s = [ln["bbox"][0] for ln in lines]
@@ -1321,9 +1322,7 @@ class PDFDocument:
             return fitz.TEXT_ALIGN_CENTER
         return fitz.TEXT_ALIGN_LEFT
 
-    def detect_text_block(
-        self, page_num: int, point: Tuple[float, float]
-    ) -> Optional[Dict[str, Any]]:
+    def detect_text_block(self, page_num: int, point: tuple[float, float]) -> dict[str, Any] | None:
         """Find the text paragraph under ``point`` (PDF coords) on ``page_num``.
 
         Returns ``None`` when the point isn't over a text block (e.g. a scanned
@@ -1343,7 +1342,7 @@ class PDFDocument:
         pt = fitz.Point(float(point[0]), float(point[1]))
         tol = 3.0
         best = None
-        best_area: Optional[float] = None
+        best_area: float | None = None
         for blk in data.get("blocks", []):
             if blk.get("type") != 0:
                 continue
@@ -1356,8 +1355,8 @@ class PDFDocument:
         if best is None:
             return None
 
-        lines_text: List[str] = []
-        spans_all: List[Dict[str, Any]] = []
+        lines_text: list[str] = []
+        spans_all: list[dict[str, Any]] = []
         for line in best.get("lines", []):
             spans = line.get("spans", [])
             if not spans:
@@ -1369,7 +1368,7 @@ class PDFDocument:
             return None
 
         # Dominant style: the (size, font, flags, colour) carrying the most text.
-        weights: "defaultdict[Tuple, float]" = defaultdict(float)
+        weights: defaultdict[tuple, float] = defaultdict(float)
         for s in spans_all:
             key = (
                 round(float(s.get("size", 0.0)), 1),
@@ -1398,11 +1397,11 @@ class PDFDocument:
     def replace_text_block(
         self,
         page_num: int,
-        bbox: Tuple[float, float, float, float],
+        bbox: tuple[float, float, float, float],
         new_text: str,
-        style: Dict[str, Any],
-        bg_color: Optional[Tuple[float, float, float]] = None,
-    ) -> Dict[str, Any]:
+        style: dict[str, Any],
+        bg_color: tuple[float, float, float] | None = None,
+    ) -> dict[str, Any]:
         """Erase the paragraph at ``bbox`` and re-typeset ``new_text`` into it.
 
         The old text is removed by redaction (filled with ``bg_color`` or white),
@@ -1452,7 +1451,7 @@ class PDFDocument:
                         rect, text, font=font, fontsize=used, align=align
                     )
                     started = True
-                except Exception:
+                except Exception:  # noqa: BLE001 - MuPDF rejects a size that cannot fit one line; try a smaller one
                     overflow = None
                     started = False
                 too_big = (not started) or bool(overflow)
@@ -1475,10 +1474,10 @@ class PDFDocument:
         self,
         page_num: int,
         text: str,
-        position: Tuple[float, float],
+        position: tuple[float, float],
         font_size: float = 12,
         font_name: str = "helv",
-        color: Tuple[float, float, float] = (0, 0, 0),
+        color: tuple[float, float, float] = (0, 0, 0),
     ) -> bool:
         """Add text to a page"""
         page = self.get_page(page_num)
@@ -1493,7 +1492,7 @@ class PDFDocument:
 
     # ==================== Image Operations ====================
 
-    def get_page_images(self, page_num: int) -> List[Dict]:
+    def get_page_images(self, page_num: int) -> list[dict]:
         """Get list of images on a page"""
         page = self.get_page(page_num)
         images = page.get_images()
@@ -1518,7 +1517,7 @@ class PDFDocument:
             raise ValueError("No document is open")
         return self._doc.extract_image(xref)["image"]
 
-    def extract_all_images(self, output_dir: Union[str, Path]) -> List[str]:
+    def extract_all_images(self, output_dir: str | Path) -> list[str]:
         """Extract all images from the document"""
         if self._doc is None:
             raise ValueError("No document is open")
@@ -1554,17 +1553,14 @@ class PDFDocument:
     def insert_image(
         self,
         page_num: int,
-        image_path: Union[str, Path],
-        rect: Optional[Tuple[float, float, float, float]] = None,
+        image_path: str | Path,
+        rect: tuple[float, float, float, float] | None = None,
         keep_proportion: bool = True,
     ) -> bool:
         """Insert an image into a page"""
         page = self.get_page(page_num)
 
-        if rect:
-            target_rect = fitz.Rect(rect)
-        else:
-            target_rect = page.rect
+        target_rect = fitz.Rect(rect) if rect else page.rect
 
         page.insert_image(target_rect, filename=str(image_path), keep_proportion=keep_proportion)
         self._is_modified = True
@@ -1594,7 +1590,7 @@ class PDFDocument:
             pdf_version=f"PDF {meta.get('format', 'Unknown') if meta else 'Unknown'}",
         )
 
-    def set_metadata(self, metadata: Dict[str, str]) -> bool:
+    def set_metadata(self, metadata: dict[str, str]) -> bool:
         """Set document metadata"""
         if self._doc is None:
             raise ValueError("No document is open")
@@ -1605,13 +1601,13 @@ class PDFDocument:
 
     # ==================== Bookmarks/TOC ====================
 
-    def get_toc(self) -> List:
+    def get_toc(self) -> list:
         """Get table of contents (bookmarks)"""
         if self._doc is None:
             raise ValueError("No document is open")
         return self._doc.get_toc()
 
-    def set_toc(self, toc: List) -> bool:
+    def set_toc(self, toc: list) -> bool:
         """
         Set table of contents
 
@@ -1632,7 +1628,7 @@ class PDFDocument:
 
     # ==================== Annotations ====================
 
-    def get_annotations(self, page_num: int) -> List[fitz.Annot]:
+    def get_annotations(self, page_num: int) -> list[fitz.Annot]:
         """Get all annotations on a page"""
         page = self.get_page(page_num)
         return list(page.annots()) if page.annots() else []
@@ -1640,8 +1636,8 @@ class PDFDocument:
     def add_highlight(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
-        color: Tuple[float, float, float] = (1, 1, 0),
+        rect: tuple[float, float, float, float],
+        color: tuple[float, float, float] = (1, 1, 0),
         opacity: float = 1.0,
     ) -> fitz.Annot:
         """Add a highlight annotation"""
@@ -1656,8 +1652,8 @@ class PDFDocument:
     def add_underline(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
-        color: Tuple[float, float, float] = (0, 0, 1),
+        rect: tuple[float, float, float, float],
+        color: tuple[float, float, float] = (0, 0, 1),
         opacity: float = 1.0,
     ) -> fitz.Annot:
         """Add an underline annotation"""
@@ -1672,8 +1668,8 @@ class PDFDocument:
     def add_strikethrough(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
-        color: Tuple[float, float, float] = (1, 0, 0),
+        rect: tuple[float, float, float, float],
+        color: tuple[float, float, float] = (1, 0, 0),
         opacity: float = 1.0,
     ) -> fitz.Annot:
         """Add a strikethrough annotation"""
@@ -1686,7 +1682,7 @@ class PDFDocument:
         return annot
 
     def add_text_annotation(
-        self, page_num: int, position: Tuple[float, float], text: str, icon: str = "Note"
+        self, page_num: int, position: tuple[float, float], text: str, icon: str = "Note"
     ) -> fitz.Annot:
         """Add a sticky note/text annotation"""
         page = self.get_page(page_num)
@@ -1698,11 +1694,11 @@ class PDFDocument:
     def add_freetext(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
+        rect: tuple[float, float, float, float],
         text: str,
         font_size: float = 12,
-        text_color: Tuple[float, float, float] = (0, 0, 0),
-        fill_color: Tuple[float, float, float] = (1, 1, 1),
+        text_color: tuple[float, float, float] = (0, 0, 0),
+        fill_color: tuple[float, float, float] = (1, 1, 1),
     ) -> fitz.Annot:
         """Add a free text box annotation"""
         page = self.get_page(page_num)
@@ -1716,9 +1712,9 @@ class PDFDocument:
     def add_rect_annotation(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
-        stroke_color: Tuple[float, float, float] = (1, 0, 0),
-        fill_color: Optional[Tuple[float, float, float]] = None,
+        rect: tuple[float, float, float, float],
+        stroke_color: tuple[float, float, float] = (1, 0, 0),
+        fill_color: tuple[float, float, float] | None = None,
         width: float = 1,
         opacity: float = 1.0,
     ) -> fitz.Annot:
@@ -1735,9 +1731,9 @@ class PDFDocument:
     def add_circle_annotation(
         self,
         page_num: int,
-        rect: Tuple[float, float, float, float],
-        stroke_color: Tuple[float, float, float] = (1, 0, 0),
-        fill_color: Optional[Tuple[float, float, float]] = None,
+        rect: tuple[float, float, float, float],
+        stroke_color: tuple[float, float, float] = (1, 0, 0),
+        fill_color: tuple[float, float, float] | None = None,
         width: float = 1,
         opacity: float = 1.0,
     ) -> fitz.Annot:
@@ -1754,9 +1750,9 @@ class PDFDocument:
     def add_line_annotation(
         self,
         page_num: int,
-        start: Tuple[float, float],
-        end: Tuple[float, float],
-        color: Tuple[float, float, float] = (1, 0, 0),
+        start: tuple[float, float],
+        end: tuple[float, float],
+        color: tuple[float, float, float] = (1, 0, 0),
         width: float = 1,
         opacity: float = 1.0,
     ) -> fitz.Annot:
@@ -1773,8 +1769,8 @@ class PDFDocument:
     def add_ink_annotation(
         self,
         page_num: int,
-        points: List[List[Tuple[float, float]]],
-        color: Tuple[float, float, float] = (0, 0, 0),
+        points: list[list[tuple[float, float]]],
+        color: tuple[float, float, float] = (0, 0, 0),
         width: float = 2,
         opacity: float = 1.0,
     ) -> fitz.Annot:
@@ -1802,10 +1798,10 @@ class PDFDocument:
         self,
         text: str,
         font_size: float = 48,
-        color: Tuple[float, float, float] = (0.5, 0.5, 0.5),
+        color: tuple[float, float, float] = (0.5, 0.5, 0.5),
         opacity: float = 0.3,
         rotation: float = 45,
-        pages: Optional[List[int]] = None,
+        pages: list[int] | None = None,
     ) -> bool:
         """Add a text watermark to pages"""
         if self._doc is None:
@@ -1839,7 +1835,7 @@ class PDFDocument:
         return True
 
     def add_image_watermark(
-        self, image_path: Union[str, Path], opacity: float = 0.3, pages: Optional[List[int]] = None
+        self, image_path: str | Path, opacity: float = 0.3, pages: list[int] | None = None
     ) -> bool:
         """Add an image watermark to pages"""
         if self._doc is None:
@@ -1869,7 +1865,7 @@ class PDFDocument:
         self,
         user_password: str = "",
         owner_password: str = "",
-        permissions: Optional[int] = None,
+        permissions: int | None = None,
         method: int = fitz.PDF_ENCRYPT_AES_256,
     ) -> bool:
         """
@@ -1899,7 +1895,7 @@ class PDFDocument:
         if not user_password and not owner_password:
             raise ValueError("At least one of user_password or owner_password is required")
 
-        enc: Dict[str, Any] = {"method": method}
+        enc: dict[str, Any] = {"method": method}
         if user_password:
             enc["user_password"] = user_password
         # Always set an owner password (falling back to the user password) so the
@@ -1924,7 +1920,7 @@ class PDFDocument:
             return True
         return False
 
-    def save_unencrypted(self, output_path: Union[str, Path]) -> bool:
+    def save_unencrypted(self, output_path: str | Path) -> bool:
         """Save an unprotected copy of the (already open) document.
 
         No password prompt: the document is already authenticated, so we re-prime
@@ -1943,7 +1939,7 @@ class PDFDocument:
 
     def compress(
         self,
-        output_path: Optional[Union[str, Path]] = None,
+        output_path: str | Path | None = None,
         garbage: int = 4,
         deflate: bool = True,
         deflate_images: bool = True,
@@ -1985,7 +1981,7 @@ class PDFDocument:
     # ---- margin line extraction ----
 
     @staticmethod
-    def _margin_lines(page: fitz.Page, margin_frac: float) -> List[Dict[str, Any]]:
+    def _margin_lines(page: fitz.Page, margin_frac: float) -> list[dict[str, Any]]:
         """Return text lines sitting in the top or bottom margin zone.
 
         The zone depth is min(margin_frac * page_height, _MARGIN_MAX_PT) so
@@ -1996,7 +1992,7 @@ class PDFDocument:
         top_lim = pr.y0 + depth
         bot_lim = pr.y1 - depth
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for blk in page.get_text("dict").get("blocks", []):
             if blk.get("type") != 0:
                 continue
@@ -2062,7 +2058,7 @@ class PDFDocument:
     )
 
     @staticmethod
-    def _extract_page_number(text: str) -> Optional[int]:
+    def _extract_page_number(text: str) -> int | None:
         t = text.strip()
         if not t or len(t) > 30:
             return None
@@ -2092,10 +2088,10 @@ class PDFDocument:
     @staticmethod
     def scan_margin_text_in_copy(
         data: bytes,
-        password: Optional[str],
-        progress_cb: Optional[Any] = None,
-        is_cancelled: Optional[Any] = None,
-    ) -> List[Dict[str, Any]]:
+        password: str | None,
+        progress_cb: Any | None = None,
+        is_cancelled: Any | None = None,
+    ) -> list[dict[str, Any]]:
         """:meth:`scan_margin_text` on a private copy, for a background worker.
 
         The findings' page indices and rects apply to the live document,
@@ -2110,9 +2106,9 @@ class PDFDocument:
         finally:
             work.close()
 
-    def scan_margin_text(
-        self, progress_cb: Optional[Any] = None, is_cancelled: Optional[Any] = None
-    ) -> List[Dict[str, Any]]:
+    def scan_margin_text(  # noqa: PLR0912 - a single pass over the page text; splitting adds no clarity
+        self, progress_cb: Any | None = None, is_cancelled: Any | None = None
+    ) -> list[dict[str, Any]]:
         """
         Scan all pages for repeating text in the top/bottom margin zones.
 
@@ -2142,11 +2138,11 @@ class PDFDocument:
 
         # ---- pass 1: collect all margin lines and count lines-per-zone-per-page ----
         # key = (zone, tmpl) → {pages: set, lines: [(page_idx, bbox, text)], sample: str}
-        groups: Dict[Tuple[str, str], Dict[str, Any]] = defaultdict(
+        groups: dict[tuple[str, str], dict[str, Any]] = defaultdict(
             lambda: {"pages": set(), "lines": [], "sample": ""}
         )
         # (page_idx, zone) → count of distinct lines on that page in that zone
-        page_zone_count: Dict[Tuple[int, str], int] = defaultdict(int)
+        page_zone_count: dict[tuple[int, str], int] = defaultdict(int)
 
         for page_idx in range(page_count):
             if is_cancelled is not None and is_cancelled():
@@ -2172,8 +2168,8 @@ class PDFDocument:
 
         # ---- determine which zones are "content-heavy" (likely tables) ----
         # If the median lines-per-page in a zone exceeds 3, that zone is table content.
-        zone_line_counts: Dict[str, List[int]] = defaultdict(list)
-        for (page_idx, zone), cnt in page_zone_count.items():
+        zone_line_counts: dict[str, list[int]] = defaultdict(list)
+        for (_page_idx, zone), cnt in page_zone_count.items():
             zone_line_counts[zone].append(cnt)
 
         crowded_zones: set = set()
@@ -2184,7 +2180,7 @@ class PDFDocument:
                 crowded_zones.add(zone)
 
         threshold = max(2, int(page_count * 0.30))
-        findings: List[Dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
 
         for (zone, tmpl), g in groups.items():
             if zone in crowded_zones:
@@ -2195,7 +2191,7 @@ class PDFDocument:
             sample = g["sample"]
             is_page_num = PDFDocument._extract_page_number(sample) is not None
 
-            rects: List[Tuple[int, fitz.Rect]] = []
+            rects: list[tuple[int, fitz.Rect]] = []
             for page_idx, bbox, _text in g["lines"]:
                 bx0, by0, bx1, by1 = bbox
                 rects.append((page_idx, fitz.Rect(bx0 - 2, by0 - 2, bx1 + 2, by1 + 2)))
@@ -2215,7 +2211,7 @@ class PDFDocument:
         findings.sort(key=lambda f: (0 if f["zone"] == "Header" else 1, -f["page_count"]))
         return findings
 
-    def redact_findings(self, findings: List[Dict[str, Any]]) -> Tuple[int, int]:
+    def redact_findings(self, findings: list[dict[str, Any]]) -> tuple[int, int]:
         """
         Apply redactions for user-selected findings.
 
@@ -2226,7 +2222,7 @@ class PDFDocument:
         if not findings:
             return 0, 0
 
-        by_page: Dict[int, List[fitz.Rect]] = defaultdict(list)
+        by_page: dict[int, list[fitz.Rect]] = defaultdict(list)
         total_rects = 0
         for finding in findings:
             for page_idx, rect in finding["rects"]:
@@ -2258,7 +2254,5 @@ class PDFDocument:
         only a backstop and must never raise — during interpreter shutdown the
         ``fitz`` module may already be partially torn down.
         """
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass

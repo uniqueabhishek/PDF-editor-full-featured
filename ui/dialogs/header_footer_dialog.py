@@ -2,27 +2,27 @@
 Ultra PDF Editor - Header and Footer Dialog
 """
 
-from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLineEdit,
-    QPushButton,
-    QLabel,
-    QGroupBox,
-    QSpinBox,
-    QCheckBox,
-    QComboBox,
-    QColorDialog,
-    QFrame,
-)
+from typing import Any
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
-from typing import Dict, Any, Tuple
-
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+)
 
 # Map display name → PyMuPDF built-in font names for each style variant
-_FONT_MAP: Dict[str, Dict[str, str]] = {
+_FONT_MAP: dict[str, dict[str, str]] = {
     "Helvetica": {
         "normal": "helv",
         "bold": "helvB",
@@ -71,7 +71,7 @@ class _ColorButton(QPushButton):
     def color(self) -> QColor:
         return self._color
 
-    def as_fitz_color(self) -> Tuple[float, float, float]:
+    def as_fitz_color(self) -> tuple[float, float, float]:
         return (self._color.redF(), self._color.greenF(), self._color.blueF())
 
 
@@ -120,7 +120,7 @@ class HeaderFooterDialog(QDialog):
             "footer": ("Left footer text", "Page {page} of {total}", "Right footer text"),
         }
         ph = placeholders[prefix]
-        for side, placeholder in zip(("left", "center", "right"), ph):
+        for side, placeholder in zip(("left", "center", "right"), ph, strict=True):
             col = QVBoxLayout()
             col.addWidget(QLabel(side.capitalize() + ":"))
             edit = QLineEdit()
@@ -224,21 +224,21 @@ class HeaderFooterDialog(QDialog):
 
     # ------------------------------------------------------------------  Public API
 
-    def get_header_texts(self) -> Dict[str, str]:
+    def get_header_texts(self) -> dict[str, str]:
         return {
             "left": self._header_left.text(),
             "center": self._header_center.text(),
             "right": self._header_right.text(),
         }
 
-    def get_footer_texts(self) -> Dict[str, str]:
+    def get_footer_texts(self) -> dict[str, str]:
         return {
             "left": self._footer_left.text(),
             "center": self._footer_center.text(),
             "right": self._footer_right.text(),
         }
 
-    def get_font_settings(self) -> Dict[str, Any]:
+    def get_font_settings(self) -> dict[str, Any]:
         name = self._font_combo.currentText()
         bold = self._bold_check.isChecked()
         italic = self._italic_check.isChecked()
@@ -258,13 +258,13 @@ class HeaderFooterDialog(QDialog):
             "color": self._color_btn.as_fitz_color(),
         }
 
-    def get_page_range(self) -> Tuple[int, int]:
+    def get_page_range(self) -> tuple[int, int]:
         """Return (start, end) page indices, 0-based inclusive."""
         if self._all_pages.isChecked():
             return (0, self._page_count - 1)
         return (self._from_page.value() - 1, self._to_page.value() - 1)
 
-    def get_margins(self) -> Dict[str, int]:
+    def get_margins(self) -> dict[str, int]:
         return {
             "top": self._top_margin.value(),
             "bottom": self._bottom_margin.value(),

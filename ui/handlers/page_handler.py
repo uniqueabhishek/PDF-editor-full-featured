@@ -6,14 +6,15 @@ Insert, delete, extract, rotate and crop pages. Mixed into MainWindow; relies on
 ``self._load_document_to_viewer`` / ``self._update_title`` helpers.
 """
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import fitz
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-from ..dialogs import ExtractPagesDialog, CropDialog
 from utils.history import PageAddCommand, PageDeleteCommand, PageRotateCommand
+
+from ..dialogs import CropDialog, ExtractPagesDialog
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
@@ -35,7 +36,7 @@ class PageHandlerMixin(_MixinBase):
         self._main_toolbar.set_page_count(self._document.page_count)
         self._update_actions_state()
 
-    def _view_pages_removed(self, pages: List[int]):
+    def _view_pages_removed(self, pages: list[int]):
         doc = self._document.doc
         self._viewer.pages_removed(pages)
         self._sidebar.pages_removed(doc, pages)
@@ -104,7 +105,7 @@ class PageHandlerMixin(_MixinBase):
                 self._update_title()
                 self._statusbar.showMessage("Deleted page", 2000)
 
-    def _delete_pages(self, page_nums: List[int]):
+    def _delete_pages(self, page_nums: list[int]):
         """Delete several pages at once (the pages marked in the sidebar).
 
         Undoable via a document snapshot; the reload that follows rebuilds the
@@ -214,10 +215,10 @@ class PageHandlerMixin(_MixinBase):
                             == QMessageBox.StandardButton.Yes
                         ):
                             self._open_file(filepath)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
                         QMessageBox.critical(self, "Error", f"Failed to extract pages:\n{e}")
 
-    def _extract_specific_pages(self, pages: List[int]):
+    def _extract_specific_pages(self, pages: list[int]):
         """Extract specific pages"""
         if not self._document.is_open or not pages:
             return

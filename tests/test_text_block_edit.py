@@ -7,12 +7,12 @@ import fitz
 import pytest
 
 from core.pdf_document import (
-    PDFDocument,
+    _MIN_EDIT_FONTSIZE,
     _SPAN_FLAG_BOLD,
     _SPAN_FLAG_ITALIC,
-    _SPAN_FLAG_SERIF,
     _SPAN_FLAG_MONO,
-    _MIN_EDIT_FONTSIZE,
+    _SPAN_FLAG_SERIF,
+    PDFDocument,
 )
 
 
@@ -33,7 +33,7 @@ def doc(tmp_path):
 
 def _block_center(model, page_num=0):
     page = model.doc[page_num]
-    blk = [b for b in page.get_text("dict")["blocks"] if b["type"] == 0][0]
+    blk = next(b for b in page.get_text("dict")["blocks"] if b["type"] == 0)
     x0, y0, x1, y1 = blk["bbox"]
     return ((x0 + x1) / 2, (y0 + y1) / 2)
 

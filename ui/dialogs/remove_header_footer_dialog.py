@@ -5,20 +5,19 @@ Uses PyMuPDF redaction to permanently erase content in the top/bottom
 strip of each selected page.
 """
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
-    QVBoxLayout,
+    QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSpinBox,
-    QGroupBox,
-    QCheckBox,
-    QFrame,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QPainter, QColor
-from typing import Optional, Tuple
 
 
 class _StripPreview(QLabel):
@@ -26,7 +25,7 @@ class _StripPreview(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._pixmap: Optional[QPixmap] = None
+        self._pixmap: QPixmap | None = None
         self._header_frac: float = 0.0  # fraction of page height (0-1)
         self._footer_frac: float = 0.0
 
@@ -99,7 +98,7 @@ class RemoveHeaderFooterDialog(QDialog):
 
     # ------------------------------------------------------------------
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self) -> None:  # noqa: PLR0915 - widget layout built in order
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
@@ -233,7 +232,7 @@ class RemoveHeaderFooterDialog(QDialog):
     def get_footer_height(self) -> int:
         return self._footer_spin.value()
 
-    def get_page_range(self) -> Tuple[int, int]:
+    def get_page_range(self) -> tuple[int, int]:
         """Return (start, end) 0-based inclusive."""
         if self._all_pages.isChecked():
             return (0, self._page_count - 1)

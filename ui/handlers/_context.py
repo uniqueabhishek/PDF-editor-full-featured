@@ -27,8 +27,9 @@ Usage in a mixin module::
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
-    from typing import Any, Callable, Dict, List, Optional, Union
+    from typing import Any
 
     from PyQt6.QtWidgets import QDialog, QLabel, QMainWindow, QStatusBar
 
@@ -52,19 +53,19 @@ if TYPE_CHECKING:
         _main_toolbar: MainToolbar
         _statusbar: QStatusBar
         _file_size_label: QLabel
-        _current_file: Optional[Path]
+        _current_file: Path | None
         _is_modified: bool
         _history_manager: HistoryManager
-        _search_results: List[Dict]
+        _search_results: list[dict]
         _current_search_index: int
-        _find_dialog: Optional[FindDialog]
-        _replace_dialog: Optional[FindReplaceDialog]
-        _clean_pdf_dlg: Optional[QDialog]
+        _find_dialog: FindDialog | None
+        _replace_dialog: FindReplaceDialog | None
+        _clean_pdf_dlg: QDialog | None
         _active_workers: set
 
         # --- shared helpers (MainWindow) ---
         def _load_document_to_viewer(
-            self, render_source: "Optional[Union[bytes, str]]" = None, reuse_layout: bool = False
+            self, render_source: "bytes | str | None" = None, reuse_layout: bool = False
         ) -> None: ...
         def _update_title(self) -> None: ...
         def _update_actions_state(self) -> None: ...
@@ -76,8 +77,8 @@ if TYPE_CHECKING:
             self,
             description: str,
             operation: "Callable[[], Any]",
-            command_type: "Optional[CommandType]" = None,
-            pages: "Optional[List[int]]" = None,
+            command_type: "CommandType | None" = None,
+            pages: "list[int] | None" = None,
         ) -> "Any": ...
         def _run_background(
             self,
@@ -89,13 +90,13 @@ if TYPE_CHECKING:
 
         # --- cross-mixin handlers ---
         def _view_pages_inserted(self, index: int, count: int = 1) -> None: ...
-        def _view_pages_removed(self, pages: List[int]) -> None: ...
+        def _view_pages_removed(self, pages: list[int]) -> None: ...
         def _open_file(self, filepath: str) -> None: ...
         def _save_document(self) -> None: ...
         def _save_document_as(self) -> None: ...
         def _compress_pdf(self) -> None: ...
         def _create_annotation(
-            self, page_num: int, annot_type: str, rect: "Any", data: Dict
+            self, page_num: int, annot_type: str, rect: "Any", data: dict
         ) -> None: ...
         def _apply_area_redaction(self, page_num: int, rect: "Any") -> None: ...
         def _delete(self) -> None: ...

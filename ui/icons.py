@@ -10,7 +10,7 @@ they follow the app's light/dark theme and need no font or image file.
 """
 
 import math
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QIconEngine, QPainter, QPainterPath, QPen, QPixmap
@@ -237,7 +237,7 @@ def _stamp(p):
     p.drawLine(QPointF(5, 21), QPointF(19, 21))
 
 
-_DRAW: Dict[str, Draw] = {
+_DRAW: dict[str, Draw] = {
     "open": _open,
     "save": _save,
     "save_as": _save_as,

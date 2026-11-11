@@ -6,29 +6,29 @@ via the ``PDFDocument.split_by_*`` methods, which operate on the in-memory
 document (so unsaved edits are honoured) and are covered by tests.
 """
 
+from pathlib import Path
+
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QMessageBox,
+    QFileDialog,
+    QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
     QRadioButton,
     QSpinBox,
-    QLineEdit,
-    QFileDialog,
-    QButtonGroup,
-    QFormLayout,
+    QVBoxLayout,
 )
-from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 class SplitDialog(QDialog):
     """Dialog for choosing how to split a PDF."""
 
-    def __init__(self, filepath: Optional[str] = None, page_count: int = 0, parent=None):
+    def __init__(self, filepath: str | None = None, page_count: int = 0, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Split PDF")
         self.setMinimumSize(500, 420)
@@ -40,7 +40,7 @@ class SplitDialog(QDialog):
         self._setup_ui()
         self._update_ui()
 
-    def _setup_ui(self):
+    def _setup_ui(self):  # noqa: PLR0915 - widget layout built in order
         layout = QVBoxLayout(self)
 
         # Source info
@@ -134,11 +134,11 @@ class SplitDialog(QDialog):
         self._split_btn.setEnabled(self._page_count > 0)
         self._pages_spin.setMaximum(self._page_count if self._page_count > 0 else 9999)
 
-    def _parse_ranges(self, text: str) -> List[Tuple[int, int]]:
+    def _parse_ranges(self, text: str) -> list[tuple[int, int]]:
         """Parse '1-5, 6-10' into validated 1-indexed (start, end) tuples."""
-        ranges: List[Tuple[int, int]] = []
-        for part in text.split(","):
-            part = part.strip()
+        ranges: list[tuple[int, int]] = []
+        for raw_part in text.split(","):
+            part = raw_part.strip()
             if "-" in part:
                 try:
                     start_s, end_s = part.split("-")

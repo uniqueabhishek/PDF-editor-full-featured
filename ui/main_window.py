@@ -7,38 +7,41 @@ menu/toolbar actions lives in cohesive handler mixins under ``ui.handlers`` (fil
 edit/search, view, page, tools and annotation), which MainWindow inherits.
 """
 
-from PyQt6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QHBoxLayout,
-    QSplitter,
-    QStatusBar,
-    QMessageBox,
-    QLabel,
-)
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional, List, Dict
-from datetime import datetime
+import contextlib
 import json
 import logging
 import os
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .pdf_viewer import PDFViewer, ViewMode
-from .sidebar import Sidebar
-from .toolbar import MainToolbar, AnnotationToolbar
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QStatusBar,
+    QWidget,
+)
+
+from config import UserSettings, config
+from core.pdf_document import PDFDocument
+from utils.history import HistoryManager
+
 from .handlers import (
-    FileHandlerMixin,
+    AnnotationHandlerMixin,
     EditHandlerMixin,
-    ViewHandlerMixin,
+    FileHandlerMixin,
     PageHandlerMixin,
     ToolsHandlerMixin,
-    AnnotationHandlerMixin,
+    ViewHandlerMixin,
 )
-from core.pdf_document import PDFDocument
-from config import config, UserSettings
-from utils.history import HistoryManager
+from .pdf_viewer import PDFViewer, ViewMode
+from .sidebar import Sidebar
+from .toolbar import AnnotationToolbar, MainToolbar
 
 if TYPE_CHECKING:
     from .dialogs import FindDialog, FindReplaceDialog
@@ -96,7 +99,7 @@ class MainWindow(
         self._document = PDFDocument()
         self._settings = UserSettings.load(config.SETTINGS_PATH)
         self._is_modified = False
-        self._current_file: Optional[Path] = None
+        self._current_file: Path | None = None
 
         # Undo/Redo history manager
         self._history_manager = HistoryManager(config.UNDO_HISTORY_SIZE, config.UNDO_MEMORY_BUDGET)
@@ -110,10 +113,10 @@ class MainWindow(
         self._autosave_timer.timeout.connect(self._autosave)
 
         # Search state
-        self._search_results: List[Dict] = []
+        self._search_results: list[dict] = []
         self._current_search_index = 0
-        self._find_dialog: Optional["FindDialog"] = None
-        self._replace_dialog: Optional["FindReplaceDialog"] = None
+        self._find_dialog: FindDialog | None = None
+        self._replace_dialog: FindReplaceDialog | None = None
 
         # Setup UI
         self._setup_ui()
@@ -168,7 +171,7 @@ class MainWindow(
 
         layout.addWidget(self._splitter)
 
-    def _setup_menus(self):
+    def _setup_menus(self):  # noqa: PLR0915 - widget layout built in order
         """Setup menu bar"""
         menubar = self.menuBar()
         assert menubar is not None  # QMainWindow always has a menu bar
@@ -555,7 +558,7 @@ class MainWindow(
 
                 geometry = base64.b64decode(self._settings.window_geometry)
                 self.restoreGeometry(geometry)
-            except Exception:
+            except Exception:  # noqa: BLE001 - a bad saved geometry just means the default window size
                 pass
 
         # Restore sidebar visibility and width
@@ -587,6 +590,7 @@ class MainWindow(
         """Apply settings that take effect immediately."""
         if "theme" in changes:
             from PyQt6.QtWidgets import QApplication
+
             from ui.theme import apply_theme
 
             app = QApplication.instance()
@@ -729,7 +733,7 @@ class MainWindow(
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage("Recovered unsaved changes — use Save to keep them", 5000)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(
                 self, "Recovery Failed", f"Could not restore the recovery file:\n{e}"
             )
@@ -844,7 +848,7 @@ class MainWindow(
         snapshots and a reload (~0.4 s on a 36 MB scan), wherever the document
         allows it (see ``PDFDocument.can_snapshot_pages``).
         """
-        from utils.history import DocumentSnapshotCommand, CommandType, PageSnapshotCommand
+        from utils.history import CommandType, DocumentSnapshotCommand, PageSnapshotCommand
 
         if pages and self._document.can_snapshot_pages(pages):
             page_cmd = PageSnapshotCommand(
@@ -905,10 +909,8 @@ class MainWindow(
             # worker.cancel() and make a *successful* run look cancelled (the
             # OCR/export result would then be silently discarded). Drop the
             # connection before closing so only a real user click cancels.
-            try:
+            with contextlib.suppress(TypeError):
                 progress.canceled.disconnect(worker.cancel)
-            except TypeError:
-                pass
             progress.close()
             self._active_workers.discard(worker)
 
@@ -941,7 +943,7 @@ class MainWindow(
             return
         try:
             self._document.set_toc(toc)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Could not update bookmarks:\n{e}")
             return
         # Reload the panel so it matches the stored outline exactly.
@@ -956,7 +958,7 @@ class MainWindow(
         page = self._viewer.get_current_page()
         try:
             self._document.add_bookmark(title, page)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Could not add bookmark:\n{e}")
             return
         self._sidebar.bookmark_panel.set_document(self._document.doc)

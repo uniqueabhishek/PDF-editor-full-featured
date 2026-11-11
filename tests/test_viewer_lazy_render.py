@@ -13,10 +13,12 @@ import pytest
 pytest.importorskip("PyQt6")
 pytest.importorskip("pytestqt")
 
-import fitz  # noqa: E402
+import itertools
 
-from core.pdf_document import PDFDocument  # noqa: E402
-from ui.pdf_viewer import PDFViewer, _MAX_QUEUED_PAGE_RENDERS  # noqa: E402
+import fitz
+
+from core.pdf_document import PDFDocument
+from ui.pdf_viewer import _MAX_QUEUED_PAGE_RENDERS, PDFViewer
 
 
 @pytest.fixture
@@ -204,7 +206,7 @@ def test_very_high_zoom_renders_only_the_visible_part(qtbot, tmp_path):
         assert pix.width() * pix.height() <= _MAX_RENDER_PIXELS
         full_w, full_h = v._page_pixel_size(0)
         assert full_w * full_h > 10 * _MAX_RENDER_PIXELS
-        clip, seen = v._render_clip_for(0)
+        _clip, seen = v._render_clip_for(0)
         assert widget.partial_covers(seen)
 
         # Scroll far down the same page: a new part is rendered for it.
@@ -227,7 +229,7 @@ def test_pages_never_overlap_even_past_qt_layout_limits(qtbot, many_pages):
         v.set_zoom(800)
         geos = [w.geometry() for w in v._page_widgets]
         assert geos[-1].bottom() > 524_287
-        for a, b in zip(geos, geos[1:]):
+        for a, b in itertools.pairwise(geos):
             assert b.top() == a.bottom() + 1 + 10, "pages overlap or drift apart"
         # Visible pages at the very end come from the stored row positions.
         bar = v.verticalScrollBar()
@@ -520,7 +522,7 @@ def test_thumbnails_reused_on_same_page_count(qtbot, many_pages):
 
 def test_replacing_render_copy_releases_mupdf_cache(qtbot, many_pages, monkeypatch):
     calls = []
-    monkeypatch.setattr(fitz.TOOLS, "store_shrink", lambda pct: calls.append(pct))
+    monkeypatch.setattr(fitz.TOOLS, "store_shrink", calls.append)
     v, model = _viewer(qtbot, many_pages)
     try:
         calls.clear()

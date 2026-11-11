@@ -95,7 +95,7 @@ def test_clipped_render_matches_the_same_region_of_a_full_render(scan_pdf, rotat
             start = (py + row) * stride + px * 3
             a = part[row * cstride : row * cstride + cw * 3]
             b = full[start : start + cw * 3]
-            worst = max(worst, max(abs(x - y) for x, y in zip(a, b, strict=True)))
+            worst = max(worst, *(abs(x - y) for x, y in zip(a, b, strict=True)))
         assert worst <= 8, f"clipped render differs by up to {worst}"
     finally:
         doc.close()

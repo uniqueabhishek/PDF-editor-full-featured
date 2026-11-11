@@ -5,18 +5,19 @@ Shows repeating margin text found by scan_margin_text() and lets the user
 choose which items to permanently remove.
 """
 
+from typing import Any
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QAbstractItemView,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
-from typing import List, Dict, Any
 
 
 class CleanPDFDialog(QDialog):
@@ -32,7 +33,7 @@ class CleanPDFDialog(QDialog):
     _COL_PAGES = 2
     _COL_TYPE = 3
 
-    def __init__(self, findings: List[Dict[str, Any]], parent=None):
+    def __init__(self, findings: list[dict[str, Any]], parent=None):
         super().__init__(parent)
         self._findings = findings
         self.setWindowTitle("Clean PDF — Remove Repeating Text")
@@ -99,7 +100,7 @@ class CleanPDFDialog(QDialog):
         btn_row.addWidget(self._remove_btn)
         layout.addLayout(btn_row)
 
-    def _populate(self, findings: List[Dict[str, Any]]) -> None:
+    def _populate(self, findings: list[dict[str, Any]]) -> None:
         self._tree.blockSignals(True)
         for finding in findings:
             sample = finding["sample_text"]
@@ -145,7 +146,7 @@ class CleanPDFDialog(QDialog):
 
     # ------------------------------------------------------------------ Public API
 
-    def get_selected_findings(self) -> List[Dict[str, Any]]:
+    def get_selected_findings(self) -> list[dict[str, Any]]:
         """Return the list of finding dicts the user checked."""
         result = []
         for i in range(self._tree.topLevelItemCount()):

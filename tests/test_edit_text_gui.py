@@ -5,11 +5,11 @@ import pytest
 pytest.importorskip("PyQt6")
 pytest.importorskip("pytestqt")
 
-import fitz  # noqa: E402
-from PyQt6.QtCore import QPointF  # noqa: E402
+import fitz
+from PyQt6.QtCore import QPointF
 
-from core.pdf_document import PDFDocument  # noqa: E402
-from ui.pdf_viewer import PDFViewer  # noqa: E402
+from core.pdf_document import PDFDocument
+from ui.pdf_viewer import PDFViewer
 
 
 def _viewer_with_text(qtbot, tmp_path, text="Hello world"):
@@ -30,7 +30,7 @@ def _viewer_with_text(qtbot, tmp_path, text="Hello world"):
 
 def _block_center(model):
     page = model.doc[0]
-    blk = [b for b in page.get_text("dict")["blocks"] if b["type"] == 0][0]
+    blk = next(b for b in page.get_text("dict")["blocks"] if b["type"] == 0)
     x0, y0, x1, y1 = blk["bbox"]
     return QPointF((x0 + x1) / 2, (y0 + y1) / 2)
 
@@ -73,8 +73,8 @@ def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
 
 
 def test_double_click_in_text_tool_requests_edit(qtbot, tmp_path):
-    from PyQt6.QtGui import QMouseEvent
     from PyQt6.QtCore import QEvent, Qt
+    from PyQt6.QtGui import QMouseEvent
 
     v, model = _viewer_with_text(qtbot, tmp_path)
     try:

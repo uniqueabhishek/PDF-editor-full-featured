@@ -6,9 +6,9 @@ Enter inserts a newline. The widget is intentionally "dumb": the PDFViewer owns
 positioning/styling and reacts to the ``committed``/``cancelled`` signals.
 """
 
-from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QFocusEvent
+from PyQt6.QtGui import QFocusEvent, QKeyEvent
+from PyQt6.QtWidgets import QTextEdit
 
 
 class InlineTextEditor(QTextEdit):

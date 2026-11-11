@@ -37,7 +37,7 @@ def resolve_theme(theme: str) -> str:
         import darkdetect
 
         return "dark" if darkdetect.isDark() else "light"
-    except Exception:
+    except Exception:  # noqa: BLE001 - OS theme detection is optional; fall back to light
         return "light"
 
 
@@ -55,7 +55,7 @@ def current_theme() -> str:
 
 def apply_theme(app, theme: str) -> None:
     """Apply the light/dark stylesheet for ``theme`` to the QApplication."""
-    global _current
+    global _current  # noqa: PLW0603 - one app-wide theme, read by current_theme()
     resolved = resolve_theme(theme)
     _current = resolved
     app.setStyleSheet(_load_stylesheet(f"{resolved}_theme.qss"))

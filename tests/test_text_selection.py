@@ -10,9 +10,9 @@ import pytest
 pytest.importorskip("PyQt6")
 pytest.importorskip("pytestqt")
 
-import fitz  # noqa: E402
-from PyQt6.QtWidgets import QApplication  # noqa: E402
-from PyQt6.QtCore import QPointF  # noqa: E402
+import fitz
+from PyQt6.QtCore import QPointF
+from PyQt6.QtWidgets import QApplication
 
 
 @pytest.fixture
@@ -88,7 +88,6 @@ def test_context_menu_shows_only_copy_with_selection(viewer, monkeypatch):
 
     def fake_exec(self, *args, **kwargs):
         captured["labels"] = [a.text() for a in self.actions() if a.text()]
-        return None
 
     monkeypatch.setattr(QMenu, "exec", fake_exec)
 

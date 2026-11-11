@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 
 import fitz
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QProgressDialog
 from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox, QProgressDialog
 
 from ..dialogs import (
-    HeaderFooterDialog,
-    RemoveHeaderFooterDialog,
     BatchDialog,
+    HeaderFooterDialog,
     MergeDialog,
+    RemoveHeaderFooterDialog,
     SplitDialog,
 )
 
@@ -66,7 +66,7 @@ class ToolsHandlerMixin(_MixinBase):
                 == QMessageBox.StandardButton.Yes
             ):
                 self._open_file(output)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to merge:\n{e}")
 
     def _split_pdf(self):
@@ -97,7 +97,7 @@ class ToolsHandlerMixin(_MixinBase):
             else:
                 files = self._document.split_by_pages(output_dir, 1)
             self._statusbar.showMessage(f"Split into {len(files)} files", 3000)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to split:\n{e}")
 
     def _compress_pdf(self):
@@ -112,14 +112,14 @@ class ToolsHandlerMixin(_MixinBase):
             try:
                 self._document.compress(filepath)
                 self._statusbar.showMessage("PDF compressed", 3000)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
                 QMessageBox.critical(self, "Error", f"Failed to compress:\n{e}")
 
     def _optimize_pdf(self):
         """Optimize PDF"""
         self._compress_pdf()
 
-    def _run_ocr(self):
+    def _run_ocr(self):  # noqa: PLR0915 - dialog, worker set-up and result handling read best in order
         """Add a searchable text layer to every page via OCR, off the GUI thread.
 
         Tesseract is CPU-bound and PyMuPDF is not thread-safe, so the work runs
@@ -185,7 +185,7 @@ class ToolsHandlerMixin(_MixinBase):
             src_bytes = self._document.doc.tobytes(
                 garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "OCR Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
@@ -303,16 +303,17 @@ class ToolsHandlerMixin(_MixinBase):
                 page = doc[i]
                 rect = page.rect
 
+                # Both helpers run within this iteration, so binding i and page late is safe.
                 def process_text(raw: str) -> str:
                     return (
-                        raw.replace("{page}", str(i + 1))
+                        raw.replace("{page}", str(i + 1))  # noqa: B023
                         .replace("{total}", str(self._document.page_count))
                         .replace("{date}", today_str)
                         .replace("{filename}", filename_str)
                     )
 
                 def insert(pt: "fitz.Point", raw: str) -> None:
-                    page.insert_text(
+                    page.insert_text(  # noqa: B023
                         pt,
                         process_text(raw),
                         fontsize=fontsize,
@@ -430,7 +431,7 @@ class ToolsHandlerMixin(_MixinBase):
         # frozen; scan a private copy in the background with progress.
         try:
             data, password = self._document.worker_copy()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Scan failed:\n{e}")
             return
         self._statusbar.showMessage("Scanning pages for repeating text…")
@@ -470,7 +471,7 @@ class ToolsHandlerMixin(_MixinBase):
         dlg.setModal(False)  # non-modal: user can scroll the PDF freely
         self._clean_pdf_dlg = dlg  # keep reference so it isn't garbage-collected
         dlg.accepted.connect(self._apply_clean_pdf)
-        dlg.rejected.connect(lambda: self._statusbar.clearMessage())
+        dlg.rejected.connect(self._statusbar.clearMessage)
         dlg.finished.connect(lambda _: setattr(self, "_clean_pdf_dlg", None))
         dlg.show()
 
@@ -530,7 +531,7 @@ class ToolsHandlerMixin(_MixinBase):
         try:
             self._document.encrypt(user_password=password, owner_password=password)
             self._save_document()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to encrypt the document:\n{e}")
             return
 
@@ -563,7 +564,7 @@ class ToolsHandlerMixin(_MixinBase):
             # Already authenticated on open, so no password is needed here; the
             # model re-primes the stored password and writes an unencrypted copy.
             self._document.save_unencrypted(filepath)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Failed to remove password:\n{e}")
             return
 

@@ -13,8 +13,8 @@ import logging
 import os
 import shutil
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def _candidate_paths() -> Iterator[Path]:
             yield Path(p)
 
 
-def _locate() -> Optional[str]:
+def _locate() -> str | None:
     """Return a path to a tesseract executable, or None if none is found."""
     found = shutil.which("tesseract")
     if found:
@@ -80,7 +80,7 @@ def configure_tesseract() -> bool:
     try:
         pytesseract.get_tesseract_version()
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - not on PATH; fall through to the known install folders
         pass
 
     found = _locate()

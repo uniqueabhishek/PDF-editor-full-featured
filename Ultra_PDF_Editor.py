@@ -92,10 +92,10 @@ def check_dependencies():
 def setup_application():
     """Setup and configure the Qt application"""
     # Import here after path setup and dependency check
-    from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QFont, QIcon
+    from PyQt6.QtWidgets import QApplication
 
-    from config import config, UserSettings
+    from config import UserSettings, config
     from ui.theme import apply_theme
 
     # Enable high DPI scaling
@@ -111,7 +111,7 @@ def setup_application():
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "UltraPDFTeam.UltraPDFEditor.1"
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - taskbar grouping is cosmetic; never block start-up
             pass
 
     app = QApplication(sys.argv)

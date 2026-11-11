@@ -6,8 +6,8 @@ import pytest
 pytest.importorskip("PyQt6")
 pytest.importorskip("pytestqt")
 
-from core.pdf_document import PDFDocument  # noqa: E402
-from ui.dialogs.find_dialog import (  # noqa: E402
+from core.pdf_document import PDFDocument
+from ui.dialogs.find_dialog import (
     _LIVE_SEARCH_DELAY_MS,
     FindDialog,
     FindReplaceDialog,

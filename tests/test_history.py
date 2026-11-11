@@ -5,12 +5,12 @@ import pytest
 
 from core.pdf_document import PDFDocument
 from utils.history import (
+    AnnotationAddCommand,
+    DocumentSnapshotCommand,
     HistoryManager,
     PageAddCommand,
     PageDeleteCommand,
     PageRotateCommand,
-    AnnotationAddCommand,
-    DocumentSnapshotCommand,
 )
 
 
@@ -116,7 +116,7 @@ def test_history_max_size_evicts_oldest(doc):
 
 def test_snapshot_command_reports_memory(doc):
     hm = HistoryManager()
-    cmd = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op")
+    cmd = DocumentSnapshotCommand(doc, doc.add_blank_page, description="op")
     assert cmd.memory_bytes() == 0  # nothing captured until executed
     hm.execute(cmd)
     assert cmd.memory_bytes() > 0  # before + after snapshots now held
@@ -126,9 +126,7 @@ def test_history_memory_budget_evicts_oldest(doc):
     # A tiny budget forces eviction down to the single most-recent command.
     hm = HistoryManager(max_size=100, max_bytes=1)
     for _ in range(3):
-        assert hm.execute(
-            DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op")
-        )
+        assert hm.execute(DocumentSnapshotCommand(doc, doc.add_blank_page, description="op"))
     assert hm.get_undo_count() == 1
 
 
@@ -137,8 +135,8 @@ def test_back_to_back_snapshots_share_a_buffer(doc):
     must still walk back through every state correctly."""
     hm = HistoryManager()
     start = doc.page_count
-    first = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="a")
-    second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
+    first = DocumentSnapshotCommand(doc, doc.add_blank_page, description="a")
+    second = DocumentSnapshotCommand(doc, doc.add_blank_page, description="b")
     assert hm.execute(first) and hm.execute(second)
     assert second._before is first._after, "identical state stored twice"
     assert hm._history_bytes() == sum(len(b) for b in (first._before, first._after, second._after))
@@ -150,10 +148,10 @@ def test_back_to_back_snapshots_share_a_buffer(doc):
 
 def test_snapshot_not_shared_after_an_untracked_change(doc):
     hm = HistoryManager()
-    first = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="a")
+    first = DocumentSnapshotCommand(doc, doc.add_blank_page, description="a")
     assert hm.execute(first)
     doc.add_blank_page()  # changed outside the history
-    second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
+    second = DocumentSnapshotCommand(doc, doc.add_blank_page, description="b")
     assert hm.execute(second)
     assert second._before is not first._after
 
@@ -198,7 +196,7 @@ def test_page_snapshot_refused_for_bookmarked_pages(doc):
 def test_no_memory_budget_keeps_all_within_count(doc):
     hm = HistoryManager(max_size=100, max_bytes=None)
     for _ in range(3):
-        hm.execute(DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op"))
+        hm.execute(DocumentSnapshotCommand(doc, doc.add_blank_page, description="op"))
     assert hm.get_undo_count() == 3
 
 

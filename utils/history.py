@@ -5,9 +5,10 @@ Implements command pattern for unlimited undo/redo
 
 import logging
 import re
-from typing import Callable, List, Optional, Any, Dict, Tuple
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from enum import Enum
+from typing import Any
 
 import fitz
 
@@ -83,7 +84,7 @@ class Command(ABC):
         """
         return 0
 
-    def snapshot_buffers(self) -> List[bytes]:
+    def snapshot_buffers(self) -> list[bytes]:
         """Snapshot byte buffers held, so shared buffers are counted once."""
         return []
 
@@ -105,17 +106,17 @@ class PageAddCommand(Command):
         try:
             self.document.add_blank_page(self.width, self.height, self.page_index)
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
     def undo(self) -> bool:
         try:
             self.document.delete_page(self.page_index)
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
-    def view_delta(self, undoing: bool) -> Tuple[str, int]:
+    def view_delta(self, undoing: bool) -> tuple[str, int]:
         """How the page list changed, so the view can follow without a reload."""
         return ("removed" if undoing else "inserted"), self.page_index
 
@@ -131,7 +132,7 @@ class PageDeleteCommand(Command):
         self.page_index = page_index
         # The deleted page's content, captured as a single-page PDF so undo can
         # restore the real page rather than fabricating a blank one.
-        self._page_pdf: Optional[bytes] = None
+        self._page_pdf: bytes | None = None
 
     def execute(self) -> bool:
         try:
@@ -168,7 +169,7 @@ class PageDeleteCommand(Command):
     def memory_bytes(self) -> int:
         return len(self._page_pdf) if self._page_pdf else 0
 
-    def view_delta(self, undoing: bool) -> Tuple[str, int]:
+    def view_delta(self, undoing: bool) -> tuple[str, int]:
         """How the page list changed, so the view can follow without a reload."""
         return ("inserted" if undoing else "removed"), self.page_index
 
@@ -189,7 +190,7 @@ class PageRotateCommand(Command):
             self.original_rotation = page_info.rotation
             self.document.rotate_page(self.page_index, self.rotation)
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
     def undo(self) -> bool:
@@ -197,7 +198,7 @@ class PageRotateCommand(Command):
             # Rotate back to original
             self.document.rotate_page(self.page_index, -self.rotation)
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
 
@@ -210,7 +211,7 @@ class AnnotationAddCommand(Command):
         page_index: int,
         annot_type: str,
         rect: Any,
-        annot_data: Optional[Dict[str, Any]] = None,
+        annot_data: dict[str, Any] | None = None,
     ):
         super().__init__(CommandType.ANNOTATION_ADD, f"Add {annot_type}")
         self.document = document
@@ -220,7 +221,7 @@ class AnnotationAddCommand(Command):
         self.annot_data = annot_data or {}
         self._annot_xref = 0
 
-    def _rect_to_tuple(self, rect: Any) -> Tuple[float, float, float, float]:
+    def _rect_to_tuple(self, rect: Any) -> tuple[float, float, float, float]:
         """Convert QRectF or similar to tuple (x0, y0, x1, y1)"""
         if rect is None:
             return (0, 0, 0, 0)
@@ -232,7 +233,7 @@ class AnnotationAddCommand(Command):
             return (rect[0], rect[1], rect[2], rect[3])
         return (0, 0, 0, 0)
 
-    def _create_stamp_annotation(self, rect: Tuple[float, float, float, float]) -> Any:
+    def _create_stamp_annotation(self, rect: tuple[float, float, float, float]) -> Any:
         """Create a stamp annotation"""
         try:
             import fitz
@@ -266,7 +267,7 @@ class AnnotationAddCommand(Command):
             logger.exception("Stamp annotation failed")
             return None
 
-    def execute(self) -> bool:
+    def execute(self) -> bool:  # noqa: PLR0912 - one branch per snapshot case; splitting hides the flow
         try:
             annot = None
             rect_tuple = self._rect_to_tuple(self.rect)
@@ -363,7 +364,7 @@ class AnnotationAddCommand(Command):
                 self._annot_xref = annot.xref
                 return True
             return False
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
     def undo(self) -> bool:
@@ -377,7 +378,7 @@ class AnnotationAddCommand(Command):
                             page.delete_annot(annot)
                             return True
             return False
-        except Exception:
+        except Exception:  # noqa: BLE001 - failure is reported through the return value
             return False
 
 
@@ -403,13 +404,13 @@ class DocumentSnapshotCommand(Command):
         super().__init__(command_type, description)
         self.document = document
         self._operation = operation
-        self._before: Optional[bytes] = None
-        self._after: Optional[bytes] = None
+        self._before: bytes | None = None
+        self._after: bytes | None = None
         self.result: Any = None
         # Bytes that exactly match the document's current state after the last
         # execute/undo/redo (None if unknown). The viewer hands these to its
         # render worker instead of serializing the whole document again.
-        self.last_restored: Optional[bytes] = None
+        self.last_restored: bytes | None = None
 
     def execute(self) -> bool:
         self.last_restored = None
@@ -457,7 +458,7 @@ class DocumentSnapshotCommand(Command):
             logger.exception("Redo of '%s' failed", self.description)
             return False
 
-    def snapshot_buffers(self) -> List[bytes]:
+    def snapshot_buffers(self) -> list[bytes]:
         return [b for b in (self._before, self._after) if b]
 
     def share_before_with(self, previous: "Command") -> bool:
@@ -497,7 +498,7 @@ class PageSnapshotCommand(Command):
     def __init__(
         self,
         document: Any,
-        pages: List[int],
+        pages: list[int],
         operation: Callable[[], Any],
         command_type: CommandType = CommandType.METADATA_CHANGE,
         description: str = "",
@@ -508,8 +509,8 @@ class PageSnapshotCommand(Command):
         # The viewer refreshes (and re-renders) just this page on undo/redo.
         self.page_index = self.pages[0]
         self._operation = operation
-        self._before: Optional[bytes] = None
-        self._after: Optional[bytes] = None
+        self._before: bytes | None = None
+        self._after: bytes | None = None
         self.result: Any = None
 
     def execute(self) -> bool:
@@ -541,7 +542,7 @@ class PageSnapshotCommand(Command):
     def redo(self) -> bool:
         return self._swap(self._after, "Redo")
 
-    def _swap(self, data: Optional[bytes], what: str) -> bool:
+    def _swap(self, data: bytes | None, what: str) -> bool:
         if data is None:
             return False
         try:
@@ -558,9 +559,9 @@ class PageSnapshotCommand(Command):
 class HistoryManager:
     """Manages undo/redo history"""
 
-    def __init__(self, max_size: int = 100, max_bytes: Optional[int] = None):
-        self._undo_stack: List[Command] = []
-        self._redo_stack: List[Command] = []
+    def __init__(self, max_size: int = 100, max_bytes: int | None = None):
+        self._undo_stack: list[Command] = []
+        self._redo_stack: list[Command] = []
         self._max_size = max_size
         # Optional cap on total snapshot memory held by the undo stack. Snapshot
         # commands keep full before/after PDF bytes, so on large documents the
@@ -656,11 +657,11 @@ class HistoryManager:
         """Check if redo is available"""
         return len(self._redo_stack) > 0
 
-    def peek_undo(self) -> Optional[Command]:
+    def peek_undo(self) -> Command | None:
         """The command that the next undo() will reverse, or None."""
         return self._undo_stack[-1] if self._undo_stack else None
 
-    def peek_redo(self) -> Optional[Command]:
+    def peek_redo(self) -> Command | None:
         """The command that the next redo() will re-apply, or None."""
         return self._redo_stack[-1] if self._redo_stack else None
 
@@ -689,6 +690,6 @@ class HistoryManager:
         self._undo_stack.clear()
         self._redo_stack.clear()
 
-    def get_history(self) -> List[str]:
+    def get_history(self) -> list[str]:
         """Get list of all actions in history"""
         return [cmd.description for cmd in self._undo_stack]

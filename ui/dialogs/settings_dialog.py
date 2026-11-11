@@ -5,19 +5,20 @@ Exposes only settings that actually take effect. Emits ``settings_changed`` with
 the changed values so the main window can apply them live and persist them.
 """
 
+from typing import Any
+
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
-    QVBoxLayout,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QPushButton,
-    QFormLayout,
-    QComboBox,
     QSpinBox,
-    QCheckBox,
-    QGroupBox,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import pyqtSignal
-from typing import Dict, Any
 
 from config import UserSettings, config
 
@@ -97,7 +98,7 @@ class SettingsDialog(QDialog):
         self._autosave_enabled.setChecked(self._settings.autosave_enabled)
         self._autosave_interval.setValue(self._settings.autosave_interval)
 
-    def _gather_settings(self) -> Dict[str, Any]:
+    def _gather_settings(self) -> dict[str, Any]:
         theme_map = {0: "system", 1: "light", 2: "dark"}
         return {
             "theme": theme_map.get(self._theme_combo.currentIndex(), "system"),

@@ -2,24 +2,25 @@
 Ultra PDF Editor - Toolbar with all tools and actions
 """
 
+from enum import Enum
+from typing import Any
+
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QToolBar,
-    QWidget,
+    QColorDialog,
+    QComboBox,
+    QFontComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QSpinBox,
-    QComboBox,
     QLineEdit,
-    QColorDialog,
     QSlider,
-    QFrame,
+    QSpinBox,
+    QToolBar,
     QToolButton,
-    QFontComboBox,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QIcon, QColor, QFont, QPixmap, QPainter
-from typing import Dict, Any
-from enum import Enum
 
 from .icons import ICON_NAMES, icon
 
@@ -62,9 +63,9 @@ class ColorButton(QToolButton):
 
     color_changed = pyqtSignal(QColor)
 
-    def __init__(self, initial_color: QColor = QColor(255, 255, 0), parent=None):
+    def __init__(self, initial_color: QColor | None = None, parent=None):
         super().__init__(parent)
-        self._color = initial_color
+        self._color = QColor(initial_color) if initial_color is not None else QColor(255, 255, 0)
         self._update_icon()
         self.clicked.connect(self._show_color_dialog)
 
@@ -326,7 +327,7 @@ class MainToolbar(QToolBar):
         self.setMovable(False)
         self.setIconSize(QSize(24, 24))
 
-        self._tool_buttons: Dict[str, QToolButton] = {}
+        self._tool_buttons: dict[str, QToolButton] = {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -469,10 +470,10 @@ class AnnotationToolbar(QToolBar):
         self.setIconSize(QSize(24, 24))
 
         self._current_tool = ToolMode.TEXT_SELECT
-        self._tool_buttons: Dict[str, QToolButton] = {}
+        self._tool_buttons: dict[str, QToolButton] = {}
         self._setup_ui()
 
-    def _setup_ui(self):
+    def _setup_ui(self):  # noqa: PLR0915 - widget layout built in order
         # === Selection Tools ===
         self._add_tool_button("Select", "select", ToolMode.SELECT, "Select tool")
         self._add_tool_button("Hand", "hand", ToolMode.HAND, "Hand tool (Pan)")

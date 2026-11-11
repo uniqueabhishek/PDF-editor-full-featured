@@ -2,30 +2,30 @@
 Ultra PDF Editor - Batch Processing Dialog
 """
 
+from pathlib import Path
+from typing import Any
+
+import fitz
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QGroupBox,
+    QAbstractItemView,
     QCheckBox,
-    QTreeWidget,
-    QTreeWidgetItem,
+    QComboBox,
+    QDialog,
     QFileDialog,
-    QProgressBar,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
-    QComboBox,
-    QFrame,
-    QAbstractItemView,
+    QProgressBar,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
-from PyQt6.QtGui import QColor
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-import fitz
-
 
 # ── Status colour palette ────────────────────────────────────────────────────
 _S_PENDING = ("Pending", QColor(150, 150, 150))
@@ -49,8 +49,8 @@ class BatchWorker(QThread):
 
     def __init__(
         self,
-        files: List[str],
-        operations: Dict[str, Any],
+        files: list[str],
+        operations: dict[str, Any],
         output_dir: str,
         suffix: str,
         parent=None,
@@ -75,7 +75,7 @@ class BatchWorker(QThread):
                 self._process_file(filepath)
                 success += 1
                 self.file_done.emit(i, True, "")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - counted as a failed file and reported
                 fail += 1
                 self.file_done.emit(i, False, str(exc))
         self.all_done.emit(success, fail)
@@ -106,7 +106,7 @@ class BatchWorker(QThread):
         out_name = (stem + self._suffix + ".pdf") if self._suffix else Path(filepath).name
         out_path = Path(self._output_dir) / out_name
 
-        save_opts: Dict[str, Any] = {"garbage": 4, "deflate": True}
+        save_opts: dict[str, Any] = {"garbage": 4, "deflate": True}
         if ops.get("compress"):
             save_opts["deflate_images"] = True
             save_opts["deflate_fonts"] = True
@@ -166,8 +166,8 @@ class BatchDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._files: List[str] = []
-        self._worker: Optional[BatchWorker] = None
+        self._files: list[str] = []
+        self._worker: BatchWorker | None = None
 
         self.setWindowTitle("Batch Processing")
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -318,7 +318,7 @@ class BatchDialog(QDialog):
 
     # ── File management ────────────────────────────────────────────────
 
-    def _add_paths(self, paths: List[str]) -> None:
+    def _add_paths(self, paths: list[str]) -> None:
         for p in paths:
             if p not in self._files:
                 self._files.append(p)
@@ -372,7 +372,7 @@ class BatchDialog(QDialog):
             return
 
         _angle_map = {0: 90, 1: 270, 2: 180}
-        operations: Dict[str, Any] = {
+        operations: dict[str, Any] = {
             "compress": self._compress_check.isChecked(),
             "rotate": self._rotate_check.isChecked(),
             "rotate_angle": _angle_map[self._rotate_combo.currentIndex()],

@@ -76,6 +76,7 @@ def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf, qt
 
 def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, make_pdf):
     import fitz
+
     from utils.history import DocumentSnapshotCommand, PageSnapshotCommand
 
     win = main_window
@@ -161,6 +162,7 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
     pytesseract = pytest.importorskip("pytesseract")
     pytest.importorskip("PIL")
     import fitz
+
     import ui.handlers.tools_handler as th
     import utils.tesseract
 
@@ -191,7 +193,7 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
     win._run_ocr()
     _wait_idle(qtbot, win)
     assert len(seen) == 2, "OCR ran on the page that already had text"
-    assert seen[0] == (int(595 * 2), int(842 * 2))
+    assert seen[0] == ((595 * 2), (842 * 2))
     texts = [win._document.doc[i].get_text().strip() for i in range(3)]
     assert texts == ["already has text", "scanned", "scanned"]
 

@@ -12,7 +12,8 @@ result back on the GUI thread (e.g. via an undoable snapshot).
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -46,7 +47,7 @@ class FunctionWorker(QThread):
     def run(self) -> None:
         try:
             result = self._fn(self._emit_progress, self.is_cancelled)
-        except Exception as exc:  # noqa: BLE001 - reported to the UI
+        except Exception as exc:
             logger.exception("Background task failed")
             self.failed.emit(str(exc))
             return

@@ -2,18 +2,18 @@
 Ultra PDF Editor - Find and Replace Dialog
 """
 
-from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLineEdit,
-    QPushButton,
-    QCheckBox,
-    QLabel,
-    QMessageBox,
-)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 
 # Live search waits for a pause in typing, and only for terms this long; a
 # shorter term is searched when the user presses Enter / Find Next. Searching
@@ -211,7 +211,7 @@ class FindReplaceDialog(_DebouncedSearchMixin, QDialog):
         self._setup_shortcuts()
         self._init_live_search()
 
-    def _setup_ui(self):
+    def _setup_ui(self):  # noqa: PLR0915 - widget layout built in order
         layout = QVBoxLayout(self)
 
         # Find input row

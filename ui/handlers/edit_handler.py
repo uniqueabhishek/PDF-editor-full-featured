@@ -143,7 +143,7 @@ class EditHandlerMixin(_MixinBase):
         page_num = self._viewer.get_current_page()
         try:
             info = self._document.get_page_info(page_num)
-        except Exception:
+        except Exception:  # noqa: BLE001 - no page info means nothing to place the box on
             return
         # A reasonable default text-box rectangle near the top-left of the page.
         rect = (50.0, 50.0, max(150.0, min(info.width - 50.0, 400.0)), 150.0)
@@ -337,7 +337,7 @@ class EditHandlerMixin(_MixinBase):
         # progress and Cancel, then swap the result in as one undoable step.
         try:
             data, password = self._document.worker_copy()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - shown to the user in an error dialog
             QMessageBox.critical(self, "Error", f"Could not prepare document:\n{e}")
             return
         progress = QProgressDialog(

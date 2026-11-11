@@ -3,37 +3,38 @@ Ultra PDF Editor - PDF Viewer Widget
 High-performance PDF rendering and interaction widget
 """
 
-from PyQt6.QtWidgets import (
-    QWidget,
-    QScrollArea,
-    QLabel,
-    QRubberBand,
-    QApplication,
-    QMenu,
-    QSizePolicy,
-)
-from PyQt6.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QTimer, QThread
-from PyQt6.QtGui import (
-    QPixmap,
-    QImage,
-    QPainter,
-    QColor,
-    QPen,
-    QBrush,
-    QWheelEvent,
-    QMouseEvent,
-    QKeyEvent,
-)
 import bisect
-import fitz
 import logging
 import math
 import os
 import threading
 from collections import OrderedDict
-from typing import Optional, List, Dict, Union, cast, Any
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, cast
+
+import fitz
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+    QWheelEvent,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMenu,
+    QRubberBand,
+    QScrollArea,
+    QSizePolicy,
+    QWidget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ _KEEP_RENDERED_MARGIN = 3
 _ZOOM_RENDER_DELAY_MS = 150
 
 
-def _to_device(clip: Optional[tuple], dpr: float) -> Optional[tuple]:
+def _to_device(clip: tuple | None, dpr: float) -> tuple | None:
     """A clip in layout pixels as device pixels (outward-rounded)."""
     if clip is None:
         return None
@@ -122,7 +123,7 @@ class RenderTask:
     zoom: float
     priority: int = 0
     # Part of the page to render, in full-page pixels (see _render_clip_for).
-    clip: Optional[tuple] = None
+    clip: tuple | None = None
 
 
 class PageRenderWorker(QThread):
@@ -150,7 +151,7 @@ class PageRenderWorker(QThread):
         super().__init__(parent)
         self._backend: Any = None
         self._backend_ready = threading.Event()
-        self._tasks: List[RenderTask] = []
+        self._tasks: list[RenderTask] = []
         self._render_dpi = 150
         self._rotation = 0
         # Screen pixels per layout pixel; pages render this much finer so they
@@ -208,13 +209,13 @@ class PageRenderWorker(QThread):
             count = self._call("page_count")
         return -1 if count is None else count
 
-    def render_samples(self, page_num: int, dpi: int) -> Optional[bytes]:
+    def render_samples(self, page_num: int, dpi: int) -> bytes | None:
         """Raw RGB pixels of one page of the worker's copy (for checks/tests)."""
         with self._lock:
             out = self._call("render", page_num, dpi / 72, 0)
         return None if out is None else out[3]
 
-    def set_document(self, data: Optional[Union[bytes, str]], render_dpi: int = 150) -> bool:
+    def set_document(self, data: bytes | str | None, render_dpi: int = 150) -> bool:
         """Give the worker its own document copy.
 
         ``data`` is serialized PDF bytes, or the path of a file whose content is
@@ -234,7 +235,7 @@ class PageRenderWorker(QThread):
                 return True
             return bool(self._call("open", data))
 
-    def patch_pages(self, src: fitz.Document, pages: List[int]) -> bool:
+    def patch_pages(self, src: fitz.Document, pages: list[int]) -> bool:
         """Copy just ``pages`` from the editable document into the worker's copy.
 
         Runs on the GUI thread (which owns ``src``). About 2 ms a page, against
@@ -247,7 +248,7 @@ class PageRenderWorker(QThread):
         with self._lock:
             return bool(self._call("patch", src, list(pages)))
 
-    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+    def delete_pages(self, pages: list[int], expected_before: int) -> bool:
         """Mirror a page deletion in the worker's copy (no re-serialize)."""
         with self._task_cond:
             self._tasks.clear()  # page numbers shift
@@ -273,7 +274,7 @@ class PageRenderWorker(QThread):
             self._rotation = rotation
 
     def request_page(
-        self, page_num: int, zoom: float, priority: int = 0, clip: Optional[tuple] = None
+        self, page_num: int, zoom: float, priority: int = 0, clip: tuple | None = None
     ):
         """Request a page (or the ``clip`` part of it) to be rendered"""
         with self._task_cond:
@@ -372,38 +373,38 @@ class PageWidget(QLabel):
     def __init__(self, page_num: int, render_dpi: int = 150, parent=None):
         super().__init__(parent)
         self.page_num = page_num
-        self._pixmap: Optional[QPixmap] = None
+        self._pixmap: QPixmap | None = None
         # Old render shown stretched while a zoom step re-renders the page.
-        self._preview: Optional[QPixmap] = None
+        self._preview: QPixmap | None = None
         # (offset QPoint, clip) when only part of the page is rendered.
-        self._partial: Optional[tuple] = None
+        self._partial: tuple | None = None
         self._zoom = 1.0
         self._render_dpi = render_dpi  # Store render DPI for coordinate conversion
         self._page_rect = QRectF()
-        self._selection_start: Optional[QPointF] = None
-        self._selection_rect: Optional[QRectF] = None
-        self._rubber_band: Optional[QRubberBand] = None
-        self._annotations: List[Dict] = []
+        self._selection_start: QPointF | None = None
+        self._selection_rect: QRectF | None = None
+        self._rubber_band: QRubberBand | None = None
+        self._annotations: list[dict] = []
         # Search-result rectangles in PDF coordinates (72 dpi); scaled to widget
         # pixels at paint time so they track zoom. _current_search_rect is the
         # active match, drawn in a stronger colour.
-        self._search_rects: List[QRectF] = []
-        self._current_search_rect: Optional[QRectF] = None
+        self._search_rects: list[QRectF] = []
+        self._current_search_rect: QRectF | None = None
         self._is_loading = True
-        self._tool_mode: Optional[str] = None  # Current tool mode
+        self._tool_mode: str | None = None  # Current tool mode
         # Points for freehand drawing
-        self._freehand_points: List[QPointF] = []
+        self._freehand_points: list[QPointF] = []
 
         # --- word-based text selection (Text Select tool) ------------------
         # Provider returns this page's words in reading order, each a tuple
         # (x0, y0, x1, y1, "word", block_no, line_no, word_no) in PDF coords.
         self._word_provider = None
-        self._sel_words: Optional[List] = None  # words snapshot for a drag
-        self._text_anchor: Optional[QPointF] = None  # drag start (PDF coords)
-        self._text_press_widget: Optional[QPointF] = None  # drag start (px)
+        self._sel_words: list | None = None  # words snapshot for a drag
+        self._text_anchor: QPointF | None = None  # drag start (PDF coords)
+        self._text_press_widget: QPointF | None = None  # drag start (px)
         self._text_selecting = False
         # Persistent highlight rectangles (PDF coords) for the active selection.
-        self._text_sel_rects: List[QRectF] = []
+        self._text_sel_rects: list[QRectF] = []
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("background-color: white; border: 1px solid #ccc;")
@@ -415,7 +416,7 @@ class PageWidget(QLabel):
         """Set the current tool mode"""
         self._tool_mode = mode
 
-    def set_search_rects(self, rects: List[QRectF], current: Optional[QRectF] = None):
+    def set_search_rects(self, rects: list[QRectF], current: QRectF | None = None):
         """Show search-result highlights (``rects`` in PDF coordinates)."""
         self._search_rects = rects
         self._current_search_rect = current
@@ -527,7 +528,7 @@ class PageWidget(QLabel):
         return QPointF(widget_pos.x() / scale, widget_pos.y() / scale)
 
     @staticmethod
-    def _nearest_word_index(words: List, p: QPointF) -> Optional[int]:
+    def _nearest_word_index(words: list, p: QPointF) -> int | None:
         """Index of the word nearest point ``p`` (PDF coords), caret-style.
 
         Distance to a word's box is the point-to-rectangle distance with the
@@ -550,7 +551,7 @@ class PageWidget(QLabel):
                 best_i = i
         return best_i
 
-    def _selection_for(self, a: Optional[QPointF], b: Optional[QPointF]):
+    def _selection_for(self, a: QPointF | None, b: QPointF | None):
         """Return (highlight rects in PDF coords, selected text) for a drag.
 
         Selects every word between the words nearest ``a`` and ``b`` in reading
@@ -568,7 +569,7 @@ class PageWidget(QLabel):
         selected = words[lo : hi + 1]
 
         # Group consecutive words that share a (block, line) into lines.
-        groups: List = []
+        groups: list = []
         for w in selected:
             key = (w[5], w[6])
             if groups and groups[-1][0] == key:
@@ -576,8 +577,8 @@ class PageWidget(QLabel):
             else:
                 groups.append((key, [w]))
 
-        rects: List[QRectF] = []
-        lines: List[str] = []
+        rects: list[QRectF] = []
+        lines: list[str] = []
         for _key, line_words in groups:
             r = QRectF(
                 line_words[0][0],
@@ -786,8 +787,8 @@ class PDFViewer(QScrollArea):
         super().__init__(parent)
 
         # Document reference
-        self._doc: Optional[fitz.Document] = None
-        self._filepath: Optional[str] = None
+        self._doc: fitz.Document | None = None
+        self._filepath: str | None = None
 
         # View state
         self._current_page = 0
@@ -798,34 +799,34 @@ class PDFViewer(QScrollArea):
 
         # Rendering
         self._render_dpi = 150
-        self._page_widgets: List[PageWidget] = []
+        self._page_widgets: list[PageWidget] = []
         # LRU cache keyed by page number; most-recently-used at the end.
-        self._page_cache: "OrderedDict[int, QPixmap]" = OrderedDict()
+        self._page_cache: OrderedDict[int, QPixmap] = OrderedDict()
         # Pages whose widget currently holds a bitmap (see _release_offscreen_pixmaps).
         self._shown_pages: set = set()
         # Device pixel ratio the renders are made for (see _sync_device_pixel_ratio).
         self._render_dpr = 1.0
         # Page rects the current widgets were built for (see set_document reuse).
-        self._page_rects: List[tuple] = []
+        self._page_rects: list[tuple] = []
         self._cache_size = 10
 
         # Search highlighting: results from PDFDocument.search_text plus the
         # active match (page_num, QRectF in PDF coords).
-        self._search_results: List[Dict] = []
-        self._current_result: Optional[tuple] = None
+        self._search_results: list[dict] = []
+        self._current_result: tuple | None = None
 
         # Tool state — Text Select is the default cursor tool (Acrobat-style).
         self._tool_mode = ToolMode.TEXT_SELECT
         self._tool_cursor = Qt.CursorShape.IBeamCursor
         # Per-page word boxes cache (PDF coords), filled lazily for selection.
-        self._page_words_cache: Dict[int, List] = {}
+        self._page_words_cache: dict[int, list] = {}
         # Active text selection as (page_num, text), or None.
-        self._text_selection: Optional[tuple] = None
+        self._text_selection: tuple | None = None
         # Inline "Edit Text" state: a provider that finds the paragraph under a
         # point, the live editor overlay, and its context.
         self._text_block_provider = None
         self._inline_editor = None
-        self._edit_ctx: Optional[dict] = None
+        self._edit_ctx: dict | None = None
         self._annotation_color = QColor(255, 255, 0)  # Yellow
         self._annotation_opacity = 0.5
         self._stroke_width = 2
@@ -835,7 +836,7 @@ class PDFViewer(QScrollArea):
         # Interaction state
         self._is_panning = False
         self._last_pan_pos = QPoint()
-        self._freehand_points: List[QPointF] = []
+        self._freehand_points: list[QPointF] = []
 
         # Background render worker
         self._render_worker = PageRenderWorker()
@@ -883,8 +884,8 @@ class PDFViewer(QScrollArea):
         # pages a binary search instead of a walk down the document.
         self._container = _PageContainer(self._position_pages)
         self._container.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self._rows: List[tuple] = []  # (top, height, [page indices])
-        self._row_bottoms: List[int] = []
+        self._rows: list[tuple] = []  # (top, height, [page indices])
+        self._row_bottoms: list[int] = []
 
         self.setWidget(self._container)
 
@@ -921,9 +922,9 @@ class PDFViewer(QScrollArea):
 
     def set_document(
         self,
-        doc: Optional[fitz.Document],
-        filepath: Optional[str] = None,
-        render_source: Optional[Union[bytes, str]] = None,
+        doc: fitz.Document | None,
+        filepath: str | None = None,
+        render_source: bytes | str | None = None,
         reuse_layout: bool = False,
         keep_images: bool = False,
     ):
@@ -1012,11 +1013,11 @@ class PDFViewer(QScrollArea):
             QTimer.singleShot(50, self._request_visible_pages)
 
     @staticmethod
-    def _doc_page_rects(doc: fitz.Document) -> List[tuple]:
+    def _doc_page_rects(doc: fitz.Document) -> list[tuple]:
         """Every page's on-screen rect (rotation applied), to compare layouts."""
         return [tuple(doc[i].rect) for i in range(len(doc))]
 
-    def pages_edited(self, pages: List[int]):
+    def pages_edited(self, pages: list[int]):
         """Content of ``pages`` changed in place (page count and order kept)."""
         self._teardown_inline_editor()
         self._text_selection = None
@@ -1043,7 +1044,7 @@ class PDFViewer(QScrollArea):
         self._render_timer.stop()
         self._render_worker.clear_tasks()
 
-    def _render_source(self, doc: Optional[fitz.Document]) -> Optional[bytes]:
+    def _render_source(self, doc: fitz.Document | None) -> bytes | None:
         """Serialize the document to PDF bytes for the render worker's copy.
 
         Encryption is dropped in this transient, in-memory copy so the worker
@@ -1108,7 +1109,7 @@ class PDFViewer(QScrollArea):
             self._page_words_cache.clear()
         self._schedule_worker_resync()
 
-    def _patch_render_copy(self, pages: List[int]) -> bool:
+    def _patch_render_copy(self, pages: list[int]) -> bool:
         """Patch ``pages`` into the worker's copy; False means do a full resync.
 
         Skipped while a full resync is already pending: the worker's copy is
@@ -1193,7 +1194,7 @@ class PDFViewer(QScrollArea):
         self._shown_pages = {p + count if p >= index else p for p in self._shown_pages}
         self._after_structure_change()
 
-    def pages_removed(self, pages: List[int]):
+    def pages_removed(self, pages: list[int]):
         """``pages`` (indices before the removal) were deleted."""
         if not self._doc_live() or not self._page_widgets:
             return
@@ -1297,7 +1298,7 @@ class PDFViewer(QScrollArea):
         self._rows = [(top, h, row) for top, h, row, _s, _w in specs]
         self._row_bottoms = [top + h for top, h, _row in self._rows]
 
-    def _visible_page_indices(self) -> List[int]:
+    def _visible_page_indices(self) -> list[int]:
         """Indices of the pages intersecting the viewport, in view order.
 
         A binary search over the row positions kept by _position_pages(), so
@@ -1310,14 +1311,14 @@ class PDFViewer(QScrollArea):
         top = v_scrollbar.value()
         bottom = top + viewport_widget.height()
         first = bisect.bisect_left(self._row_bottoms, top)
-        visible: List[int] = []
+        visible: list[int] = []
         for row_top, _h, row in self._rows[first:]:
             if row_top > bottom:
                 break
             visible.extend(row)
         return visible
 
-    def _cache_get(self, page_num: int) -> Optional[QPixmap]:
+    def _cache_get(self, page_num: int) -> QPixmap | None:
         """Return a cached pixmap, marking it most-recently-used (true LRU)."""
         pixmap = self._page_cache.get(page_num)
         if pixmap is not None:
@@ -1394,7 +1395,7 @@ class PDFViewer(QScrollArea):
             self._render_worker.request_page(i, self._zoom, priority=1000 - abs(i - center))
             queued += 1
 
-    def _release_offscreen_pixmaps(self, visible: List[int]) -> None:
+    def _release_offscreen_pixmaps(self, visible: list[int]) -> None:
         """Drop bitmaps of pages more than a few pages away from the viewport.
 
         Pages just outside the view keep theirs so short scrolls stay instant;
@@ -1419,7 +1420,7 @@ class PDFViewer(QScrollArea):
         for w in self._page_widgets:
             w._is_loading = True
 
-    def _render_clip_for(self, page_num: int) -> Optional[tuple]:
+    def _render_clip_for(self, page_num: int) -> tuple | None:
         """``(clip, visible)`` for a page too large to render whole, else None.
 
         Both are ``(x0, y0, x1, y1)`` in the page widget's pixels: ``visible``
@@ -1450,7 +1451,7 @@ class PDFViewer(QScrollArea):
         return clip, (x0, y0, x1, y1)
 
     def _on_page_rendered(
-        self, page_num: int, image: QImage, zoom: float, part: Optional[tuple] = None
+        self, page_num: int, image: QImage, zoom: float, part: tuple | None = None
     ):
         """Handle page rendered from background worker"""
         # Check if zoom still matches (ignore stale renders)
@@ -1620,7 +1621,7 @@ class PDFViewer(QScrollArea):
                         if content:
                             tooltip_text = content
                             break
-        except Exception:
+        except Exception:  # noqa: BLE001 - a tooltip is optional; never break mouse movement
             pass
 
         # Set or clear tooltip on the page widget
@@ -1651,7 +1652,7 @@ class PDFViewer(QScrollArea):
 
     def _edit_sticky_note(self, page_num: int, annot):
         """Open dialog to view/edit sticky note content"""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QTextEdit, QVBoxLayout
 
         # Get current note content
         current_text = annot.info.get("content", "")
@@ -1710,7 +1711,7 @@ class PDFViewer(QScrollArea):
                 self.document_modified.emit(page_num)
                 self.refresh(page_num)
 
-    def _style_data(self) -> Dict[str, Any]:
+    def _style_data(self) -> dict[str, Any]:
         """Current annotation style (color/opacity/width/font) from the toolbar.
 
         Threaded into every ``annotation_create_requested`` so the command that
@@ -1730,7 +1731,7 @@ class PDFViewer(QScrollArea):
         }
 
     def _request_annotation(
-        self, page_num: int, annot_type: str, rect, extra: Optional[Dict[str, Any]] = None
+        self, page_num: int, annot_type: str, rect, extra: dict[str, Any] | None = None
     ):
         """Emit an annotation-creation request with the current style merged in."""
         data = self._style_data()
@@ -1746,7 +1747,7 @@ class PDFViewer(QScrollArea):
         # Emit signal instead of creating directly
         self._request_annotation(page_num, "ink", None, {"points": points})
 
-    def _on_annotation_created(self, page_num: int, annot_type: str, rect: QRectF):
+    def _on_annotation_created(self, page_num: int, annot_type: str, rect: QRectF):  # noqa: PLR0912 - one branch per annotation tool
         """Handle annotation creation based on current tool mode"""
         # Reject accidental clicks (near-zero drag), but allow thin selections so
         # that horizontal/vertical lines and arrows (height or width ~0) still work.
@@ -1817,7 +1818,7 @@ class PDFViewer(QScrollArea):
 
     def _create_text_annotation(self, page_num: int, rect: QRectF, free_text: bool = False):
         """Create text box or sticky note annotation"""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QLabel
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QTextEdit, QVBoxLayout
 
         # Create a custom dialog with better text editing
         dialog = QDialog(self)
@@ -1859,7 +1860,7 @@ class PDFViewer(QScrollArea):
 
     def _create_stamp_annotation(self, page_num: int, rect: QRectF):
         """Create a stamp annotation with user-selected stamp type"""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QDialogButtonBox, QLabel
+        from PyQt6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
         # Available stamp types
         stamp_types = [
@@ -1985,7 +1986,7 @@ class PDFViewer(QScrollArea):
         self._update_zoom()
         self._render_all_pages()
 
-    def set_search_results(self, results: List[Dict]):
+    def set_search_results(self, results: list[dict]):
         """Highlight search results across pages.
 
         ``results`` is the list from ``PDFDocument.search_text``: dicts of
@@ -2002,10 +2003,10 @@ class PDFViewer(QScrollArea):
         for pw in self._page_widgets:
             pw.clear_search_rects()
 
-    def _search_rects_by_page(self) -> Dict[int, List[QRectF]]:
+    def _search_rects_by_page(self) -> dict[int, list[QRectF]]:
         """Search rects grouped by page, built once per result list."""
         if getattr(self, "_by_page_src", None) is not self._search_results:
-            by_page: Dict[int, List[QRectF]] = {}
+            by_page: dict[int, list[QRectF]] = {}
             for res in self._search_results:
                 page = res.get("page", -1)
                 by_page.setdefault(page, []).extend(
@@ -2172,7 +2173,7 @@ class PDFViewer(QScrollArea):
         self._position_pages()
         self._request_visible_pages()
 
-    def get_page_words(self, page_num: int) -> List:
+    def get_page_words(self, page_num: int) -> list:
         """Return ``page_num``'s words in reading order (cached).
 
         Each word is the PyMuPDF tuple ``(x0, y0, x1, y1, "word", block_no,
@@ -2248,8 +2249,9 @@ class PDFViewer(QScrollArea):
             self._open_inline_editor(page_num, block)
 
     def _open_inline_editor(self, page_num: int, block: dict):
-        from ui.inline_text_editor import InlineTextEditor
         from PyQt6.QtGui import QFont, QFontMetricsF
+
+        from ui.inline_text_editor import InlineTextEditor
 
         page_widget = self._page_widgets[page_num]
         scale = page_widget._zoom * page_widget._render_dpi / 72
@@ -2456,9 +2458,8 @@ class PDFViewer(QScrollArea):
         # patch the one changed page if known, else re-serialize lazily
         # (debounced). Both re-request the visible pages once the copy is fresh,
         # avoiding a stale-render flash.
-        if 0 <= changed_page < len(self._page_widgets):
-            if self._patch_render_copy([changed_page]):
-                return
+        if 0 <= changed_page < len(self._page_widgets) and self._patch_render_copy([changed_page]):
+            return
         self._schedule_worker_resync()
 
     def _render_page_sync(self, page_num: int):
@@ -2571,7 +2572,7 @@ class PDFViewer(QScrollArea):
             self.first_page()
         elif key == Qt.Key.Key_End:
             self.last_page()
-        elif key == Qt.Key.Key_Plus or key == Qt.Key.Key_Equal:
+        elif key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
             if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
                 self.zoom_in()
         elif key == Qt.Key.Key_Minus:

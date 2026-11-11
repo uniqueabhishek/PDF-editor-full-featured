@@ -28,6 +28,7 @@ def main_window(qtbot, tmp_path, monkeypatch):
 
 def test_print_caps_render_dpi_and_prints_every_page(main_window, make_pdf, tmp_path, monkeypatch):
     import PyQt6.QtPrintSupport as qps
+
     import ui.handlers.file_handler as fh
 
     out = tmp_path / "printed.pdf"

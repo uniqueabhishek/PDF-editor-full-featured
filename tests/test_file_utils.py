@@ -4,15 +4,15 @@ import hashlib
 from pathlib import Path
 
 from utils.file_utils import (
-    format_file_size,
-    sanitize_filename,
     ensure_extension,
-    get_unique_filename,
-    validate_pdf,
+    format_file_size,
     get_file_hash,
     get_pdf_page_count,
+    get_unique_filename,
     is_pdf_encrypted,
     list_pdfs_in_directory,
+    sanitize_filename,
+    validate_pdf,
 )
 
 

@@ -2,21 +2,21 @@
 Ultra PDF Editor - Extract Pages Dialog
 """
 
+import re
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLineEdit,
-    QPushButton,
-    QLabel,
     QFileDialog,
-    QMessageBox,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
     QRadioButton,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
-from typing import List, Optional
-import re
 
 
 class ExtractPagesDialog(QDialog):
@@ -26,8 +26,8 @@ class ExtractPagesDialog(QDialog):
         super().__init__(parent)
         self._page_count = page_count
         self._current_page = current_page
-        self._output_path: Optional[str] = None
-        self._selected_pages: List[int] = []
+        self._output_path: str | None = None
+        self._selected_pages: list[int] = []
 
         self.setWindowTitle("Extract Pages")
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -121,7 +121,7 @@ class ExtractPagesDialog(QDialog):
             self._output_input.setText(filepath)
             self._output_path = filepath
 
-    def _parse_page_range(self, range_str: str) -> List[int]:
+    def _parse_page_range(self, range_str: str) -> list[int]:
         """Parse page range string into list of page numbers (0-indexed)"""
         pages = []
         range_str = range_str.strip()
@@ -130,8 +130,8 @@ class ExtractPagesDialog(QDialog):
             return pages
 
         parts = range_str.split(",")
-        for part in parts:
-            part = part.strip()
+        for raw_part in parts:
+            part = raw_part.strip()
             if "-" in part:
                 # Range like "1-5"
                 match = re.match(r"(\d+)\s*-\s*(\d+)", part)
@@ -173,7 +173,7 @@ class ExtractPagesDialog(QDialog):
 
         self.accept()
 
-    def get_selected_pages(self) -> List[int]:
+    def get_selected_pages(self) -> list[int]:
         """Get list of selected pages (0-indexed)"""
         return self._selected_pages
 
