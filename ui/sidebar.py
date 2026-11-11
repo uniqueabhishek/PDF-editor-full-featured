@@ -191,13 +191,18 @@ class ThumbnailWidget(QFrame):
         self.mark_toggled.emit(self.page_num, marked)
 
     def set_pixmap(self, pixmap: QPixmap):
-        """Set the thumbnail image"""
-        self._pixmap = pixmap
+        """Set the thumbnail image.
+
+        Only the scaled-down copy is kept: holding the 36-dpi source as well
+        cost ~0.5 MB per page ever shown, which nothing needs (the drag image is
+        smaller still). The label shares the same pixmap data.
+        """
         scaled = pixmap.scaled(
             120, 160,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
+        self._pixmap = scaled
         self._image_label.setPixmap(scaled)
         self._image_label.setFixedSize(scaled.size())
         self._reposition_badges()
