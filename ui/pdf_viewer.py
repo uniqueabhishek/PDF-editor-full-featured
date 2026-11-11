@@ -15,6 +15,7 @@ from PyQt6.QtGui import (
 )
 import fitz
 import logging
+import os
 import threading
 from collections import OrderedDict
 from typing import Optional, List, Dict, Union, cast, Any
@@ -31,21 +32,6 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 # Pages within this many of the viewport keep their rendered bitmap; the rest
 # are released so memory stays flat however far the user scrolls.
 _KEEP_RENDERED_MARGIN = 3
-
-
-def _release_mupdf_cache() -> None:
-    """Empty MuPDF's shared cache of decoded images and fonts.
-
-    The cache tops out at ~256 MB, but closing a document does not release its
-    entries: they linger until pushed out, so every discarded copy (each
-    snapshot edit and undo swaps one) keeps its decoded scan images around.
-    Called when a document copy is discarded; the live documents just re-decode
-    what they next render.
-    """
-    try:
-        fitz.TOOLS.store_shrink(100)
-    except Exception:
-        logger.debug("Could not shrink the MuPDF cache", exc_info=True)
 
 
 class ViewMode(Enum):
@@ -89,18 +75,28 @@ class RenderTask:
 
 
 class PageRenderWorker(QThread):
-    """Background worker for rendering PDF pages"""
+    """Background worker for rendering PDF pages.
+
+    Renders from its OWN private copy of the document so it never touches the
+    editable document the main thread reads and mutates (PyMuPDF documents are
+    not thread-safe). That copy lives in a separate render process (see
+    :mod:`core.render_backend`): PyMuPDF holds the GIL while it renders, so an
+    in-thread render froze the window for its whole duration. If the process
+    can't start, or dies, rendering falls back to this thread and
+    ``copy_lost`` asks the viewer to hand over a fresh copy.
+
+    ``_lock`` serializes every call into the backend (render vs. hand-off /
+    patch / close); ``_task_cond`` guards the task queue and lets the loop
+    sleep until there is work or a stop.
+    """
 
     page_rendered = pyqtSignal(int, QImage, float)  # page_num, image, zoom
+    copy_lost = pyqtSignal()  # the render process died; resend the document
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # The worker renders from its OWN private copy of the document so it
-        # never touches the editable document the main thread reads and mutates
-        # (PyMuPDF documents are not thread-safe). `_lock` guards that private
-        # copy (render vs. hand-off/close); `_task_cond` (a Condition) guards the
-        # task queue and lets the loop sleep until there is work or a stop.
-        self._doc: Optional[fitz.Document] = None
+        self._backend: Any = None
+        self._backend_ready = threading.Event()
         self._tasks: List[RenderTask] = []
         self._render_dpi = 150
         self._rotation = 0
@@ -109,77 +105,89 @@ class PageRenderWorker(QThread):
         self._lock = threading.Lock()
         self._task_cond = threading.Condition()
 
+    # ---- backend management ----
+
+    def _start_backend(self):
+        """Runs on the worker thread so spawning the process never blocks the UI."""
+        from core.render_backend import InProcessRenderer, ProcessRenderer
+        backend: Any = None
+        if os.environ.get("ULTRA_PDF_RENDER_IN_PROCESS") != "1":
+            try:
+                backend = ProcessRenderer()
+                backend.page_count()  # wait until the process is up
+            except Exception:
+                logger.exception("Render process unavailable; rendering in-thread")
+                backend = None
+        self._backend = backend or InProcessRenderer()
+        self._backend_ready.set()
+
+    def _ready_backend(self):
+        if not self._backend_ready.wait(30):
+            raise RuntimeError("render backend did not start")
+        return self._backend
+
+    def _call(self, fn_name: str, *args):
+        """Call the backend under the lock; survive the render process dying."""
+        from core.render_backend import InProcessRenderer, RenderProcessDied
+        backend = self._ready_backend()
+        try:
+            return getattr(backend, fn_name)(*args)
+        except RenderProcessDied:
+            logger.error("Render process died; rendering in-thread from now on")
+            self._backend = InProcessRenderer()
+            self.copy_lost.emit()
+            return None
+
+    @property
+    def uses_render_process(self) -> bool:
+        from core.render_backend import ProcessRenderer
+        return isinstance(self._ready_backend(), ProcessRenderer)
+
+    def page_count(self) -> int:
+        """Pages in the worker's copy (-1 when it has none)."""
+        with self._lock:
+            count = self._call("page_count")
+        return -1 if count is None else count
+
+    def render_samples(self, page_num: int, dpi: int) -> Optional[bytes]:
+        """Raw RGB pixels of one page of the worker's copy (for checks/tests)."""
+        with self._lock:
+            out = self._call("render", page_num, dpi / 72, 0)
+        return None if out is None else out[3]
+
     def set_document(self, data: Optional[Union[bytes, str]],
                      render_dpi: int = 150) -> bool:
         """Give the worker its own document copy.
 
         ``data`` is serialized PDF bytes, or the path of a file whose content is
         known to match the editable document (a freshly opened file). Passing
-        ``None`` detaches (e.g. when the document is closed). Opening a private
-        copy keeps the render thread fully isolated from the editable document,
-        so rendering can never collide with edits or other reads.
+        ``None`` detaches (e.g. when the document is closed).
 
         Returns False if a source was given but could not be used (unreadable,
         or password-locked); the worker is then detached and the caller should
         fall back to serialized bytes.
         """
-        new_doc = None
-        ok = True
-        if data is not None:
-            try:
-                if isinstance(data, str):
-                    new_doc = fitz.open(data)
-                else:
-                    new_doc = fitz.open(stream=data, filetype="pdf")
-                if new_doc.needs_pass:
-                    new_doc.close()
-                    new_doc = None
-                    ok = False
-            except Exception:
-                logger.exception("Render worker could not open its document copy")
-                new_doc = None
-                ok = False
-        with self._lock:
-            old_doc = self._doc
-            self._doc = new_doc
-            self._render_dpi = render_dpi
-            if old_doc is not None:
-                try:
-                    old_doc.close()
-                except Exception:
-                    logger.debug("Failed to close previous render copy", exc_info=True)
-                _release_mupdf_cache()
         with self._task_cond:
             self._tasks.clear()
-        return ok
+        with self._lock:
+            self._render_dpi = render_dpi
+            if data is None:
+                self._call("close")
+                return True
+            return bool(self._call("open", data))
 
     def patch_pages(self, src: fitz.Document, pages: List[int]) -> bool:
         """Copy just ``pages`` from the editable document into the worker's copy.
 
-        Runs on the GUI thread (which owns ``src``) while holding the worker's
-        lock, so neither document is touched by two threads at once. About 2 ms
-        a page, against a full re-serialize that grows with file size (~0.2 s on
-        a 36 MB scan). Returns False if the copies no longer line up (no copy,
-        or page count differs); the caller then falls back to a full resync.
+        Runs on the GUI thread (which owns ``src``). About 2 ms a page, against
+        a full re-serialize that grows with file size (~0.2 s on a 36 MB scan).
+        Returns False if the copies no longer line up (no copy, or page count
+        differs); the caller then falls back to a full resync.
         """
         with self._task_cond:
             self._tasks = [t for t in self._tasks if t.page_num not in pages]
         with self._lock:
-            doc = self._doc
-            if doc is None or doc.is_closed or len(doc) != len(src):
-                return False
-            try:
-                for p in sorted(set(pages)):
-                    # A fresh graft map per insert, so objects copied by an
-                    # earlier patch are never reused in their stale form.
-                    if hasattr(doc, "Graftmaps"):
-                        doc.Graftmaps = {}
-                    doc.delete_page(p)
-                    doc.insert_pdf(src, from_page=p, to_page=p, start_at=p)
-                return len(doc) == len(src)
-            except Exception:
-                logger.exception("Could not patch render copy for pages %s", pages)
-                return False
+            return bool(self._call("patch", src, list(pages)))
 
     def set_rotation(self, rotation: int):
         """Set rotation angle"""
@@ -203,21 +211,21 @@ class PageRenderWorker(QThread):
             self._tasks.clear()
 
     def stop(self):
-        """Stop the worker and release its document copy."""
+        """Stop the worker and release its document copy (and process)."""
         self._running = False
         with self._task_cond:
             self._task_cond.notify()  # wake the loop so it can exit promptly
         self.wait()
-        with self._lock:
-            if self._doc is not None:
+        if self._backend_ready.is_set():
+            with self._lock:
                 try:
-                    self._doc.close()
+                    self._backend.shutdown()
                 except Exception:
-                    logger.debug("Failed to close render copy on stop", exc_info=True)
-                self._doc = None
+                    logger.debug("Failed to shut down the render backend", exc_info=True)
 
     def run(self):
         """Main render loop"""
+        self._start_backend()
         while self._running:
             task = None
             with self._task_cond:
@@ -237,26 +245,18 @@ class PageRenderWorker(QThread):
 
             img = None
             with self._lock:
-                doc = self._doc
-                if doc is not None and 0 <= task.page_num < len(doc):
-                    try:
-                        page = doc[task.page_num]
-                        zoom_matrix = fitz.Matrix(
-                            task.zoom * self._render_dpi / 72,
-                            task.zoom * self._render_dpi / 72,
-                        ).prerotate(self._rotation)
-
-                        pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
-
-                        # Copy detaches from the pixmap memory so the QImage is
-                        # safe to use after the lock is released.
-                        img = QImage(
-                            pixmap.samples, pixmap.width, pixmap.height,
-                            pixmap.stride, QImage.Format.Format_RGB888,
-                        ).copy()
-                    except Exception:
-                        logger.exception("Error rendering page %s", task.page_num)
-                        img = None
+                try:
+                    out = self._call("render", task.page_num,
+                                     task.zoom * self._render_dpi / 72, self._rotation)
+                    if out is not None:
+                        width, height, stride, samples = out
+                        # Copy detaches from the samples buffer so the QImage
+                        # owns its pixels.
+                        img = QImage(samples, width, height, stride,
+                                     QImage.Format.Format_RGB888).copy()
+                except Exception:
+                    logger.exception("Error rendering page %s", task.page_num)
+                    img = None
 
             if img is not None:
                 self.page_rendered.emit(task.page_num, img, task.zoom)
@@ -697,6 +697,10 @@ class PDFViewer(QScrollArea):
         # Background render worker
         self._render_worker = PageRenderWorker()
         self._render_worker.page_rendered.connect(self._on_page_rendered)
+        # The render process died: hand the in-thread fallback a fresh copy.
+        # Queued, because copy_lost is emitted while the worker lock is held.
+        self._render_worker.copy_lost.connect(
+            self._resync_render_worker, Qt.ConnectionType.QueuedConnection)
         self._render_worker.start()
 
         # Setup UI

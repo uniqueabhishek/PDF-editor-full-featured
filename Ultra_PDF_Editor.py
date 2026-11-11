@@ -142,6 +142,11 @@ def setup_application():
 
 def main():
     """Main entry point"""
+    # Pages render in a child process (core.render_backend); a frozen build
+    # must let that child start instead of re-running the app.
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     # Check dependencies
     if not check_dependencies():
         sys.exit(1)

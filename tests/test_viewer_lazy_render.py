@@ -157,8 +157,7 @@ def test_scrolling_away_releases_page_bitmaps(qtbot, many_pages):
 
 
 def _worker_pixels(v, page_num):
-    with v._render_worker._lock:
-        return v._render_worker._doc[page_num].get_pixmap(dpi=40).samples
+    return v._render_worker.render_samples(page_num, 40)
 
 
 def test_single_page_edit_patches_render_copy(qtbot, many_pages):
@@ -174,13 +173,13 @@ def test_single_page_edit_patches_render_copy(qtbot, many_pages):
 
         assert not v._resync_timer.isActive(), "fell back to a debounced full resync"
         assert _worker_pixels(v, 5) == model.doc[5].get_pixmap(dpi=40).samples
-        assert len(v._render_worker._doc) == len(model.doc)
+        assert v._render_worker.page_count() == len(model.doc)
 
         # Undo-style refresh with a known page takes the same fast path.
         model.doc[8].set_rotation(90)
         v.refresh(8)
         assert not v._resync_timer.isActive()
-        assert v._render_worker._doc[8].rotation == 90
+        assert _worker_pixels(v, 8) == model.doc[8].get_pixmap(dpi=40).samples
     finally:
         v._render_worker.stop()
         model.close()
@@ -205,7 +204,7 @@ def test_render_source_is_used_instead_of_serializing(qtbot, many_pages, tmp_pat
     try:
         v._render_source = lambda doc: pytest.fail("serialized despite a usable source")
         v.set_document(model.doc, str(many_pages), render_source=str(many_pages))
-        assert len(v._render_worker._doc) == len(model.doc)
+        assert v._render_worker.page_count() == len(model.doc)
         snap = model.snapshot()
         v.set_document(model.doc, str(many_pages), render_source=snap)
         assert _worker_pixels(v, 3) == model.doc[3].get_pixmap(dpi=40).samples
@@ -226,9 +225,8 @@ def test_locked_render_source_falls_back_to_serializing(qtbot, many_pages, tmp_p
     qtbot.addWidget(v)
     try:
         v.set_document(model.doc, str(locked), render_source=str(locked))
-        doc = v._render_worker._doc
-        assert doc is not None and not doc.needs_pass
-        assert len(doc) == len(model.doc)
+        assert v._render_worker.page_count() == len(model.doc)
+        assert _worker_pixels(v, 0) == model.doc[0].get_pixmap(dpi=40).samples
     finally:
         v._render_worker.stop()
         model.close()

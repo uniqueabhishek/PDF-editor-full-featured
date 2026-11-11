@@ -13,6 +13,9 @@ import pytest
 # Run Qt headless (no display) for the GUI smoke tests; must be set before any
 # QApplication is created. Harmless for the headless-core tests.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Most tests build many viewers; render in-thread so each one doesn't spawn a
+# render process. tests/test_render_process.py covers the process backend.
+os.environ.setdefault("ULTRA_PDF_RENDER_IN_PROCESS", "1")
 
 # The project uses a flat layout (core/, config.py, utils/ at the repo root) and
 # is run from source, so make the repo root importable for the test session.
