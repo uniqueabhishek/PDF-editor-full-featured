@@ -47,7 +47,7 @@ def test_open_does_not_queue_every_page(qtbot, many_pages):
     v, model = _viewer(qtbot, many_pages)
     try:
         v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0: requested.append(page_num))
+            lambda page_num, zoom, priority=0, clip=None: requested.append(page_num))
         v._request_visible_pages()
 
         assert requested, "no page was requested — the view would stay blank"
@@ -118,7 +118,7 @@ def test_request_is_capped_when_geometry_is_degenerate(qtbot, many_pages):
     v, model = _viewer(qtbot, many_pages)
     try:
         v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0: requested.append(page_num))
+            lambda page_num, zoom, priority=0, clip=None: requested.append(page_num))
         # Zero-height pages make every page land at the same y — the degenerate
         # case the old geometry-based test hit on every open.
         v._page_pixel_size = lambda i: (100, 0)
@@ -135,7 +135,7 @@ def test_scrolling_away_releases_page_bitmaps(qtbot, many_pages):
     """Pages far from the viewport must drop their bitmap so memory stays flat."""
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: None
         for i in range(10):
             v._render_page_sync(i)
         assert all(v._page_widgets[i]._pixmap is not None for i in range(10))
@@ -165,13 +165,49 @@ def test_zoom_burst_renders_only_the_final_zoom(qtbot, many_pages):
     try:
         qtbot.wait(100)  # let the open-time render pass run
         v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0: requested.append(round(zoom, 4)))
+            lambda page_num, zoom, priority=0, clip=None: requested.append(round(zoom, 4)))
         for _ in range(5):
             v.zoom_in()
             qtbot.wait(40)          # notches closer together than the delay
         assert requested == [], f"rendered mid-burst at zooms {set(requested)}"
         qtbot.wait(_ZOOM_RENDER_DELAY_MS + 150)
         assert requested and set(requested) == {round(v._zoom, 4)}
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
+def test_very_high_zoom_renders_only_the_visible_part(qtbot, tmp_path):
+    """At 800% a page is ~139 M pixels; only what is on screen gets rendered."""
+    from ui.pdf_viewer import _MAX_RENDER_PIXELS, _ZOOM_RENDER_DELAY_MS
+    path = tmp_path / "three.pdf"
+    d = fitz.open()
+    for i in range(3):
+        d.new_page(width=595, height=842).insert_text((72, 100), f"page {i + 1}")
+    d.save(str(path))
+    d.close()
+    v, model = _viewer(qtbot, path)
+    try:
+        v.show()
+        v.set_zoom(800)
+        qtbot.wait(_ZOOM_RENDER_DELAY_MS + 100)
+        widget = v._page_widgets[0]
+        qtbot.waitUntil(lambda: widget._partial is not None, timeout=10000)
+        pix = widget._pixmap
+        assert pix.width() * pix.height() <= _MAX_RENDER_PIXELS
+        full_w, full_h = v._page_pixel_size(0)
+        assert full_w * full_h > 10 * _MAX_RENDER_PIXELS
+        clip, seen = v._render_clip_for(0)
+        assert widget.partial_covers(seen)
+
+        # Scroll far down the same page: a new part is rendered for it.
+        bar = v.verticalScrollBar()
+        qtbot.waitUntil(lambda: bar.maximum() > full_h, timeout=5000)
+        bar.setValue(full_h // 2)
+        qtbot.waitUntil(lambda: widget.partial_covers(v._render_clip_for(0)[1]),
+                        timeout=10000)
+        assert widget._partial[1][1] > 0, "still showing the top of the page"
+        assert not v._page_cache, "partial renders must not be cached"
     finally:
         v._render_worker.stop()
         model.close()
@@ -186,7 +222,7 @@ def test_single_page_edit_patches_render_copy(qtbot, many_pages):
     full re-serialize, and the copy must then render exactly like the source."""
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: None
         v._render_source = lambda doc: pytest.fail("full re-serialize on a one-page edit")
         model.doc[5].add_highlight_annot(fitz.Rect(72, 90, 200, 110))
         model.doc[5].draw_rect(fitz.Rect(50, 300, 300, 500), color=(1, 0, 0), width=5)
@@ -258,7 +294,7 @@ def test_reload_after_edit_reuses_page_widgets(qtbot, many_pages):
     a changed layout rebuilds them."""
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._render_worker.request_page = lambda page_num, zoom, priority=0: None
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: None
         widgets = list(v._page_widgets)
         v._current_page = 12
 

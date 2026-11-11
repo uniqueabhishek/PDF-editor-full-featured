@@ -34,6 +34,9 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 _KEEP_RENDERED_MARGIN = 3
 # Pages render this long after the last zoom step (see set_zoom).
 _ZOOM_RENDER_DELAY_MS = 150
+# A page bigger than this (pixels) renders only its visible part: 8 M pixels is
+# ~24 MB, a fit-width page on a 4K screen; 800% zoom would be 139 M pixels.
+_MAX_RENDER_PIXELS = 8_000_000
 
 
 class ViewMode(Enum):
@@ -74,6 +77,8 @@ class RenderTask:
     page_num: int
     zoom: float
     priority: int = 0
+    # Part of the page to render, in full-page pixels (see _render_clip_for).
+    clip: Optional[tuple] = None
 
 
 class PageRenderWorker(QThread):
@@ -92,7 +97,9 @@ class PageRenderWorker(QThread):
     sleep until there is work or a stop.
     """
 
-    page_rendered = pyqtSignal(int, QImage, float)  # page_num, image, zoom
+    # page_num, image, zoom, and for a partial render (x, y, clip) giving the
+    # image's offset within the page and the requested clip; None if whole.
+    page_rendered = pyqtSignal(int, QImage, float, object)
     copy_lost = pyqtSignal()  # the render process died; resend the document
 
     def __init__(self, parent=None):
@@ -196,12 +203,13 @@ class PageRenderWorker(QThread):
         with self._lock:
             self._rotation = rotation
 
-    def request_page(self, page_num: int, zoom: float, priority: int = 0):
-        """Request a page to be rendered"""
+    def request_page(self, page_num: int, zoom: float, priority: int = 0,
+                     clip: Optional[tuple] = None):
+        """Request a page (or the ``clip`` part of it) to be rendered"""
         with self._task_cond:
             # Remove any existing task for this page
             self._tasks = [t for t in self._tasks if t.page_num != page_num]
-            self._tasks.append(RenderTask(page_num, zoom, priority))
+            self._tasks.append(RenderTask(page_num, zoom, priority, clip))
             self._current_zoom = zoom
             # Sort by priority (higher first)
             self._tasks.sort(key=lambda t: t.priority, reverse=True)
@@ -249,9 +257,10 @@ class PageRenderWorker(QThread):
             with self._lock:
                 try:
                     out = self._call("render", task.page_num,
-                                     task.zoom * self._render_dpi / 72, self._rotation)
+                                     task.zoom * self._render_dpi / 72, self._rotation,
+                                     task.clip)
                     if out is not None:
-                        width, height, stride, samples = out
+                        width, height, stride, samples, ox, oy = out
                         # Copy detaches from the samples buffer so the QImage
                         # owns its pixels.
                         img = QImage(samples, width, height, stride,
@@ -261,7 +270,8 @@ class PageRenderWorker(QThread):
                     img = None
 
             if img is not None:
-                self.page_rendered.emit(task.page_num, img, task.zoom)
+                part = None if task.clip is None else (ox, oy, task.clip)
+                self.page_rendered.emit(task.page_num, img, task.zoom, part)
 
 
 class PageWidget(QLabel):
@@ -286,6 +296,8 @@ class PageWidget(QLabel):
         super().__init__(parent)
         self.page_num = page_num
         self._pixmap: Optional[QPixmap] = None
+        # (offset QPoint, clip) when only part of the page is rendered.
+        self._partial: Optional[tuple] = None
         self._zoom = 1.0
         self._render_dpi = render_dpi  # Store render DPI for coordinate conversion
         self._page_rect = QRectF()
@@ -340,11 +352,35 @@ class PageWidget(QLabel):
 
     def set_pixmap(self, pixmap: QPixmap, zoom: float = 1.0):
         """Set the page pixmap"""
+        self._partial = None
         self._pixmap = pixmap
         self._zoom = zoom
         self._is_loading = False
         self.setPixmap(pixmap)
         self.setFixedSize(pixmap.size())
+
+    def set_partial_pixmap(self, pixmap: QPixmap, zoom: float, x: int, y: int,
+                           clip: tuple):
+        """Show a render of only part of the page (very high zoom).
+
+        The widget keeps its full page size; ``pixmap`` is painted at ``(x, y)``
+        and covers ``clip`` (full-page pixels), which the viewer checks to
+        decide when scrolling needs a fresh part.
+        """
+        self._pixmap = pixmap
+        self._partial = (QPoint(x, y), clip)
+        self._zoom = zoom
+        self._is_loading = False
+        self.clear()  # QLabel would centre the pixmap; paintEvent places it
+        self.update()
+
+    def partial_covers(self, rect: tuple) -> bool:
+        """True if the shown partial render covers ``rect`` (x0, y0, x1, y1)."""
+        if self._partial is None or self._pixmap is None:
+            return False
+        cx0, cy0, cx1, cy1 = self._partial[1]
+        x0, y0, x1, y1 = rect
+        return cx0 <= x0 and cy0 <= y0 and cx1 >= x1 and cy1 >= y1
 
     def set_placeholder(self, width: int, height: int):
         """Reserve space for a not-yet-rendered page without allocating a pixmap.
@@ -358,6 +394,7 @@ class PageWidget(QLabel):
         """
         self._is_loading = True
         self._pixmap = None
+        self._partial = None
 
         # Ensure valid dimensions
         width = max(1, width)
@@ -379,6 +416,7 @@ class PageWidget(QLabel):
         if self._pixmap is None:
             return
         self._pixmap = None
+        self._partial = None
         self.clear()
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
@@ -576,6 +614,8 @@ class PageWidget(QLabel):
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
+        if self._partial is not None and self._pixmap is not None:
+            painter.drawPixmap(self._partial[0], self._pixmap)
 
         # Draw search-result highlights underneath any active tool overlay.
         if self._search_rects:
@@ -1096,6 +1136,20 @@ class PDFViewer(QScrollArea):
         for i in visible:
             page_widget = self._page_widgets[i]
 
+            # Too big to render whole (very high zoom): render the visible part
+            # only, and again only once scrolling leaves the part already shown.
+            region = self._render_clip_for(i)
+            if region is not None:
+                clip, seen = region
+                if not page_widget._is_loading and page_widget.partial_covers(seen):
+                    continue
+                if queued >= _MAX_QUEUED_PAGE_RENDERS:
+                    break
+                self._render_worker.request_page(
+                    i, self._zoom, priority=1000 - abs(i - center), clip=clip)
+                queued += 1
+                continue
+
             # Check cache first (only if page is not marked for re-render)
             cached = None if page_widget._is_loading else self._cache_get(i)
             if cached is not None:
@@ -1131,10 +1185,49 @@ class PDFViewer(QScrollArea):
                 self._page_widgets[i].release_pixmap()
             self._shown_pages.discard(i)
 
-    def _on_page_rendered(self, page_num: int, image: QImage, zoom: float):
+    def _render_clip_for(self, page_num: int) -> Optional[tuple]:
+        """``(clip, visible)`` for a page too large to render whole, else None.
+
+        Both are ``(x0, y0, x1, y1)`` in the page widget's pixels: ``visible``
+        is the part on screen, ``clip`` that part plus half a viewport around
+        it, so short scrolls need no new render. Without this cap a page at
+        800% was a 9917x14034 bitmap, 531 MB, several of them cached.
+        """
+        width, height = self._page_pixel_size(page_num)
+        if width * height <= _MAX_RENDER_PIXELS:
+            return None
+        viewport = self.viewport()
+        if viewport is None:
+            return None
+        geo = self._page_widgets[page_num].geometry()
+        h_bar, v_bar = self.horizontalScrollBar(), self.verticalScrollBar()
+        sx = h_bar.value() if h_bar else 0
+        sy = v_bar.value() if v_bar else 0
+        vw, vh = viewport.width(), viewport.height()
+        x0 = max(0, sx - geo.x())
+        y0 = max(0, sy - geo.y())
+        x1 = min(width, sx + vw - geo.x())
+        y1 = min(height, sy + vh - geo.y())
+        if x1 <= x0 or y1 <= y0:  # not actually on screen yet
+            x0, y0, x1, y1 = 0, 0, min(width, vw), min(height, vh)
+        mx, my = vw // 2, vh // 2
+        clip = (max(0, x0 - mx), max(0, y0 - my),
+                min(width, x1 + mx), min(height, y1 + my))
+        return clip, (x0, y0, x1, y1)
+
+    def _on_page_rendered(self, page_num: int, image: QImage, zoom: float,
+                          part: Optional[tuple] = None):
         """Handle page rendered from background worker"""
         # Check if zoom still matches (ignore stale renders)
         if abs(zoom - self._zoom) > 0.001:
+            return
+
+        if page_num < len(self._page_widgets) and part is not None:
+            # Partial renders of huge pages are never cached.
+            x, y, clip = part
+            self._page_widgets[page_num].set_partial_pixmap(
+                QPixmap.fromImage(image), zoom, x, y, clip)
+            self._shown_pages.add(page_num)
             return
 
         if page_num < len(self._page_widgets):
@@ -2162,19 +2255,23 @@ class PDFViewer(QScrollArea):
             return
 
         try:
-            page = self._doc[page_num]
-            zoom_matrix = fitz.Matrix(
-                self._zoom * self._render_dpi / 72,
-                self._zoom * self._render_dpi / 72
-            )
-            zoom_matrix = zoom_matrix.prerotate(self._rotation)
-
-            pixmap = page.get_pixmap(matrix=zoom_matrix, alpha=False)
-
-            # Convert to QPixmap
-            img = QImage(pixmap.samples, pixmap.width, pixmap.height,
-                         pixmap.stride, QImage.Format.Format_RGB888)
+            from core.render_backend import render_page
+            region = (self._render_clip_for(page_num)
+                      if page_num < len(self._page_widgets) else None)
+            clip = region[0] if region is not None else None
+            out = render_page(self._doc, page_num, self._zoom * self._render_dpi / 72,
+                              self._rotation, clip)
+            if out is None:
+                return
+            width, height, stride, samples, ox, oy = out
+            img = QImage(samples, width, height, stride, QImage.Format.Format_RGB888)
             qpixmap = QPixmap.fromImage(img)
+            if clip is not None:
+                # Huge page: show just the rendered part, never cache it.
+                self._page_widgets[page_num].set_partial_pixmap(
+                    qpixmap, self._zoom, ox, oy, clip)
+                self._shown_pages.add(page_num)
+                return
 
             # Update cache and widget
             self._cache_put(page_num, qpixmap)

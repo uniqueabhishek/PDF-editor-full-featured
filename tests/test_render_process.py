@@ -53,6 +53,28 @@ def test_process_renderer_matches_in_process(scan_pdf, process_renderer):
         src.close()
 
 
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_clipped_render_matches_the_same_region_of_a_full_render(scan_pdf, rotation):
+    from core.render_backend import render_page
+    doc = fitz.open(str(scan_pdf))
+    try:
+        w, h, stride, full, ox, oy = render_page(doc, 1, 0.8, rotation)
+        assert (ox, oy) == (0, 0)
+        clip = (w // 5, h // 3, w // 5 + 120, h // 3 + 90)
+        cw, ch, cstride, part, px, py = render_page(doc, 1, 0.8, rotation, clip)
+        assert (px, py) == clip[:2] and (cw, ch) == (120, 90)
+        # Same region, same content; anti-aliasing may differ by a shade.
+        worst = 0
+        for row in range(ch):
+            start = (py + row) * stride + px * 3
+            a = part[row * cstride: row * cstride + cw * 3]
+            b = full[start: start + cw * 3]
+            worst = max(worst, max(abs(x - y) for x, y in zip(a, b, strict=True)))
+        assert worst <= 8, f"clipped render differs by up to {worst}"
+    finally:
+        doc.close()
+
+
 def test_rendering_in_the_process_does_not_block_this_thread(scan_pdf, process_renderer):
     """While the process renders, other Python threads keep running."""
     assert process_renderer.open(str(scan_pdf))

@@ -14,7 +14,7 @@ Both share one interface (all calls are serialized by the caller's lock):
     open(source)               -> bool   bytes or file path; False if unusable
     close()
     patch(src_doc, pages)      -> bool   copy those pages from the live doc
-    render(page, scale, rot)   -> (width, height, stride, samples) or None
+    render(page, scale, rot, clip=None) -> see render_page(), or None
     page_count()               -> int    -1 when no document
     shutdown()
 
@@ -29,7 +29,9 @@ import fitz
 logger = logging.getLogger(__name__)
 
 Source = Union[bytes, str]
-Rendered = Tuple[int, int, int, bytes]
+Clip = Tuple[int, int, int, int]
+# (width, height, stride, samples, x offset, y offset) - see render_page()
+Rendered = Tuple[int, int, int, bytes, int, int]
 
 
 def _release_cache() -> None:
@@ -61,13 +63,29 @@ def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document,
         doc.insert_pdf(pages_pdf, from_page=idx, to_page=idx, start_at=p)
 
 
-def _render(doc: fitz.Document, page_num: int, scale: float,
-            rotation: int) -> Optional[Rendered]:
+def render_page(doc: fitz.Document, page_num: int, scale: float, rotation: int,
+                clip: Optional[Clip] = None) -> Optional[Rendered]:
+    """Render a page, or only the part ``clip`` covers.
+
+    ``clip`` is ``(x0, y0, x1, y1)`` in the coordinates of the full rendered
+    page (pixels, origin at its top-left). The result carries the offset of
+    the returned pixels within that full page, ``(0, 0)`` without a clip.
+    """
     if not 0 <= page_num < len(doc):
         return None
+    page = doc[page_num]
     matrix = fitz.Matrix(scale, scale).prerotate(rotation)
-    pix = doc[page_num].get_pixmap(matrix=matrix, alpha=False)
-    return pix.width, pix.height, pix.stride, pix.samples
+    if clip is None:
+        pix = page.get_pixmap(matrix=matrix, alpha=False)
+        return pix.width, pix.height, pix.stride, pix.samples, 0, 0
+    # Map the clip from full-page pixels back to page space; MuPDF places the
+    # full page at the transformed page rect's top-left, which may be negative
+    # once rotated.
+    origin = (page.rect * matrix).irect
+    device = fitz.Rect(clip) + (origin.x0, origin.y0, origin.x0, origin.y0)
+    pix = page.get_pixmap(matrix=matrix, clip=device * ~matrix, alpha=False)
+    return (pix.width, pix.height, pix.stride, pix.samples,
+            pix.x - origin.x0, pix.y - origin.y0)
 
 
 class InProcessRenderer:
@@ -110,10 +128,11 @@ class InProcessRenderer:
             logger.exception("Could not patch render copy for pages %s", pages)
             return False
 
-    def render(self, page_num: int, scale: float, rotation: int) -> Optional[Rendered]:
+    def render(self, page_num: int, scale: float, rotation: int,
+               clip: Optional[Clip] = None) -> Optional[Rendered]:
         if self._doc is None:
             return None
-        return _render(self._doc, page_num, scale, rotation)
+        return render_page(self._doc, page_num, scale, rotation, clip)
 
     def page_count(self) -> int:
         return len(self._doc) if self._doc is not None else -1
@@ -163,7 +182,8 @@ def serve(conn) -> None:
                     pages_pdf.close()
                 conn.send(("ok", len(doc) == expected))
             elif op == "render":
-                result = None if doc is None else _render(doc, msg[1], msg[2], msg[3])
+                result = None if doc is None else render_page(
+                    doc, msg[1], msg[2], msg[3], msg[4])
                 conn.send(("ok", result))
             elif op == "count":
                 conn.send(("ok", len(doc) if doc is not None else -1))
@@ -233,8 +253,9 @@ class ProcessRenderer:
             logger.exception("Render process could not patch pages %s", pages)
             return False
 
-    def render(self, page_num: int, scale: float, rotation: int) -> Optional[Rendered]:
-        return self._call("render", page_num, scale, rotation)
+    def render(self, page_num: int, scale: float, rotation: int,
+               clip: Optional[Clip] = None) -> Optional[Rendered]:
+        return self._call("render", page_num, scale, rotation, clip)
 
     def page_count(self) -> int:
         return int(self._call("count"))
