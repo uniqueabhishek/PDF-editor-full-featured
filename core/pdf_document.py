@@ -25,6 +25,34 @@ _SPAN_FLAG_BOLD = 1 << 4
 _MIN_EDIT_FONTSIZE = 5.0
 
 
+def _char_lines(textpage: fitz.TextPage) -> List[Tuple[float, float, List[Tuple[float, float, str]]]]:
+    """Every text line as ``(y0, y1, [(centre_x, centre_y, char), ...])``."""
+    out = []
+    for block in textpage.extractRAWDICT()["blocks"]:
+        for line in block.get("lines", []):
+            chars = []
+            for span in line["spans"]:
+                for ch in span["chars"]:
+                    x0, y0, x1, y1 = ch["bbox"]
+                    chars.append(((x0 + x1) / 2, (y0 + y1) / 2, ch["c"]))
+            if chars:
+                out.append((line["bbox"][1], line["bbox"][3], chars))
+    return out
+
+
+def _text_in_rect(lines, rect: fitz.Rect) -> str:
+    """Characters whose centre lies in ``rect``, one output line per text line."""
+    parts = []
+    for y0, y1, chars in lines:
+        if y1 < rect.y0 or y0 > rect.y1:
+            continue
+        s = "".join(c for cx, cy, c in chars
+                    if rect.x0 <= cx <= rect.x1 and rect.y0 <= cy <= rect.y1)
+        if s:
+            parts.append(s)
+    return "\n".join(parts)
+
+
 class PageRotation(Enum):
     NONE = 0
     CW_90 = 90
@@ -854,17 +882,9 @@ class PDFDocument:
             raise ValueError("No document is open")
 
         results = []
-        # PyMuPDF's search_for is always case-insensitive; the flag here only
-        # controls whitespace handling, not case. When the caller wants a
-        # case-sensitive match we post-filter each hit against the exact-case
-        # text inside its bounding box.
-        flags = fitz.TEXT_PRESERVE_WHITESPACE
-
         for page_num in range(self.page_count):
             page = self.get_page(page_num)
-            rects = page.search_for(text, flags=flags)
-            if case_sensitive and rects:
-                rects = [r for r in rects if text in page.get_textbox(r)]
+            rects = self._find_on_page(page, text, case_sensitive)
             if rects:
                 results.append({
                     "page": page_num,
@@ -872,6 +892,26 @@ class PDFDocument:
                 })
 
         return results
+
+    @staticmethod
+    def _find_on_page(page: fitz.Page, text: str,
+                      case_sensitive: bool) -> List[fitz.Rect]:
+        """Rects of ``text`` on ``page``, optionally matching case exactly.
+
+        PyMuPDF's search_for is always case-insensitive (its flags only control
+        whitespace), so a case-sensitive search post-filters each hit against
+        the exact-case characters inside it. That check used ``get_textbox()``,
+        which costs ~140 ms a call: a common word on a 300-page file took about
+        half an hour. The characters are now read once per page and looked up
+        per hit (same results: centre-of-character containment).
+        """
+        flags = fitz.TEXT_PRESERVE_WHITESPACE
+        textpage = page.get_textpage(flags=flags)
+        rects = page.search_for(text, flags=flags, textpage=textpage)
+        if not case_sensitive or not rects:
+            return rects
+        lines = _char_lines(textpage)
+        return [r for r in rects if text in _text_in_rect(lines, r)]
 
     # ---- text replacement (redaction-based) ----
 
@@ -923,9 +963,7 @@ class PDFDocument:
         count = 0
         for page_num in range(self.page_count):
             page = self._doc[page_num]
-            rects = page.search_for(search, flags=fitz.TEXT_PRESERVE_WHITESPACE)
-            if case_sensitive and rects:
-                rects = [r for r in rects if search in page.get_textbox(r)]
+            rects = self._find_on_page(page, search, case_sensitive)
             if not rects:
                 continue
             for r in rects:

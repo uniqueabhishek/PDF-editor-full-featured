@@ -114,6 +114,32 @@ def test_search_case_sensitive_filters(tmp_path):
         doc.close()
 
 
+def test_case_sensitive_matches_get_textbox_reference(tmp_path):
+    """The fast per-page character lookup must keep exactly the hits the old
+    per-hit ``get_textbox()`` filter kept, including mixed-case runs."""
+    p = tmp_path / "mixed.pdf"
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(50, 50, 545, 800),
+                        "lorem Lorem LOREM xLoremx Loremipsum dolor. " * 6,
+                        fontsize=11)
+    d.save(str(p))
+    d.close()
+
+    doc = PDFDocument()
+    assert doc.open(p) is True
+    try:
+        pg = doc.doc[0]
+        for term in ("Lorem", "lorem", "LOREM", "m Lo"):
+            hits = pg.search_for(term, flags=fitz.TEXT_PRESERVE_WHITESPACE)
+            expected = [tuple(r) for r in hits if term in pg.get_textbox(r)]
+            got = [tuple(r) for res in doc.search_text(term, case_sensitive=True)
+                   for r in res["rects"]]
+            assert got == expected, term
+    finally:
+        doc.close()
+
+
 def test_replace_text_all(tmp_path):
     p = tmp_path / "rep.pdf"
     d = fitz.open()
