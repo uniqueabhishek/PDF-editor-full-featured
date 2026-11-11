@@ -52,6 +52,22 @@ class MainWindow(
     those handlers depend on (title/state updates, recent files, etc.).
     """
 
+    # Every handler flags an edit with ``self._is_modified = True``; counting
+    # those lets auto-save tell whether anything changed since its last copy.
+    @property
+    def _is_modified(self) -> bool:
+        return self.__dict__.get("_modified_flag", False)
+
+    @_is_modified.setter
+    def _is_modified(self, value: bool) -> None:
+        self.__dict__["_modified_flag"] = value
+        if value:
+            self.__dict__["_edit_count"] = self.__dict__.get("_edit_count", 0) + 1
+
+    def _edit_state(self) -> tuple:
+        """Changes whenever the document is edited (by the app or the model)."""
+        return (self.__dict__.get("_edit_count", 0), self._document.edit_version)
+
     def _create_action(self, text: str, slot=None, shortcut=None, checkable=False) -> QAction:
         """Helper to create menu actions (PyQt6 compatible)"""
         action = QAction(text, self)
@@ -614,6 +630,12 @@ class MainWindow(
         """
         if not self._document.is_open or not self._is_modified:
             return
+        # Nothing changed since the last recovery copy: _is_modified stays set
+        # until a save, so this re-serialized the whole document every interval
+        # (~0.2 s hitch on a 36 MB scan) for an identical copy.
+        state = self._edit_state()
+        if state == getattr(self, "_autosaved_state", None):
+            return
         # Never write an *unencrypted* recovery copy of a protected document:
         # the recovery copy has no password, so this would leak its plaintext to
         # AUTOSAVE_DIR. Skip auto-save for protected files instead.
@@ -650,6 +672,7 @@ class MainWindow(
         def _ok(_result):
             self._autosave_in_flight = False
             self._active_workers.discard(worker)
+            self._autosaved_state = state
             self._statusbar.showMessage("Auto-saved a recovery copy", 1500)
 
         def _err(message: str):
@@ -665,6 +688,7 @@ class MainWindow(
 
     def _clear_autosave(self):
         """Remove any recovery files (after a clean save/close)."""
+        self._autosaved_state = None  # the next edit must be auto-saved again
         for name in ("recovery.pdf", "recovery.json"):
             path = config.AUTOSAVE_DIR / name
             try:

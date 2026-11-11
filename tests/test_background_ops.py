@@ -124,6 +124,31 @@ def test_annotation_edit_refreshes_only_that_thumbnail(main_window, make_pdf, qt
     assert stale() == [2]
 
 
+def test_autosave_skips_when_nothing_changed(main_window, make_pdf, qtbot):
+    win = main_window
+    win._open_file(str(make_pdf("doc.pdf", pages=3)))
+    calls = []
+    real = win._document.recovery_bytes
+    win._document.recovery_bytes = lambda: (calls.append(1), real())[1]
+
+    win._rotate_page(0, 90)
+    win._autosave()
+    _wait_idle(qtbot, win)
+    assert calls == [1]
+    win._autosave()           # no edit since: no new copy
+    _wait_idle(qtbot, win)
+    assert calls == [1]
+    win._rotate_page(1, 90)   # an edit: copy again
+    win._autosave()
+    _wait_idle(qtbot, win)
+    assert calls == [1, 1]
+    win._save_document()      # saved, then edited again: copy again
+    win._rotate_page(2, 90)
+    win._autosave()
+    _wait_idle(qtbot, win)
+    assert len(calls) == 3
+
+
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
     monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",
