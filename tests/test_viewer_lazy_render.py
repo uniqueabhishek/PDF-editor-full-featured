@@ -252,6 +252,28 @@ def test_two_page_and_single_page_modes_place_pages(qtbot, many_pages):
         model.close()
 
 
+def test_zoom_keeps_old_render_visible_until_the_new_one_lands(qtbot, many_pages):
+    from ui.pdf_viewer import _ZOOM_RENDER_DELAY_MS
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        v.show()
+        qtbot.waitUntil(lambda: v._page_widgets[0]._pixmap is not None, timeout=5000)
+        old = v._page_widgets[0]._pixmap
+        v.zoom_in()
+        w = v._page_widgets[0]
+        assert w._pixmap is None and w._preview is old, "page blanked on zoom"
+        assert (w.width(), w.height()) == v._page_pixel_size(0)
+        assert w._zoom == v._zoom, "clicks would map at the old zoom"
+        qtbot.wait(_ZOOM_RENDER_DELAY_MS)
+        qtbot.waitUntil(lambda: w._pixmap is not None, timeout=5000)
+        assert w._preview is None
+        # Pages far off screen hold neither a render nor a preview.
+        assert all(p._preview is None for p in v._page_widgets[10:])
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def _worker_pixels(v, page_num):
     return v._render_worker.render_samples(page_num, 40)
 

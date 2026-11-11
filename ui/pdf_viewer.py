@@ -331,6 +331,8 @@ class PageWidget(QLabel):
         super().__init__(parent)
         self.page_num = page_num
         self._pixmap: Optional[QPixmap] = None
+        # Old render shown stretched while a zoom step re-renders the page.
+        self._preview: Optional[QPixmap] = None
         # (offset QPoint, clip) when only part of the page is rendered.
         self._partial: Optional[tuple] = None
         self._zoom = 1.0
@@ -388,6 +390,7 @@ class PageWidget(QLabel):
     def set_pixmap(self, pixmap: QPixmap, zoom: float = 1.0):
         """Set the page pixmap"""
         self._partial = None
+        self._preview = None
         self._pixmap = pixmap
         self._zoom = zoom
         self._is_loading = False
@@ -405,6 +408,7 @@ class PageWidget(QLabel):
         decide when scrolling needs a fresh part.
         """
         self._pixmap = pixmap
+        self._preview = None
         self._partial = (QPoint(x, y), clip)
         self._zoom = zoom
         self._is_loading = False
@@ -432,6 +436,7 @@ class PageWidget(QLabel):
         self._is_loading = True
         self._pixmap = None
         self._partial = None
+        self._preview = None
 
         # Ensure valid dimensions
         width = max(1, width)
@@ -450,11 +455,27 @@ class PageWidget(QLabel):
         scrolls back. Without this every page ever viewed kept its full-size
         bitmap (~5 MB at fit-width), so scrolling a 300-page file reached 1.8 GB.
         """
-        if self._pixmap is None:
+        if self._pixmap is None and self._preview is None:
             return
         self._pixmap = None
         self._partial = None
+        self._preview = None
         self.clear()
+
+    def show_scaled_preview(self, width: int, height: int, zoom: float):
+        """Resize for a new zoom, showing the current render stretched to fit
+        until the new one arrives (instead of a blank white page).
+
+        The stretch happens at paint time, so no full-size copy is made.
+        Partial renders (very high zoom) just fall back to a blank page.
+        """
+        source = self._pixmap if self._partial is None else None
+        source = source or self._preview
+        self.set_placeholder(width, height)
+        self._zoom = zoom  # clicks map to page coordinates at the new zoom
+        if source is not None and not source.isNull():
+            self._preview = source
+            self.update()
 
     def get_page_position(self, widget_pos: QPoint) -> QPointF:
         """Convert widget position to PDF page coordinates (72 DPI)"""
@@ -653,6 +674,8 @@ class PageWidget(QLabel):
         painter = QPainter(self)
         if self._partial is not None and self._pixmap is not None:
             painter.drawPixmap(self._partial[0], self._pixmap)
+        elif self._pixmap is None and self._preview is not None:
+            painter.drawPixmap(self.rect(), self._preview)
 
         # Draw search-result highlights underneath any active tool overlay.
         if self._search_rects:
@@ -1407,17 +1430,28 @@ class PDFViewer(QScrollArea):
             self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
             self._shown_pages.add(page_num)
 
-    def _apply_page_sizes(self):
-        """Size every page for the current zoom/rotation, then place them."""
+    def _apply_page_sizes(self, keep_previews: bool = False):
+        """Size every page for the current zoom/rotation, then place them.
+
+        ``keep_previews`` (zoom changes) keeps each rendered page visible,
+        stretched to its new size, until its re-render arrives, instead of
+        blanking every page on each zoom step.
+        """
         for i, page_widget in enumerate(self._page_widgets):
-            page_widget.set_placeholder(*self._page_pixel_size(i))
+            size = self._page_pixel_size(i)
+            if keep_previews and i in self._shown_pages:
+                page_widget.show_scaled_preview(*size, self._zoom)
+            else:
+                page_widget.set_placeholder(*size)
         self._position_pages()
 
-    def _render_all_pages(self, defer_render: bool = False):
+    def _render_all_pages(self, defer_render: bool = False, keep_previews: bool = True):
         """Update all page sizes and request rendering (used when zoom changes).
 
         ``defer_render`` (zoom steps) starts the zoom debounce instead of
         rendering now, so a burst of steps renders only the final zoom.
+        ``keep_previews=False`` blanks the pages instead of stretching the old
+        renders (a view rotation changes their shape).
         """
         if not self._doc_live() or not self._page_widgets:
             return
@@ -1426,9 +1460,9 @@ class PDFViewer(QScrollArea):
         self._page_cache.clear()
         self._render_worker.clear_tasks()
 
-        # Update all page sizes with white placeholders, and re-place them so
-        # _request_visible_pages() tests visibility against the new positions.
-        self._apply_page_sizes()
+        # Update all page sizes, and re-place them so _request_visible_pages()
+        # tests visibility against the new positions.
+        self._apply_page_sizes(keep_previews=keep_previews)
 
         if defer_render:
             self._zoom_render_timer.start()
@@ -2062,7 +2096,7 @@ class PDFViewer(QScrollArea):
         self._rotation = (self._rotation + degrees) % 360
         self._render_worker.set_rotation(self._rotation)
         self._page_cache.clear()
-        self._render_all_pages()
+        self._render_all_pages(keep_previews=False)
 
     def set_view_mode(self, mode: ViewMode):
         """Set the view mode (single page, two page, continuous)"""
