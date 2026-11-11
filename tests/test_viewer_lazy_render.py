@@ -284,6 +284,19 @@ def test_thumbnails_reused_on_same_page_count(qtbot, many_pages):
         doc.close()
 
 
+def test_replacing_render_copy_releases_mupdf_cache(qtbot, many_pages, monkeypatch):
+    calls = []
+    monkeypatch.setattr(fitz.TOOLS, "store_shrink", lambda pct: calls.append(pct))
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        calls.clear()
+        v.set_document(model.doc, str(many_pages), reuse_layout=True)
+        assert calls == [100], "discarded render copy left its cache entries behind"
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
     """Selecting a page must not call setStyleSheet on every thumbnail."""
     from ui.sidebar import ThumbnailPanel

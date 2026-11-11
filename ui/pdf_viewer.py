@@ -33,6 +33,21 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 _KEEP_RENDERED_MARGIN = 3
 
 
+def _release_mupdf_cache() -> None:
+    """Empty MuPDF's shared cache of decoded images and fonts.
+
+    The cache tops out at ~256 MB, but closing a document does not release its
+    entries: they linger until pushed out, so every discarded copy (each
+    snapshot edit and undo swaps one) keeps its decoded scan images around.
+    Called when a document copy is discarded; the live documents just re-decode
+    what they next render.
+    """
+    try:
+        fitz.TOOLS.store_shrink(100)
+    except Exception:
+        logger.debug("Could not shrink the MuPDF cache", exc_info=True)
+
+
 class ViewMode(Enum):
     SINGLE_PAGE = "single"
     TWO_PAGE = "two_page"
@@ -133,6 +148,7 @@ class PageRenderWorker(QThread):
                     old_doc.close()
                 except Exception:
                     logger.debug("Failed to close previous render copy", exc_info=True)
+                _release_mupdf_cache()
         with self._task_cond:
             self._tasks.clear()
         return ok
