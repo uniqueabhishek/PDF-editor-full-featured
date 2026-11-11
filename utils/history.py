@@ -3,6 +3,7 @@ Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
 import logging
+import re
 from typing import Callable, List, Optional, Any, Dict, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -10,6 +11,28 @@ from enum import Enum
 import fitz
 
 logger = logging.getLogger(__name__)
+
+_TRAILER_ID = re.compile(rb"/ID\s*\[[^\]]*\]")
+
+
+def _same_pdf_state(a: bytes, b: bytes) -> bool:
+    """True if two serialized PDFs are identical apart from the trailer /ID.
+
+    MuPDF writes a fresh random second /ID on every save, so two snapshots of
+    an unchanged document never compare equal byte-for-byte. Everything before
+    the final trailer is compared with ``memoryview`` (no 36 MB copies), then the
+    trailers with /ID removed.
+    """
+    if a is b:
+        return True
+    if len(a) != len(b):
+        return False
+    ta, tb = a.rfind(b"trailer"), b.rfind(b"trailer")
+    if ta < 0 or ta != tb:
+        return a == b
+    if memoryview(a)[:ta] != memoryview(b)[:tb]:
+        return False
+    return _TRAILER_ID.sub(b"", a[ta:]) == _TRAILER_ID.sub(b"", b[tb:])
 
 
 class CommandType(Enum):
@@ -57,6 +80,10 @@ class Command(ABC):
         total snapshot memory.
         """
         return 0
+
+    def snapshot_buffers(self) -> List[bytes]:
+        """Snapshot byte buffers held, so shared buffers are counted once."""
+        return []
 
 
 class PageAddCommand(Command):
@@ -392,6 +419,27 @@ class DocumentSnapshotCommand(Command):
             logger.exception("Redo of '%s' failed", self.description)
             return False
 
+    def snapshot_buffers(self) -> List[bytes]:
+        return [b for b in (self._before, self._after) if b]
+
+    def share_before_with(self, previous: "Command") -> bool:
+        """Reuse ``previous``'s after-snapshot as this command's before-snapshot.
+
+        Back-to-back snapshot edits capture the same document state twice (the
+        first edit's "after" is the second's "before"), which on a 36 MB scan
+        doubled the undo history to ~72 MB per edit. When the two snapshots
+        describe the same PDF, keep one buffer.
+        """
+        if not isinstance(previous, DocumentSnapshotCommand):
+            return False
+        prev_after = previous._after
+        if not prev_after or not self._before or prev_after is self._before:
+            return False
+        if not _same_pdf_state(prev_after, self._before):
+            return False
+        self._before = prev_after
+        return True
+
     def memory_bytes(self) -> int:
         before = len(self._before) if self._before else 0
         after = len(self._after) if self._after else 0
@@ -417,11 +465,25 @@ class HistoryManager:
             self._undo_stack.pop(0)
 
         if self._max_bytes is not None:
-            total = sum(cmd.memory_bytes() for cmd in self._undo_stack)
             # Keep at least the most recent command so one undo is always possible.
-            while total > self._max_bytes and len(self._undo_stack) > 1:
-                evicted = self._undo_stack.pop(0)
-                total -= evicted.memory_bytes()
+            while (self._history_bytes() > self._max_bytes
+                   and len(self._undo_stack) > 1):
+                self._undo_stack.pop(0)
+
+    def _history_bytes(self) -> int:
+        """Memory held by the undo stack, counting shared snapshots once."""
+        seen: set = set()
+        total = 0
+        for cmd in self._undo_stack:
+            buffers = cmd.snapshot_buffers()
+            if not buffers:
+                total += cmd.memory_bytes()
+                continue
+            for buf in buffers:
+                if id(buf) not in seen:
+                    seen.add(id(buf))
+                    total += len(buf)
+        return total
 
     def execute(self, command: Command) -> bool:
         """Execute a command and add it to history"""
@@ -431,6 +493,9 @@ class HistoryManager:
         self._is_executing = True
         try:
             if command.execute():
+                share = getattr(command, "share_before_with", None)
+                if share is not None and self._undo_stack:
+                    share(self._undo_stack[-1])
                 self._undo_stack.append(command)
                 self._redo_stack.clear()  # Clear redo stack on new action
                 self._enforce_limits()

@@ -126,6 +126,33 @@ def test_history_memory_budget_evicts_oldest(doc):
     assert hm.get_undo_count() == 1
 
 
+def test_back_to_back_snapshots_share_a_buffer(doc):
+    """Edit 2's before-state is edit 1's after-state: hold it once, and undo
+    must still walk back through every state correctly."""
+    hm = HistoryManager()
+    start = doc.page_count
+    first = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="a")
+    second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
+    assert hm.execute(first) and hm.execute(second)
+    assert second._before is first._after, "identical state stored twice"
+    assert hm._history_bytes() == sum(
+        len(b) for b in (first._before, first._after, second._after))
+
+    assert hm.undo() and doc.page_count == start + 1
+    assert hm.undo() and doc.page_count == start
+    assert hm.redo() and hm.redo() and doc.page_count == start + 2
+
+
+def test_snapshot_not_shared_after_an_untracked_change(doc):
+    hm = HistoryManager()
+    first = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="a")
+    assert hm.execute(first)
+    doc.add_blank_page()  # changed outside the history
+    second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
+    assert hm.execute(second)
+    assert second._before is not first._after
+
+
 def test_no_memory_budget_keeps_all_within_count(doc):
     hm = HistoryManager(max_size=100, max_bytes=None)
     for _ in range(3):
