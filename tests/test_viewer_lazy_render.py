@@ -296,6 +296,39 @@ def test_find_next_updates_only_the_two_affected_pages(qtbot, many_pages):
         model.close()
 
 
+def test_thumbnails_render_a_couple_per_pass(qtbot, many_pages):
+    from ui.sidebar import _MAX_THUMBNAILS_PER_PASS, ThumbnailPanel
+    doc = fitz.open(str(many_pages))
+    panel = ThumbnailPanel()
+    qtbot.addWidget(panel)
+    panel.resize(200, 900)
+    panel.show()
+    try:
+        per_pass, count = [], [0]
+        real_render = panel._render_thumbnail
+        real_pass = panel._render_visible_thumbnails
+
+        def counting_render(n):
+            count[0] += 1
+            return real_render(n)
+
+        def counting_pass():
+            count[0] = 0
+            real_pass()
+            per_pass.append(count[0])
+
+        panel._render_thumbnail = counting_render
+        panel._render_timer.timeout.disconnect()
+        panel._render_timer.timeout.connect(counting_pass)
+        panel.set_document(doc)
+        qtbot.waitUntil(lambda: sum(t._pixmap is not None for t in panel._thumbnails) >= 6,
+                        timeout=5000)
+        assert max(per_pass) == _MAX_THUMBNAILS_PER_PASS <= 2
+    finally:
+        panel._render_timer.stop()
+        doc.close()
+
+
 def _worker_pixels(v, page_num):
     return v._render_worker.render_samples(page_num, 40)
 

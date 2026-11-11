@@ -17,7 +17,9 @@ from dataclasses import dataclass
 # MIME type used to carry a page index during thumbnail drag-and-drop reorder.
 _PAGE_MIME = "application/x-pdf-page"
 # Thumbnails rendered per UI-thread pass before yielding to the event loop.
-_MAX_THUMBNAILS_PER_PASS = 8
+# A cold thumbnail of a scanned page takes ~23 ms; 8 per pass blocked the UI
+# for ~180 ms at a time, 2 keeps each pass under ~50 ms.
+_MAX_THUMBNAILS_PER_PASS = 2
 
 
 @dataclass
