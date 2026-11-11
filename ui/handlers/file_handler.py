@@ -132,25 +132,33 @@ class FileHandlerMixin(_MixinBase):
 
         if self._current_file:
             try:
-                # Detach doc from viewer/sidebar so their render workers release
-                # any file handles (mmap) before we try to overwrite the file.
-                self._viewer.set_document(None, None)
-                self._sidebar.set_document(None)
+                # The render copy may have the file open (it is opened from the
+                # path); close it so the file can be overwritten. The page and
+                # thumbnail widgets stay: saving changes nothing on screen, and
+                # rebuilding them made every Ctrl+S take 0.4-0.6 s.
+                self._viewer.release_render_copy()
+                self._sidebar.detach_document()
+                saved = False
                 try:
                     self._document.save()
+                    saved = True
                 finally:
                     # save() may have redirected to a new path (e.g. *.edited.pdf)
                     # when the original was locked — sync _current_file.
                     if self._document.filepath:
                         self._current_file = Path(str(self._document.filepath))
                     # Reattach whatever doc is currently open (save() may have
-                    # reopened it from disk after a full rewrite).
+                    # reopened it from disk after a full rewrite). After a good
+                    # save the file on disk is the document, so the render copy
+                    # opens it rather than re-serializing.
                     if self._document.is_open and self._document.doc:
+                        path = str(self._current_file) if self._current_file else ""
                         self._viewer.set_document(
-                            self._document.doc,
-                            str(self._current_file) if self._current_file else "",
-                        )
-                        self._sidebar.set_document(self._document.doc)
+                            self._document.doc, path,
+                            render_source=path if saved and path else None,
+                            reuse_layout=True, keep_images=saved)
+                        self._sidebar.set_document(
+                            self._document.doc, reuse_layout=True, keep_images=saved)
                 self._is_modified = False
                 self._clear_autosave()  # saved — no unsaved changes to recover
                 self._update_title()

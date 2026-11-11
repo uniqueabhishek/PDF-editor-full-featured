@@ -832,8 +832,12 @@ class PDFViewer(QScrollArea):
 
     def set_document(self, doc: Optional[fitz.Document], filepath: Optional[str] = None,
                      render_source: Optional[Union[bytes, str]] = None,
-                     reuse_layout: bool = False):
+                     reuse_layout: bool = False, keep_images: bool = False):
         """Set the document to display.
+
+        ``keep_images`` (with ``reuse_layout``) is for re-attaching a document
+        whose content did not change, e.g. after a save: the pages on screen
+        and the page cache stay valid, so nothing is re-rendered.
 
         ``render_source`` lets the caller hand the render worker a copy it
         already has instead of re-serializing the whole document: the path of a
@@ -856,13 +860,14 @@ class PDFViewer(QScrollArea):
         self._filepath = filepath
         if not reuse:
             self._current_page = 0
-        self._page_cache.clear()
-        # Drop highlights from the previous document.
-        self._search_results = []
-        self._current_result = None
-        # Drop any cached word boxes / text selection from the previous document.
-        self._page_words_cache.clear()
-        self._text_selection = None
+        if not (reuse and keep_images):
+            self._page_cache.clear()
+            # Drop highlights from the previous document.
+            self._search_results = []
+            self._current_result = None
+            # Drop any cached word boxes / text selection from the previous document.
+            self._page_words_cache.clear()
+            self._text_selection = None
         # Cancel any debounced re-serialize queued for the previous document.
         self._resync_timer.stop()
 
@@ -872,6 +877,10 @@ class PDFViewer(QScrollArea):
         if doc is None or render_source is None or not self._render_worker.set_document(
                 render_source, self._render_dpi):
             self._render_worker.set_document(self._render_source(doc), self._render_dpi)
+
+        if reuse and keep_images:
+            self._teardown_inline_editor()
+            return
 
         if reuse:
             self._teardown_inline_editor()
@@ -903,6 +912,11 @@ class PDFViewer(QScrollArea):
     def _doc_page_rects(doc: fitz.Document) -> List[tuple]:
         """Every page's on-screen rect (rotation applied), to compare layouts."""
         return [tuple(doc[i].rect) for i in range(len(doc))]
+
+    def release_render_copy(self):
+        """Close the render worker's copy (it may hold the file open)."""
+        self._resync_timer.stop()
+        self._render_worker.set_document(None)
 
     def detach_document(self):
         """Let go of the document without destroying the page widgets.

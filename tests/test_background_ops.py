@@ -70,6 +70,41 @@ def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
     assert win._document.page_count == 4
 
 
+@pytest.fixture(params=["thread", "process"])
+def render_mode(request, monkeypatch):
+    monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",
+                       "1" if request.param == "thread" else "0")
+    return request.param
+
+
+def test_save_keeps_the_view_and_can_overwrite_repeatedly(render_mode, main_window,
+                                                         make_pdf):
+    win = main_window
+    pdf = make_pdf("doc.pdf", pages=3)
+    win._open_file(str(pdf))
+    widgets = list(win._viewer._page_widgets)
+    thumbs = list(win._sidebar.thumbnail_panel._thumbnails)
+    serialized = []
+    real = win._viewer._render_source
+    win._viewer._render_source = lambda doc: (serialized.append(1), real(doc))[1]
+
+    for _ in range(3):  # the render copy must let go of the file every time
+        win._rotate_page(0, 90)
+        win._save_document()
+        assert win._is_modified is False
+        assert win._viewer._page_widgets == widgets, "save rebuilt the page widgets"
+        assert win._sidebar.thumbnail_panel._thumbnails == thumbs
+        _assert_view_matches_document(win)
+
+    assert serialized == [], "save re-serialized the document for the render copy"
+    import fitz
+    on_disk = fitz.open(str(win._current_file))
+    try:
+        assert on_disk[0].rotation == 270
+    finally:
+        on_disk.close()
+
+
 def _wait_idle(qtbot, window, timeout=15000):
     qtbot.waitUntil(lambda: not window._active_workers, timeout=timeout)
 

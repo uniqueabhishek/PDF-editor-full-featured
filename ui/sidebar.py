@@ -369,16 +369,20 @@ class ThumbnailPanel(QScrollArea):
         bar_layout.addWidget(self._clear_btn)
         self._delete_bar.hide()
 
-    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False):
+    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False,
+                     keep_images: bool = False):
         """Set the document for thumbnail generation.
 
         With ``reuse_layout`` (reloading the same document after an edit) and
         an unchanged page count, the thumbnail widgets are kept and only
         re-rendered as they come into view; the old image shows until then.
+        ``keep_images`` (content unchanged, e.g. after a save) keeps them as is.
         """
         if (reuse_layout and doc is not None and self._thumbnails
                 and len(doc) == len(self._thumbnails)):
             self._doc = doc
+            if keep_images:
+                return
             self._render_timer.stop()
             if self._marked_pages:
                 self.clear_marks()
@@ -1065,9 +1069,11 @@ class Sidebar(QTabWidget):
             }
         """)
 
-    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False):
+    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False,
+                     keep_images: bool = False):
         """Set document for all panels"""
-        self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout)
+        self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout,
+                                          keep_images=keep_images)
         self.bookmark_panel.set_document(doc)
         self.annotation_panel.set_document(doc)
 
