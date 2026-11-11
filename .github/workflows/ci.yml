@@ -24,7 +24,7 @@ jobs:
 
       # pyproject.toml sets python-preference = "only-system", so uv needs a
       # python.org interpreter on the runner rather than downloading its own.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
 
