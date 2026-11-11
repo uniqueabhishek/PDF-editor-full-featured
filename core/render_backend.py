@@ -14,6 +14,8 @@ Both share one interface (all calls are serialized by the caller's lock):
     open(source)               -> bool   bytes or file path; False if unusable
     close()
     patch(src_doc, pages)      -> bool   copy those pages from the live doc
+    delete_pages(pages, n)     -> bool   n = page count before; False if off
+    insert_pages(src, i, k)    -> bool   copy src pages i..i+k-1 in at i
     render(page, scale, rot, clip=None) -> see render_page(), or None
     page_count()               -> int    -1 when no document
     shutdown()
@@ -128,6 +130,22 @@ class InProcessRenderer:
             logger.exception("Could not patch render copy for pages %s", pages)
             return False
 
+    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+        doc = self._doc
+        if doc is None or len(doc) != expected_before:
+            return False
+        doc.delete_pages(sorted(set(pages)))
+        return True
+
+    def insert_pages(self, src: fitz.Document, index: int, count: int) -> bool:
+        doc = self._doc
+        if doc is None or len(doc) + count != len(src):
+            return False
+        if hasattr(doc, "Graftmaps"):
+            doc.Graftmaps = {}
+        doc.insert_pdf(src, from_page=index, to_page=index + count - 1, start_at=index)
+        return len(doc) == len(src)
+
     def render(self, page_num: int, scale: float, rotation: int,
                clip: Optional[Clip] = None) -> Optional[Rendered]:
         if self._doc is None:
@@ -181,6 +199,26 @@ def serve(conn) -> None:
                 finally:
                     pages_pdf.close()
                 conn.send(("ok", len(doc) == expected))
+            elif op == "delete":
+                pages, expected = msg[1], msg[2]
+                if doc is None or len(doc) != expected:
+                    conn.send(("ok", False))
+                    continue
+                doc.delete_pages(sorted(set(pages)))
+                conn.send(("ok", True))
+            elif op == "insert":
+                index, expected_after, data = msg[1], msg[2], msg[3]
+                pages_pdf = fitz.open(stream=data, filetype="pdf")
+                try:
+                    if doc is None or len(doc) + len(pages_pdf) != expected_after:
+                        conn.send(("ok", False))
+                        continue
+                    if hasattr(doc, "Graftmaps"):
+                        doc.Graftmaps = {}
+                    doc.insert_pdf(pages_pdf, start_at=index)
+                finally:
+                    pages_pdf.close()
+                conn.send(("ok", len(doc) == expected_after))
             elif op == "render":
                 result = None if doc is None else render_page(
                     doc, msg[1], msg[2], msg[3], msg[4])
@@ -252,6 +290,18 @@ class ProcessRenderer:
         except Exception:
             logger.exception("Render process could not patch pages %s", pages)
             return False
+
+    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+        return bool(self._call("delete", list(pages), expected_before))
+
+    def insert_pages(self, src: fitz.Document, index: int, count: int) -> bool:
+        pages_pdf = fitz.open()
+        try:
+            pages_pdf.insert_pdf(src, from_page=index, to_page=index + count - 1)
+            data = pages_pdf.tobytes(garbage=0, deflate=False)
+        finally:
+            pages_pdf.close()
+        return bool(self._call("insert", index, len(src), data))
 
     def render(self, page_num: int, scale: float, rotation: int,
                clip: Optional[Clip] = None) -> Optional[Rendered]:

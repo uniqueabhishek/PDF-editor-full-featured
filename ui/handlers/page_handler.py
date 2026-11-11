@@ -24,6 +24,26 @@ else:
 class PageHandlerMixin(_MixinBase):
     """Page-menu operations for MainWindow."""
 
+    # ---- keep the view in step with page structure edits, without a reload ----
+
+    def _view_pages_inserted(self, index: int, count: int = 1):
+        doc = self._document.doc
+        self._viewer.pages_inserted(index, count)
+        self._sidebar.pages_inserted(doc, index, count)
+        self._main_toolbar.set_page_count(self._document.page_count)
+        self._update_actions_state()
+
+    def _view_pages_removed(self, pages: List[int]):
+        doc = self._document.doc
+        self._viewer.pages_removed(pages)
+        self._sidebar.pages_removed(doc, pages)
+        self._main_toolbar.set_page_count(self._document.page_count)
+        self._update_actions_state()
+
+    def _view_page_resized(self, page_num: int):
+        self._viewer.page_resized(page_num)
+        self._sidebar.page_changed_in_place(page_num)
+
     def _insert_blank_page(self):
         """Insert a blank page"""
         if not self._document.is_open:
@@ -32,7 +52,7 @@ class PageHandlerMixin(_MixinBase):
         current = self._viewer.get_current_page()
         command = PageAddCommand(self._document, current + 1)
         if self._history_manager.execute(command):
-            self._load_document_to_viewer()
+            self._view_pages_inserted(current + 1)
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage("Inserted blank page", 2000)
@@ -75,7 +95,7 @@ class PageHandlerMixin(_MixinBase):
         if result == QMessageBox.StandardButton.Yes:
             command = PageDeleteCommand(self._document, page_num)
             if self._history_manager.execute(command):
-                self._load_document_to_viewer()
+                self._view_pages_removed([page_num])
                 self._is_modified = True
                 self._update_title()
                 self._statusbar.showMessage("Deleted page", 2000)
@@ -124,7 +144,7 @@ class PageHandlerMixin(_MixinBase):
 
         command = PageRotateCommand(self._document, page_num, degrees)
         if self._history_manager.execute(command):
-            self._load_document_to_viewer()
+            self._view_page_resized(page_num)
             self._is_modified = True
             self._update_title()
             self._statusbar.showMessage("Rotated page", 2000)

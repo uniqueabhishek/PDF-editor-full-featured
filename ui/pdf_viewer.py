@@ -198,6 +198,20 @@ class PageRenderWorker(QThread):
         with self._lock:
             return bool(self._call("patch", src, list(pages)))
 
+    def delete_pages(self, pages: List[int], expected_before: int) -> bool:
+        """Mirror a page deletion in the worker's copy (no re-serialize)."""
+        with self._task_cond:
+            self._tasks.clear()  # page numbers shift
+        with self._lock:
+            return bool(self._call("delete_pages", list(pages), expected_before))
+
+    def insert_pages(self, src: fitz.Document, index: int, count: int) -> bool:
+        """Mirror an insertion: copy ``src`` pages index..index+count-1 in."""
+        with self._task_cond:
+            self._tasks.clear()  # page numbers shift
+        with self._lock:
+            return bool(self._call("insert_pages", src, index, count))
+
     def set_rotation(self, rotation: int):
         """Set rotation angle"""
         with self._lock:
@@ -1002,26 +1016,89 @@ class PDFViewer(QScrollArea):
 
         self._page_rects = self._doc_page_rects(self._doc)
         for i in range(len(self._doc)):
-            page_widget = PageWidget(i, self._render_dpi, self._container)
-            page_widget.clicked.connect(self._on_page_clicked)
-            page_widget.annotation_created.connect(self._on_annotation_created)
-            page_widget.freehand_created.connect(self._on_freehand_created)
-            page_widget.hover_position.connect(self._on_hover_position)
-            page_widget.text_selection_made.connect(self._on_text_selection_made)
-            page_widget.selection_needs_text.connect(
-                lambda _p: self.selection_needs_ocr.emit())
-            page_widget.edit_text_requested.connect(self._on_edit_text_requested)
-            page_widget._word_provider = self.get_page_words
-            page_widget.set_tool_mode(
-                self._tool_mode.value if self._tool_mode else "select")
-            page_widget.setCursor(self._tool_cursor)
-
-            # Set initial placeholder size based on page dimensions
-            width, height = self._page_pixel_size(i)
-            page_widget.set_placeholder(width, height)
-
+            page_widget = self._make_page_widget(i)
             self._layout.addWidget(page_widget)
             self._page_widgets.append(page_widget)
+
+    def _make_page_widget(self, i: int) -> "PageWidget":
+        page_widget = PageWidget(i, self._render_dpi, self._container)
+        page_widget.clicked.connect(self._on_page_clicked)
+        page_widget.annotation_created.connect(self._on_annotation_created)
+        page_widget.freehand_created.connect(self._on_freehand_created)
+        page_widget.hover_position.connect(self._on_hover_position)
+        page_widget.text_selection_made.connect(self._on_text_selection_made)
+        page_widget.selection_needs_text.connect(
+            lambda _p: self.selection_needs_ocr.emit())
+        page_widget.edit_text_requested.connect(self._on_edit_text_requested)
+        page_widget._word_provider = self.get_page_words
+        page_widget.set_tool_mode(
+            self._tool_mode.value if self._tool_mode else "select")
+        page_widget.setCursor(self._tool_cursor)
+        # Set initial placeholder size based on page dimensions
+        width, height = self._page_pixel_size(i)
+        page_widget.set_placeholder(width, height)
+        return page_widget
+
+    # ---- page structure edits, applied without rebuilding the view ----
+    # Deleting / inserting / rotating a page used to reload the viewer: a
+    # re-serialize for the render worker plus every page widget rebuilt,
+    # 0.3-0.6 s each, and the view jumped back to page 1.
+
+    def _after_structure_change(self):
+        self._teardown_inline_editor()
+        self._page_cache.clear()
+        self._page_words_cache.clear()
+        self._text_selection = None
+        self._search_results = []
+        self._current_result = None
+        for i, w in enumerate(self._page_widgets):
+            w.page_num = i
+            w.clear_text_selection()
+            w.clear_search_rects()
+        self._page_rects = self._doc_page_rects(self._doc)
+        self._current_page = min(self._current_page, len(self._page_widgets) - 1)
+        self._layout.activate()
+        QTimer.singleShot(0, self._request_visible_pages)
+
+    def pages_inserted(self, index: int, count: int = 1):
+        """``count`` pages were inserted into the document at ``index``."""
+        if not self._doc_live() or not self._page_widgets:
+            return
+        if not self._render_worker.insert_pages(self._doc, index, count):
+            self._schedule_worker_resync()
+        for k in range(count):
+            w = self._make_page_widget(index + k)
+            self._layout.insertWidget(index + k, w)
+            self._page_widgets.insert(index + k, w)
+        self._shown_pages = {p + count if p >= index else p for p in self._shown_pages}
+        self._after_structure_change()
+
+    def pages_removed(self, pages: List[int]):
+        """``pages`` (indices before the removal) were deleted."""
+        if not self._doc_live() or not self._page_widgets:
+            return
+        gone = sorted(set(pages))
+        if not self._render_worker.delete_pages(gone, len(self._page_widgets)):
+            self._schedule_worker_resync()
+        for p in reversed(gone):
+            w = self._page_widgets.pop(p)
+            w.setParent(None)
+            w.deleteLater()
+        self._shown_pages = {p - sum(1 for g in gone if g < p)
+                             for p in self._shown_pages if p not in gone}
+        self._after_structure_change()
+
+    def page_resized(self, page_num: int):
+        """A page's size or rotation changed in place (e.g. rotate page)."""
+        if not self._doc_live() or not 0 <= page_num < len(self._page_widgets):
+            return
+        self._page_rects[page_num] = tuple(self._doc[page_num].rect)
+        self._page_cache.pop(page_num, None)
+        self._page_words_cache.pop(page_num, None)
+        self._page_widgets[page_num].set_placeholder(*self._page_pixel_size(page_num))
+        self._layout.activate()
+        if not self._patch_render_copy([page_num]):
+            self._schedule_worker_resync()
 
     def _page_pixel_size(self, page_num: int) -> tuple:
         """On-screen size of a page in device pixels at the current zoom.
@@ -2234,6 +2311,15 @@ class PDFViewer(QScrollArea):
         # Mark all page widgets as needing re-render
         for page_widget in self._page_widgets:
             page_widget._is_loading = True
+
+        # A changed page may have changed shape (undoing a rotation): resize
+        # its widget, or the page keeps its old, rotated proportions.
+        if (0 <= changed_page < len(self._page_widgets) and self._doc_live()
+                and tuple(self._doc[changed_page].rect) != self._page_rects[changed_page]):
+            self._page_rects[changed_page] = tuple(self._doc[changed_page].rect)
+            self._page_widgets[changed_page].set_placeholder(
+                *self._page_pixel_size(changed_page))
+            self._layout.activate()
 
         # Immediate synchronous render of the current page for instant feedback,
         # straight from the editable document.

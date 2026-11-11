@@ -62,12 +62,21 @@ class EditHandlerMixin(_MixinBase):
             self._viewer.detach_document()
             self._sidebar.detach_document()
 
+        view_delta = getattr(command, "view_delta", None)
+        undoing = action == self._history_manager.undo
+
         if action():
-            if requires_reload:
+            if view_delta is not None:
+                # Page inserted or removed: follow it in the view directly.
+                kind, index = view_delta(undoing)
+                if kind == "inserted":
+                    self._view_pages_inserted(index)
+                else:
+                    self._view_pages_removed([index])
+            elif requires_reload:
                 # A snapshot step reopened the document from bytes it still
                 # holds; hand those to the render worker instead of
-                # re-serializing the whole document. Page add/delete changes the
-                # page count, so the viewer rebuilds its widgets for those.
+                # re-serializing the whole document.
                 self._load_document_to_viewer(
                     render_source=getattr(command, "last_restored", None),
                     reuse_layout=True)

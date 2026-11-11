@@ -113,6 +113,10 @@ class PageAddCommand(Command):
         except Exception:
             return False
 
+    def view_delta(self, undoing: bool) -> Tuple[str, int]:
+        """How the page list changed, so the view can follow without a reload."""
+        return ("removed" if undoing else "inserted"), self.page_index
+
 
 class PageDeleteCommand(Command):
     """Command for deleting a page"""
@@ -161,6 +165,10 @@ class PageDeleteCommand(Command):
 
     def memory_bytes(self) -> int:
         return len(self._page_pdf) if self._page_pdf else 0
+
+    def view_delta(self, undoing: bool) -> Tuple[str, int]:
+        """How the page list changed, so the view can follow without a reload."""
+        return ("inserted" if undoing else "removed"), self.page_index
 
 
 class PageRotateCommand(Command):

@@ -417,15 +417,52 @@ class ThumbnailPanel(QScrollArea):
             return
 
         for i in range(len(self._doc)):
-            thumb = ThumbnailWidget(i, self._container)
-            thumb.clicked.connect(self._on_thumbnail_clicked)
-            thumb.double_clicked.connect(self._on_thumbnail_double_clicked)
-            thumb.context_menu_requested.connect(self._show_context_menu)
-            thumb.mark_toggled.connect(self._on_mark_toggled)
-            if self._delete_mode:
-                thumb.set_delete_mode(True)
+            thumb = self._make_thumbnail(i)
             self._layout.addWidget(thumb)
             self._thumbnails.append(thumb)
+
+    def _make_thumbnail(self, i: int) -> ThumbnailWidget:
+        thumb = ThumbnailWidget(i, self._container)
+        thumb.clicked.connect(self._on_thumbnail_clicked)
+        thumb.double_clicked.connect(self._on_thumbnail_double_clicked)
+        thumb.context_menu_requested.connect(self._show_context_menu)
+        thumb.mark_toggled.connect(self._on_mark_toggled)
+        if self._delete_mode:
+            thumb.set_delete_mode(True)
+        return thumb
+
+    # ---- page structure edits, applied without rebuilding every thumbnail ----
+
+    def _renumber(self):
+        for i, thumb in enumerate(self._thumbnails):
+            if thumb.page_num != i:
+                thumb.page_num = i
+                thumb.set_label(str(i + 1))
+        if self._marked_pages:
+            self.clear_marks()
+        self._selected_pages = [p for p in self._selected_pages if p < len(self._thumbnails)]
+        self._render_timer.start(0)
+
+    def pages_inserted(self, index: int, count: int = 1):
+        for k in range(count):
+            thumb = self._make_thumbnail(index + k)
+            self._layout.insertWidget(index + k, thumb)
+            self._thumbnails.insert(index + k, thumb)
+        self._renumber()
+
+    def pages_removed(self, pages: List[int]):
+        for p in sorted(set(pages), reverse=True):
+            if 0 <= p < len(self._thumbnails):
+                thumb = self._thumbnails.pop(p)
+                thumb.setParent(None)
+                thumb.deleteLater()
+        self._renumber()
+
+    def refresh_page(self, page_num: int):
+        """Re-render just one thumbnail (its page changed)."""
+        if 0 <= page_num < len(self._thumbnails):
+            self._thumbnails[page_num]._pixmap = None
+            self._render_timer.start(0)
 
     def _doc_live(self) -> bool:
         """True if a document is open and not closed.
@@ -1039,6 +1076,20 @@ class Sidebar(QTabWidget):
         self.thumbnail_panel.detach_document()
         self.bookmark_panel.set_document(None)
         self.annotation_panel.set_document(None)
+
+    def pages_inserted(self, doc: fitz.Document, index: int, count: int = 1):
+        self.thumbnail_panel.pages_inserted(index, count)
+        self.bookmark_panel.set_document(doc)     # page numbers shifted
+        self.annotation_panel.set_document(doc)
+
+    def pages_removed(self, doc: fitz.Document, pages: List[int]):
+        self.thumbnail_panel.pages_removed(pages)
+        self.bookmark_panel.set_document(doc)
+        self.annotation_panel.set_document(doc)
+
+    def page_changed_in_place(self, page_num: int):
+        self.thumbnail_panel.refresh_page(page_num)
+        self.annotation_panel.refresh()
 
     def set_current_page(self, page_num: int):
         """Update current page in thumbnail panel"""

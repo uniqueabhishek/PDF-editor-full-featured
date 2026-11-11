@@ -22,6 +22,54 @@ def main_window(qtbot, tmp_path, monkeypatch):
     window.close()
 
 
+def _assert_view_matches_document(window):
+    """Widgets, thumbnails and the render copy all line up with the document."""
+    doc = window._document.doc
+    viewer, thumbs = window._viewer, window._sidebar.thumbnail_panel._thumbnails
+    assert len(viewer._page_widgets) == len(thumbs) == len(doc)
+    assert [w.page_num for w in viewer._page_widgets] == list(range(len(doc)))
+    assert [t.page_num for t in thumbs] == list(range(len(doc)))
+    assert [t._page_label.text() for t in thumbs] == [str(i + 1) for i in range(len(doc))]
+    assert viewer._render_worker.page_count() == len(doc)
+    for i in range(len(doc)):
+        assert viewer._render_worker.render_samples(i, 20) == doc[i].get_pixmap(dpi=20).samples
+        w, h = viewer._page_pixel_size(i)
+        assert abs(viewer._page_widgets[i].width() - w) <= 1
+        assert abs(viewer._page_widgets[i].height() - h) <= 1
+
+
+def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
+                                                       qtbot, monkeypatch):
+    import ui.handlers.page_handler as ph
+    monkeypatch.setattr(ph.QMessageBox, "question",
+                        staticmethod(lambda *a, **k: ph.QMessageBox.StandardButton.Yes))
+    pdf = make_pdf("doc.pdf", pages=4)
+    main_window._open_file(str(pdf))
+    win = main_window
+    untouched = win._viewer._page_widgets[0]
+    reloads = []
+    real_load = win._load_document_to_viewer
+    win._load_document_to_viewer = lambda *a, **k: (reloads.append(1), real_load(*a, **k))
+
+    win._viewer._current_page = 1
+    win._insert_blank_page()             # new page at index 2
+    _assert_view_matches_document(win)
+    win._delete_page(0)
+    _assert_view_matches_document(win)
+    win._rotate_page(1, 90)
+    _assert_view_matches_document(win)
+    for _ in range(3):
+        win._undo()
+        _assert_view_matches_document(win)
+    for _ in range(3):
+        win._redo()
+        _assert_view_matches_document(win)
+
+    assert reloads == [], "a page edit rebuilt the whole view"
+    assert untouched not in win._viewer._page_widgets  # page 0 was deleted (redo)
+    assert win._document.page_count == 4
+
+
 def _wait_idle(qtbot, window, timeout=15000):
     qtbot.waitUntil(lambda: not window._active_workers, timeout=timeout)
 

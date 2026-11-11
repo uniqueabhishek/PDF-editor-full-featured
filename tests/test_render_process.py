@@ -53,6 +53,26 @@ def test_process_renderer_matches_in_process(scan_pdf, process_renderer):
         src.close()
 
 
+@pytest.mark.parametrize("make", [InProcessRenderer, ProcessRenderer])
+def test_page_insert_and_delete_mirror_the_live_document(scan_pdf, make):
+    r = make()
+    src = fitz.open(str(scan_pdf))
+    try:
+        assert r.open(str(scan_pdf))
+        src.new_page(pno=2).insert_text((72, 72), "inserted", fontsize=30)
+        assert r.insert_pages(src, 2, 1)
+        src.delete_pages([0, 4])
+        assert r.delete_pages([0, 4], 7)
+        assert r.page_count() == len(src) == 5
+        for i in range(5):
+            expect = src[i].get_pixmap(matrix=fitz.Matrix(0.2, 0.2), alpha=False).samples
+            assert r.render(i, 0.2, 0)[3] == expect
+        assert r.delete_pages([0], 99) is False  # stale count: refused
+    finally:
+        r.shutdown()
+        src.close()
+
+
 @pytest.mark.parametrize("rotation", [0, 90, 180, 270])
 def test_clipped_render_matches_the_same_region_of_a_full_render(scan_pdf, rotation):
     from core.render_backend import render_page
