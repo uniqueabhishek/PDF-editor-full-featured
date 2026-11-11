@@ -12,17 +12,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog, QProgressDialog, QApplication
 )
-from PyQt6.QtGui import QImage, QPixmap, QPageLayout
+from PyQt6.QtGui import QImage, QPageLayout
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object
+
+# Pages are rendered for printing at no more than this resolution.
+_PRINT_MAX_DPI = 300
 
 
 class FileHandlerMixin(_MixinBase):
@@ -272,35 +275,28 @@ class FileHandlerMixin(_MixinBase):
                     if i > 0:
                         printer.newPage()
 
-                    # Render page to image at printer resolution
+                    # Render at no more than _PRINT_MAX_DPI. Rendering at the
+                    # printer's native resolution (600+ dpi) cost ~1 s and
+                    # ~250 MB per scanned page; 300 dpi is print quality.
                     page = doc[i]
-                    # Calculate scale for printer DPI
-                    dpi = printer.resolution()
-                    scale = dpi / 72.0  # PDF points to printer DPI
-                    mat = fitz.Matrix(scale, scale)
-                    pix = page.get_pixmap(matrix=mat)
-
-                    # Convert to QImage
+                    dpi = min(printer.resolution(), _PRINT_MAX_DPI)
+                    scale = dpi / 72.0
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
                     img = QImage(pix.samples, pix.width, pix.height,
                                  pix.stride, QImage.Format.Format_RGB888)
-                    pixmap = QPixmap.fromImage(img)
 
-                    # Calculate position to center on page
+                    # Draw at the page's true size in printer pixels, shrunk to
+                    # fit and centred; the printer scales the image itself, so
+                    # no QPixmap conversion or smooth-scaled copy is needed.
                     page_rect = printer.pageRect(QPrinter.Unit.DevicePixel)
-                    x = (page_rect.width() - pixmap.width()) / 2
-                    y = (page_rect.height() - pixmap.height()) / 2
-
-                    # Scale to fit page if needed
-                    if pixmap.width() > page_rect.width() or pixmap.height() > page_rect.height():
-                        pixmap = pixmap.scaled(
-                            int(page_rect.width()), int(page_rect.height()),
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation
-                        )
-                        x = (page_rect.width() - pixmap.width()) / 2
-                        y = (page_rect.height() - pixmap.height()) / 2
-
-                    painter.drawPixmap(int(x), int(y), pixmap)
+                    to_device = printer.resolution() / 72.0
+                    w = page.rect.width * to_device
+                    h = page.rect.height * to_device
+                    fit = min(1.0, page_rect.width() / w, page_rect.height() / h)
+                    w, h = w * fit, h * fit
+                    target = QRectF((page_rect.width() - w) / 2,
+                                    (page_rect.height() - h) / 2, w, h)
+                    painter.drawImage(target, img)
 
                 progress.setValue(self._document.page_count)
                 self._statusbar.showMessage("Document sent to printer", 3000)
