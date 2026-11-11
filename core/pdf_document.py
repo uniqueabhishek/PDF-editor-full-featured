@@ -1993,7 +1993,27 @@ class PDFDocument:
 
     # ---- public scan & redact methods ----
 
-    def scan_margin_text(self) -> List[Dict[str, Any]]:
+    @staticmethod
+    def scan_margin_text_in_copy(data: bytes, password: Optional[str],
+                                 progress_cb: Optional[Any] = None,
+                                 is_cancelled: Optional[Any] = None
+                                 ) -> List[Dict[str, Any]]:
+        """:meth:`scan_margin_text` on a private copy, for a background worker.
+
+        The findings' page indices and rects apply to the live document,
+        which the copy matches.
+        """
+        work = PDFDocument()
+        work._doc = fitz.open(stream=data, filetype="pdf")
+        try:
+            if work._doc.needs_pass and password:
+                work._doc.authenticate(password)
+            return work.scan_margin_text(progress_cb, is_cancelled)
+        finally:
+            work.close()
+
+    def scan_margin_text(self, progress_cb: Optional[Any] = None,
+                         is_cancelled: Optional[Any] = None) -> List[Dict[str, Any]]:
         """
         Scan all pages for repeating text in the top/bottom margin zones.
 
@@ -2030,6 +2050,10 @@ class PDFDocument:
         page_zone_count: Dict[Tuple[int, str], int] = defaultdict(int)
 
         for page_idx in range(page_count):
+            if is_cancelled is not None and is_cancelled():
+                return []
+            if progress_cb is not None:
+                progress_cb(page_idx, page_count)
             page = doc[page_idx]
             for ln in PDFDocument._margin_lines(page, mf):
                 text = ln["text"]

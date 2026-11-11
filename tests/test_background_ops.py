@@ -189,6 +189,29 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
     assert texts == ["already has text", "scanned", "scanned"]
 
 
+def test_clean_pdf_scans_in_the_background(main_window, tmp_path, qtbot):
+    import fitz
+    path = tmp_path / "footers.pdf"
+    d = fitz.open()
+    for i in range(6):
+        pg = d.new_page()
+        pg.insert_text((72, 300), f"body text {i}")
+        pg.insert_text((72, 820), "CONFIDENTIAL DRAFT")
+    d.save(str(path))
+    d.close()
+
+    win = main_window
+    win._open_file(str(path))
+    win._clean_pdf()
+    assert win._active_workers, "the scan ran on the GUI thread"
+    _wait_idle(qtbot, win)
+    dlg = win._clean_pdf_dlg
+    assert dlg is not None, "findings dialog not shown"
+    texts = [f["sample_text"] for f in dlg.get_selected_findings()]
+    assert any("CONFIDENTIAL" in t for t in texts)
+    dlg.close()
+
+
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
     monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",

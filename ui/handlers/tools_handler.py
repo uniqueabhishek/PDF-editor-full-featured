@@ -408,14 +408,29 @@ class ToolsHandlerMixin(_MixinBase):
             self._clean_pdf_dlg.close()
             self._clean_pdf_dlg = None
 
+        # Reading every page's text took ~1.2 s on 300 pages with the window
+        # frozen; scan a private copy in the background with progress.
         try:
-            self._statusbar.showMessage("Scanning pages for repeating text…")
-            findings = self._document.scan_margin_text()
+            data, password = self._document.worker_copy()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Scan failed:\n{e}")
-            self._statusbar.clearMessage()
             return
+        self._statusbar.showMessage("Scanning pages for repeating text…")
+        progress = QProgressDialog(
+            "Scanning pages for repeating text...", "Cancel", 0,
+            self._document.page_count, self)
+        progress.setWindowTitle("Clean PDF")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
 
+        def work(progress_cb, is_cancelled):
+            return self._document.scan_margin_text_in_copy(
+                data, password, progress_cb, is_cancelled)
+
+        self._run_background(work, progress, self._show_clean_findings,
+                             error_title="Clean PDF")
+
+    def _show_clean_findings(self, findings):
+        """Present the Clean PDF scan results for review."""
         if not findings:
             self._statusbar.clearMessage()
             QMessageBox.information(
