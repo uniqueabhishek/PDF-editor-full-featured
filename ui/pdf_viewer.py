@@ -32,6 +32,8 @@ _MAX_QUEUED_PAGE_RENDERS = 12
 # Pages within this many of the viewport keep their rendered bitmap; the rest
 # are released so memory stays flat however far the user scrolls.
 _KEEP_RENDERED_MARGIN = 3
+# Pages render this long after the last zoom step (see set_zoom).
+_ZOOM_RENDER_DELAY_MS = 150
 
 
 class ViewMode(Enum):
@@ -710,6 +712,13 @@ class PDFViewer(QScrollArea):
         self._render_timer = QTimer()
         self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._request_visible_pages)
+        # Zoom steps (Ctrl+wheel, Ctrl+/-) resize the pages at once but only
+        # render once the zooming pauses; each notch used to render every
+        # visible page at a zoom level that was thrown away a moment later.
+        self._zoom_render_timer = QTimer()
+        self._zoom_render_timer.setSingleShot(True)
+        self._zoom_render_timer.setInterval(_ZOOM_RENDER_DELAY_MS)
+        self._zoom_render_timer.timeout.connect(self._request_visible_pages)
 
         # Debounce timer for re-serializing the document for the render worker.
         # Re-serializing the whole document after every edit is expensive on
@@ -1068,6 +1077,10 @@ class PDFViewer(QScrollArea):
         """Request visible pages to be rendered in background"""
         if not self._doc_live() or not self._page_widgets:
             return
+        # Mid-zoom (the scroll debounce also fires as pages resize): wait for
+        # the zoom debounce, which renders the final zoom level.
+        if self._zoom_render_timer.isActive():
+            return
 
         visible = self._visible_page_indices()
         if not visible:
@@ -1132,8 +1145,12 @@ class PDFViewer(QScrollArea):
             self._page_widgets[page_num].set_pixmap(qpixmap, zoom)
             self._shown_pages.add(page_num)
 
-    def _render_all_pages(self):
-        """Update all page sizes and request rendering (used when zoom changes)"""
+    def _render_all_pages(self, defer_render: bool = False):
+        """Update all page sizes and request rendering (used when zoom changes).
+
+        ``defer_render`` (zoom steps) starts the zoom debounce instead of
+        rendering now, so a burst of steps renders only the final zoom.
+        """
         if not self._doc_live() or not self._page_widgets:
             return
 
@@ -1162,6 +1179,10 @@ class PDFViewer(QScrollArea):
         # loop mid-render; activate() is synchronous and side-effect free.
         self._layout.activate()
 
+        if defer_render:
+            self._zoom_render_timer.start()
+            return
+        self._zoom_render_timer.stop()
         # Request visible pages to be rendered
         self._request_visible_pages()
 
@@ -1610,8 +1631,8 @@ class PDFViewer(QScrollArea):
         self._zoom_mode = ZoomMode.CUSTOM
         self._page_cache.clear()
 
-        # Re-render all visible pages with new zoom
-        self._render_all_pages()
+        # Resize now; render once the zooming pauses.
+        self._render_all_pages(defer_render=True)
         self.zoom_changed.emit(self._zoom * 100)
 
     def zoom_in(self, factor: float = 1.25):

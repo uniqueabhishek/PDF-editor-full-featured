@@ -156,6 +156,27 @@ def test_scrolling_away_releases_page_bitmaps(qtbot, many_pages):
         model.close()
 
 
+def test_zoom_burst_renders_only_the_final_zoom(qtbot, many_pages):
+    """Five quick Ctrl+wheel steps must not render five zoom levels."""
+    from ui.pdf_viewer import _ZOOM_RENDER_DELAY_MS
+
+    requested = []
+    v, model = _viewer(qtbot, many_pages)
+    try:
+        qtbot.wait(100)  # let the open-time render pass run
+        v._render_worker.request_page = (
+            lambda page_num, zoom, priority=0: requested.append(round(zoom, 4)))
+        for _ in range(5):
+            v.zoom_in()
+            qtbot.wait(40)          # notches closer together than the delay
+        assert requested == [], f"rendered mid-burst at zooms {set(requested)}"
+        qtbot.wait(_ZOOM_RENDER_DELAY_MS + 150)
+        assert requested and set(requested) == {round(v._zoom, 4)}
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def _worker_pixels(v, page_num):
     return v._render_worker.render_samples(page_num, 40)
 
