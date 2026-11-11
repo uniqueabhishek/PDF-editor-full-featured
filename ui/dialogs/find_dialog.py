@@ -5,11 +5,63 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QCheckBox, QLabel, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 
+# Live search waits for a pause in typing, and only for terms this long; a
+# shorter term is searched when the user presses Enter / Find Next. Searching
+# a 300-page file on every keystroke froze the window 1-4 s per key.
+_LIVE_SEARCH_DELAY_MS = 300
+_LIVE_SEARCH_MIN_CHARS = 2
 
-class FindDialog(QDialog):
+
+class _DebouncedSearchMixin:
+    """Find-as-you-type without a full-document search on every keystroke.
+
+    Host classes provide ``_search_input``, ``_case_sensitive`` and the
+    ``find_requested`` / ``find_next`` / ``find_prev`` signals.
+    """
+
+    def _init_live_search(self):
+        self._searched = None  # (text, case) last sent as find_requested
+        self._live_timer = QTimer(self)
+        self._live_timer.setSingleShot(True)
+        self._live_timer.setInterval(_LIVE_SEARCH_DELAY_MS)
+        self._live_timer.timeout.connect(self._live_search_due)
+        self._case_sensitive.toggled.connect(lambda _on: self._schedule_live_search())
+
+    def _schedule_live_search(self):
+        if len(self._search_input.text().strip()) >= _LIVE_SEARCH_MIN_CHARS:
+            self._live_timer.start()
+        else:
+            self._live_timer.stop()
+
+    def _live_search_due(self):
+        self._flush_search()
+
+    def _flush_search(self) -> bool:
+        """Run the search now if the current term has not been searched yet.
+
+        Returns True if a search was started (results then begin at the first
+        match, so the caller should not also step to the next one).
+        """
+        self._live_timer.stop()
+        text = self._search_input.text()
+        if not text.strip():
+            return False
+        key = (text, self._case_sensitive.isChecked())
+        if key == self._searched:
+            return False
+        self._searched = key
+        self.find_requested.emit(*key)
+        return True
+
+    def _step(self, signal):
+        if self._search_input.text().strip() and not self._flush_search():
+            signal.emit()
+
+
+class FindDialog(_DebouncedSearchMixin, QDialog):
     """Find dialog for searching text in PDF"""
 
     find_requested = pyqtSignal(str, bool)  # text, case_sensitive
@@ -25,6 +77,7 @@ class FindDialog(QDialog):
 
         self._setup_ui()
         self._setup_shortcuts()
+        self._init_live_search()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -85,21 +138,15 @@ class FindDialog(QDialog):
         has_text = bool(text.strip())
         self._find_next_btn.setEnabled(has_text)
         self._find_prev_btn.setEnabled(has_text)
-
-        if has_text:
-            self.find_requested.emit(text, self._case_sensitive.isChecked())
+        self._schedule_live_search()
 
     def _find_next(self):
-        """Find next occurrence"""
-        text = self._search_input.text().strip()
-        if text:
-            self.find_next.emit()
+        """Find next occurrence (searches first if the term is new)."""
+        self._step(self.find_next)
 
     def _find_prev(self):
-        """Find previous occurrence"""
-        text = self._search_input.text().strip()
-        if text:
-            self.find_prev.emit()
+        """Find previous occurrence (searches first if the term is new)."""
+        self._step(self.find_prev)
 
     def set_result_count(self, current: int, total: int):
         """Update result count display"""
@@ -130,11 +177,14 @@ class FindDialog(QDialog):
 
     def closeEvent(self, event):
         """Handle close event"""
+        # Results are dropped on close; search afresh when reopened.
+        self._live_timer.stop()
+        self._searched = None
         self.closed.emit()
         super().closeEvent(event)
 
 
-class FindReplaceDialog(QDialog):
+class FindReplaceDialog(_DebouncedSearchMixin, QDialog):
     """Find and Replace dialog"""
 
     find_requested = pyqtSignal(str, bool)  # text, case_sensitive
@@ -152,6 +202,7 @@ class FindReplaceDialog(QDialog):
 
         self._setup_ui()
         self._setup_shortcuts()
+        self._init_live_search()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -240,22 +291,18 @@ class FindReplaceDialog(QDialog):
         self._find_prev_btn.setEnabled(has_text)
         self._replace_btn.setEnabled(has_text)
         self._replace_all_btn.setEnabled(has_text)
-
-        if has_text:
-            self.find_requested.emit(text, self._case_sensitive.isChecked())
+        self._schedule_live_search()
 
     def _find_next(self):
-        text = self._search_input.text().strip()
-        if text:
-            self.find_next.emit()
+        self._step(self.find_next)
 
     def _find_prev(self):
-        text = self._search_input.text().strip()
-        if text:
-            self.find_prev.emit()
+        self._step(self.find_prev)
 
     def _replace(self):
         """Replace current occurrence"""
+        # Make sure the highlighted match belongs to the term in the box.
+        self._flush_search()
         self.replace_requested.emit(self._replace_input.text())
 
     def _replace_all(self):
@@ -292,5 +339,8 @@ class FindReplaceDialog(QDialog):
         self._search_input.selectAll()
 
     def closeEvent(self, event):
+        # Results are dropped on close; search afresh when reopened.
+        self._live_timer.stop()
+        self._searched = None
         self.closed.emit()
         super().closeEvent(event)

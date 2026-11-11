@@ -40,6 +40,15 @@ def _char_lines(textpage: fitz.TextPage) -> List[Tuple[float, float, List[Tuple[
     return out
 
 
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def _normalize_search_text(text: str) -> str:
+    """Case-folded, every whitespace run collapsed to one space (search_for
+    treats line breaks and spacing loosely, so the pre-filter must too)."""
+    return _WHITESPACE_RUN.sub(" ", text.casefold()).strip()
+
+
 def _text_in_rect(lines, rect: fitz.Rect) -> str:
     """Characters whose centre lies in ``rect``, one output line per text line."""
     parts = []
@@ -94,12 +103,45 @@ class PDFDocument:
     """Main PDF document class for handling PDF operations"""
 
     def __init__(self):
+        # Bumped on every edit and every document swap; caches derived from
+        # page content (see _search_text_of) are valid for one version only.
+        self._edit_version = 0
+        self._search_text_cache: Dict[int, str] = {}
+        self._search_text_version = -1
         self._doc: Optional[fitz.Document] = None
         self._filepath: Optional[Path] = None
         self._is_modified: bool = False
         self._password: Optional[str] = None
         # Encryption settings queued by encrypt() and applied on the next save.
         self._pending_encryption: Optional[Dict[str, Any]] = None
+
+    # ``_doc`` and ``_is_modified`` are properties so that every document swap
+    # (open, close, restore, reopen after save) and every edit that flags the
+    # document modified bumps ``_edit_version`` without each call site having
+    # to remember to.
+    @property
+    def _doc(self) -> Optional[fitz.Document]:
+        return self._doc_obj
+
+    @_doc.setter
+    def _doc(self, value: Optional[fitz.Document]) -> None:
+        self._doc_obj = value
+        self._edit_version += 1
+
+    @property
+    def _is_modified(self) -> bool:
+        return self._modified_flag
+
+    @_is_modified.setter
+    def _is_modified(self, value: bool) -> None:
+        self._modified_flag = value
+        if value:
+            self._edit_version += 1
+
+    @property
+    def edit_version(self) -> int:
+        """Changes whenever the document is edited or replaced."""
+        return self._edit_version
 
     @property
     def is_open(self) -> bool:
@@ -456,6 +498,9 @@ class PDFDocument:
         """
         if self._doc is None:
             raise ValueError("No document is open")
+        # Snapshot operations may edit the document directly (via ``doc``)
+        # without flagging it modified; the after-snapshot marks that edit.
+        self._edit_version += 1
         # Keep any existing encryption so a restored snapshot re-opens the same way.
         # garbage=1 (drop unused objects) rather than 3: a before/after snapshot
         # only needs a faithful round-trip, not the expensive duplicate-stream-merge
@@ -882,7 +927,13 @@ class PDFDocument:
             raise ValueError("No document is open")
 
         results = []
+        # Cheap pre-filter: skip pages whose (cached) plain text cannot contain
+        # the term, so typing in Find re-searches only plausible pages. Only for
+        # ASCII terms, where Python's case folding matches MuPDF's.
+        needle = _normalize_search_text(text) if text.isascii() else None
         for page_num in range(self.page_count):
+            if needle is not None and needle not in self._search_text_of(page_num):
+                continue
             page = self.get_page(page_num)
             rects = self._find_on_page(page, text, case_sensitive)
             if rects:
@@ -892,6 +943,19 @@ class PDFDocument:
                 })
 
         return results
+
+    def _search_text_of(self, page_num: int) -> str:
+        """Normalized plain text of a page, cached until the next edit/swap."""
+        if self._search_text_version != self._edit_version:
+            self._search_text_cache.clear()
+            self._search_text_version = self._edit_version
+        cached = self._search_text_cache.get(page_num)
+        if cached is None:
+            raw = self.get_page(page_num).get_text(
+                "text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+            cached = _normalize_search_text(raw)
+            self._search_text_cache[page_num] = cached
+        return cached
 
     @staticmethod
     def _find_on_page(page: fitz.Page, text: str,
