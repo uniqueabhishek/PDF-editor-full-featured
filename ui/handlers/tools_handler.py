@@ -7,23 +7,26 @@ smart-clean), encryption and batch processing. Mixed into MainWindow; relies on
 ``self._load_document_to_viewer`` / ``self._update_title`` /
 ``self._save_document`` helpers.
 """
+
 import datetime
 from typing import TYPE_CHECKING
 
 import fitz
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QFileDialog, QMessageBox, QInputDialog, QProgressDialog
-)
+from PyQt6.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QProgressDialog
 from PyQt6.QtGui import QImage, QPixmap
 
 from ..dialogs import (
-    HeaderFooterDialog, RemoveHeaderFooterDialog, BatchDialog,
-    MergeDialog, SplitDialog,
+    HeaderFooterDialog,
+    RemoveHeaderFooterDialog,
+    BatchDialog,
+    MergeDialog,
+    SplitDialog,
 )
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
+
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object
@@ -46,17 +49,22 @@ class ToolsHandlerMixin(_MixinBase):
         opts = dialog.get_options()
         try:
             self._document.merge_pdfs(
-                files, output,
+                files,
+                output,
                 add_bookmarks=opts.get("add_bookmarks", False),
                 compress=opts.get("compress", True),
             )
             self._statusbar.showMessage("PDFs merged successfully", 3000)
 
-            if QMessageBox.question(
-                self, "Open Merged PDF",
-                "Do you want to open the merged PDF?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            ) == QMessageBox.StandardButton.Yes:
+            if (
+                QMessageBox.question(
+                    self,
+                    "Open Merged PDF",
+                    "Do you want to open the merged PDF?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                == QMessageBox.StandardButton.Yes
+            ):
                 self._open_file(output)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to merge:\n{e}")
@@ -67,8 +75,8 @@ class ToolsHandlerMixin(_MixinBase):
             return
 
         dialog = SplitDialog(
-            str(self._current_file) if self._current_file else None,
-            self._document.page_count, self)
+            str(self._current_file) if self._current_file else None, self._document.page_count, self
+        )
         if not dialog.exec():
             return
 
@@ -105,8 +113,7 @@ class ToolsHandlerMixin(_MixinBase):
                 self._document.compress(filepath)
                 self._statusbar.showMessage("PDF compressed", 3000)
             except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"Failed to compress:\n{e}")
+                QMessageBox.critical(self, "Error", f"Failed to compress:\n{e}")
 
     def _optimize_pdf(self):
         """Optimize PDF"""
@@ -136,7 +143,7 @@ class ToolsHandlerMixin(_MixinBase):
                 "You also need Tesseract OCR installed on your system:\n"
                 "- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki\n"
                 "- macOS: brew install tesseract\n"
-                "- Linux: sudo apt install tesseract-ocr"
+                "- Linux: sudo apt install tesseract-ocr",
             )
             return
 
@@ -146,6 +153,7 @@ class ToolsHandlerMixin(_MixinBase):
         # search silently find nothing). Configuring tesseract_cmd here also
         # carries over to the worker thread (same pytesseract module).
         from utils.tesseract import configure_tesseract
+
         if not configure_tesseract():
             QMessageBox.warning(
                 self,
@@ -156,30 +164,33 @@ class ToolsHandlerMixin(_MixinBase):
                 "  https://github.com/UB-Mannheim/tesseract/wiki\n"
                 "  then restart the app (or add its folder to PATH).\n"
                 "- macOS: brew install tesseract\n"
-                "- Linux: sudo apt install tesseract-ocr"
+                "- Linux: sudo apt install tesseract-ocr",
             )
             return
 
-        if QMessageBox.question(
-            self,
-            "Run OCR",
-            f"This will add a searchable text layer to all {self._document.page_count} pages.\n\n"
-            "This process may take some time. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        ) != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                "Run OCR",
+                f"This will add a searchable text layer to all {self._document.page_count} pages.\n\n"
+                "This process may take some time. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             return
 
         # Serialize a decrypted copy for the worker's private document.
         try:
             src_bytes = self._document.doc.tobytes(
-                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE)
+                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE
+            )
         except Exception as e:
             QMessageBox.critical(self, "OCR Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
 
-        progress = QProgressDialog(
-            "Running OCR...", "Cancel", 0, total, self)
+        progress = QProgressDialog("Running OCR...", "Cancel", 0, total, self)
         progress.setWindowTitle("OCR Processing")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
@@ -188,6 +199,7 @@ class ToolsHandlerMixin(_MixinBase):
         def work(progress_cb, is_cancelled):
             import pytesseract
             from PIL import Image
+
             wdoc = fitz.open(stream=src_bytes, filetype="pdf")
             try:
                 for i in range(len(wdoc)):
@@ -208,8 +220,7 @@ class ToolsHandlerMixin(_MixinBase):
                     img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                     # Position each recognised word so the invisible text layer
                     # lines up with the page.
-                    data = pytesseract.image_to_data(
-                        img, output_type=pytesseract.Output.DICT)
+                    data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
                     for j, word in enumerate(data["text"]):
                         if not word.strip():
                             continue
@@ -217,28 +228,34 @@ class ToolsHandlerMixin(_MixinBase):
                         y = (data["top"][j] + data["height"][j]) / zoom
                         fontsize = max(1.0, data["height"][j] / zoom)
                         page.insert_text(
-                            fitz.Point(x, y), word, fontsize=fontsize,
-                            color=(1, 1, 1), render_mode=3)
+                            fitz.Point(x, y),
+                            word,
+                            fontsize=fontsize,
+                            color=(1, 1, 1),
+                            render_mode=3,
+                        )
                 return wdoc.tobytes()
             finally:
                 wdoc.close()
 
         def apply_result(new_bytes):
             if skipped[0] == total:
-                self._statusbar.showMessage(
-                    "Every page already has text - nothing to OCR", 4000)
+                self._statusbar.showMessage("Every page already has text - nothing to OCR", 4000)
                 return
             # Apply the OCR'd bytes back on the GUI thread, undoably.
-            if self._run_snapshot_op(
-                    "OCR", lambda: self._document.restore(new_bytes)) is not None:
-                note = (f" ({skipped[0]} page(s) already had text and were skipped)"
-                        if skipped[0] else "")
+            if self._run_snapshot_op("OCR", lambda: self._document.restore(new_bytes)) is not None:
+                note = (
+                    f" ({skipped[0]} page(s) already had text and were skipped)"
+                    if skipped[0]
+                    else ""
+                )
                 self._statusbar.showMessage(
-                    "OCR completed - document is now searchable" + note, 4000)
+                    "OCR completed - document is now searchable" + note, 4000
+                )
             else:
                 QMessageBox.critical(
-                    self, "OCR Error",
-                    "Failed to apply OCR result. See log for details.")
+                    self, "OCR Error", "Failed to apply OCR result. See log for details."
+                )
 
         self._run_background(work, progress, apply_result, error_title="OCR Error")
 
@@ -247,16 +264,13 @@ class ToolsHandlerMixin(_MixinBase):
         if not self._document.is_open:
             return
 
-        text, ok = QInputDialog.getText(
-            self, "Add Watermark", "Watermark text:")
+        text, ok = QInputDialog.getText(self, "Add Watermark", "Watermark text:")
         if ok and text:
-            cmd = self._run_snapshot_op(
-                "Add watermark", lambda: self._document.add_watermark(text))
+            cmd = self._run_snapshot_op("Add watermark", lambda: self._document.add_watermark(text))
             if cmd is not None:
                 self._statusbar.showMessage("Watermark added", 2000)
             else:
-                QMessageBox.critical(
-                    self, "Error", "Failed to add watermark. See log for details.")
+                QMessageBox.critical(self, "Error", "Failed to add watermark. See log for details.")
 
     def _add_header_footer(self):
         """Add header/footer"""
@@ -274,14 +288,14 @@ class ToolsHandlerMixin(_MixinBase):
         page_range = dialog.get_page_range()
         margins = dialog.get_margins()
 
-        fontsize      = font_settings['size']
-        fontname      = font_settings['fitz_font']
-        font_color    = font_settings['color']
-        margin_top    = margins['top']
-        margin_bottom = margins['bottom']
-        margin_side   = margins['side']
-        filename_str  = self._current_file.name if self._current_file else ""
-        today_str     = datetime.datetime.now().strftime("%Y-%m-%d")
+        fontsize = font_settings["size"]
+        fontname = font_settings["fitz_font"]
+        font_color = font_settings["color"]
+        margin_top = margins["top"]
+        margin_bottom = margins["bottom"]
+        margin_side = margins["side"]
+        filename_str = self._current_file.name if self._current_file else ""
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
         def _do():
             doc = self._document.doc
@@ -291,16 +305,16 @@ class ToolsHandlerMixin(_MixinBase):
 
                 def process_text(raw: str) -> str:
                     return (
-                        raw
-                        .replace("{page}",     str(i + 1))
-                        .replace("{total}",    str(self._document.page_count))
-                        .replace("{date}",     today_str)
+                        raw.replace("{page}", str(i + 1))
+                        .replace("{total}", str(self._document.page_count))
+                        .replace("{date}", today_str)
                         .replace("{filename}", filename_str)
                     )
 
                 def insert(pt: "fitz.Point", raw: str) -> None:
                     page.insert_text(
-                        pt, process_text(raw),
+                        pt,
+                        process_text(raw),
                         fontsize=fontsize,
                         fontname=fontname,
                         color=font_color,
@@ -316,32 +330,39 @@ class ToolsHandlerMixin(_MixinBase):
                 # Add header
                 if any(header_texts.values()):
                     y = margin_top
-                    if header_texts['left']:
-                        insert(fitz.Point(margin_side, y), header_texts['left'])
-                    if header_texts['center']:
-                        insert(fitz.Point((rect.width - text_w(header_texts['center'])) / 2, y),
-                               header_texts['center'])
-                    if header_texts['right']:
-                        insert(fitz.Point(rect.width - margin_side - text_w(header_texts['right']), y),
-                               header_texts['right'])
+                    if header_texts["left"]:
+                        insert(fitz.Point(margin_side, y), header_texts["left"])
+                    if header_texts["center"]:
+                        insert(
+                            fitz.Point((rect.width - text_w(header_texts["center"])) / 2, y),
+                            header_texts["center"],
+                        )
+                    if header_texts["right"]:
+                        insert(
+                            fitz.Point(rect.width - margin_side - text_w(header_texts["right"]), y),
+                            header_texts["right"],
+                        )
 
                 # Add footer
                 if any(footer_texts.values()):
                     y = rect.height - margin_bottom
-                    if footer_texts['left']:
-                        insert(fitz.Point(margin_side, y), footer_texts['left'])
-                    if footer_texts['center']:
-                        insert(fitz.Point((rect.width - text_w(footer_texts['center'])) / 2, y),
-                               footer_texts['center'])
-                    if footer_texts['right']:
-                        insert(fitz.Point(rect.width - margin_side - text_w(footer_texts['right']), y),
-                               footer_texts['right'])
+                    if footer_texts["left"]:
+                        insert(fitz.Point(margin_side, y), footer_texts["left"])
+                    if footer_texts["center"]:
+                        insert(
+                            fitz.Point((rect.width - text_w(footer_texts["center"])) / 2, y),
+                            footer_texts["center"],
+                        )
+                    if footer_texts["right"]:
+                        insert(
+                            fitz.Point(rect.width - margin_side - text_w(footer_texts["right"]), y),
+                            footer_texts["right"],
+                        )
 
         if self._run_snapshot_op("Add header/footer", _do) is not None:
             self._statusbar.showMessage("Header/Footer added", 2000)
         else:
-            QMessageBox.critical(
-                self, "Error", "Failed to add header/footer. See log for details.")
+            QMessageBox.critical(self, "Error", "Failed to add header/footer. See log for details.")
 
     def _remove_header_footer(self):
         """Remove header/footer strips via redaction"""
@@ -355,8 +376,7 @@ class ToolsHandlerMixin(_MixinBase):
 
         # Render a small preview of the current page
         pix = page.get_pixmap(matrix=fitz.Matrix(0.4, 0.4))
-        img = QImage(pix.samples, pix.width, pix.height,
-                     pix.stride, QImage.Format.Format_RGB888)
+        img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
         preview_pixmap = QPixmap.fromImage(img)
 
         dialog = RemoveHeaderFooterDialog(
@@ -389,9 +409,7 @@ class ToolsHandlerMixin(_MixinBase):
 
         if self._run_snapshot_op("Trim header/footer", _do) is not None:
             pages_label = f"{end - start + 1} page(s)"
-            self._statusbar.showMessage(
-                f"Header/Footer removed from {pages_label}", 3000
-            )
+            self._statusbar.showMessage(f"Header/Footer removed from {pages_label}", 3000)
         else:
             QMessageBox.critical(
                 self, "Error", "Failed to remove header/footer. See log for details."
@@ -417,17 +435,17 @@ class ToolsHandlerMixin(_MixinBase):
             return
         self._statusbar.showMessage("Scanning pages for repeating text…")
         progress = QProgressDialog(
-            "Scanning pages for repeating text...", "Cancel", 0,
-            self._document.page_count, self)
+            "Scanning pages for repeating text...", "Cancel", 0, self._document.page_count, self
+        )
         progress.setWindowTitle("Clean PDF")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
         def work(progress_cb, is_cancelled):
             return self._document.scan_margin_text_in_copy(
-                data, password, progress_cb, is_cancelled)
+                data, password, progress_cb, is_cancelled
+            )
 
-        self._run_background(work, progress, self._show_clean_findings,
-                             error_title="Clean PDF")
+        self._run_background(work, progress, self._show_clean_findings, error_title="Clean PDF")
 
     def _show_clean_findings(self, findings):
         """Present the Clean PDF scan results for review."""
@@ -447,9 +465,10 @@ class ToolsHandlerMixin(_MixinBase):
         )
 
         from ui.dialogs import CleanPDFDialog
+
         dlg = CleanPDFDialog(findings, parent=self)
-        dlg.setModal(False)          # non-modal: user can scroll the PDF freely
-        self._clean_pdf_dlg = dlg    # keep reference so it isn't garbage-collected
+        dlg.setModal(False)  # non-modal: user can scroll the PDF freely
+        self._clean_pdf_dlg = dlg  # keep reference so it isn't garbage-collected
         dlg.accepted.connect(self._apply_clean_pdf)
         dlg.rejected.connect(lambda: self._statusbar.clearMessage())
         dlg.finished.connect(lambda _: setattr(self, "_clean_pdf_dlg", None))
@@ -465,16 +484,15 @@ class ToolsHandlerMixin(_MixinBase):
             self._statusbar.clearMessage()
             return
         cmd = self._run_snapshot_op(
-            "Clean PDF (redact margins)",
-            lambda: self._document.redact_findings(selected))
+            "Clean PDF (redact margins)", lambda: self._document.redact_findings(selected)
+        )
         if cmd is not None:
             total_rects, pages = cmd.result
             self._statusbar.showMessage(
                 f"Removed {total_rects} item(s) across {pages} page(s).", 5000
             )
         else:
-            QMessageBox.critical(
-                self, "Error", "Redaction failed. See log for details.")
+            QMessageBox.critical(self, "Error", "Redaction failed. See log for details.")
 
     def _encrypt_pdf(self):
         """Password-protect the document with AES-256 encryption."""
@@ -482,8 +500,10 @@ class ToolsHandlerMixin(_MixinBase):
             return
 
         from PyQt6.QtWidgets import QLineEdit
+
         password, ok = QInputDialog.getText(
-            self, "Encrypt PDF",
+            self,
+            "Encrypt PDF",
             "Enter a password to protect this PDF:",
             QLineEdit.EchoMode.Password,
         )
@@ -492,7 +512,8 @@ class ToolsHandlerMixin(_MixinBase):
 
         # Confirm the password — an encryption typo locks the file permanently.
         confirm, ok = QInputDialog.getText(
-            self, "Encrypt PDF",
+            self,
+            "Encrypt PDF",
             "Re-enter the password to confirm:",
             QLineEdit.EchoMode.Password,
         )
@@ -500,24 +521,21 @@ class ToolsHandlerMixin(_MixinBase):
             return
         if confirm != password:
             QMessageBox.warning(
-                self, "Passwords Do Not Match",
-                "The passwords you entered do not match. "
-                "The document was not encrypted.",
+                self,
+                "Passwords Do Not Match",
+                "The passwords you entered do not match. The document was not encrypted.",
             )
             return
 
         try:
-            self._document.encrypt(
-                user_password=password, owner_password=password)
+            self._document.encrypt(user_password=password, owner_password=password)
             self._save_document()
         except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to encrypt the document:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed to encrypt the document:\n{e}")
             return
 
         if not self._document.is_modified:
-            self._statusbar.showMessage(
-                "PDF encrypted with AES-256 and saved.", 4000)
+            self._statusbar.showMessage("PDF encrypted with AES-256 and saved.", 4000)
 
     def _remove_password(self):
         """Remove password protection"""
@@ -529,8 +547,7 @@ class ToolsHandlerMixin(_MixinBase):
         # document is authenticated — so test needs_password here, not is_encrypted
         # (otherwise this always reports "not protected" for an opened PDF).
         if not self._document.needs_password:
-            QMessageBox.information(
-                self, "No Password", "This document is not password protected.")
+            QMessageBox.information(self, "No Password", "This document is not password protected.")
             return
 
         # The document is already authenticated — this app can't keep an
@@ -547,16 +564,19 @@ class ToolsHandlerMixin(_MixinBase):
             # model re-primes the stored password and writes an unencrypted copy.
             self._document.save_unencrypted(filepath)
         except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to remove password:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed to remove password:\n{e}")
             return
 
         self._statusbar.showMessage("Password removed and saved", 3000)
-        if QMessageBox.question(
-            self, "Open Unprotected PDF",
-            "Do you want to open the unprotected PDF?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        ) == QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                "Open Unprotected PDF",
+                "Do you want to open the unprotected PDF?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            == QMessageBox.StandardButton.Yes
+        ):
             self._open_file(filepath)
 
     def _batch_process(self):

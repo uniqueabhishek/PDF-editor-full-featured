@@ -1,10 +1,20 @@
 """
 Ultra PDF Editor - Header and Footer Dialog
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QGroupBox, QSpinBox, QCheckBox, QComboBox,
-    QColorDialog, QFrame,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+    QGroupBox,
+    QSpinBox,
+    QCheckBox,
+    QComboBox,
+    QColorDialog,
+    QFrame,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -14,21 +24,21 @@ from typing import Dict, Any, Tuple
 # Map display name → PyMuPDF built-in font names for each style variant
 _FONT_MAP: Dict[str, Dict[str, str]] = {
     "Helvetica": {
-        "normal":      "helv",
-        "bold":        "helvB",
-        "italic":      "helvI",
+        "normal": "helv",
+        "bold": "helvB",
+        "italic": "helvI",
         "bold_italic": "helvBI",
     },
     "Times Roman": {
-        "normal":      "tiro",
-        "bold":        "tiroBd",
-        "italic":      "tiroIt",
+        "normal": "tiro",
+        "bold": "tiroBd",
+        "italic": "tiroIt",
         "bold_italic": "tiroBdIt",
     },
     "Courier": {
-        "normal":      "cour",
-        "bold":        "courB",
-        "italic":      "courI",
+        "normal": "cour",
+        "bold": "courB",
+        "italic": "courI",
         "bold_italic": "courBI",
     },
 }
@@ -48,8 +58,7 @@ class _ColorButton(QPushButton):
     def _refresh(self) -> None:
         r, g, b = self._color.red(), self._color.green(), self._color.blue()
         self.setStyleSheet(
-            f"background-color: rgb({r},{g},{b});"
-            "border: 2px solid #888; border-radius: 4px;"
+            f"background-color: rgb({r},{g},{b});border: 2px solid #888; border-radius: 4px;"
         )
 
     def _pick(self) -> None:
@@ -73,9 +82,7 @@ class HeaderFooterDialog(QDialog):
         super().__init__(parent)
         self._page_count = page_count
         self.setWindowTitle("Add Header and Footer")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
-        )
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setMinimumWidth(580)
         self._setup_ui()
 
@@ -184,9 +191,9 @@ class HeaderFooterDialog(QDialog):
         group = QGroupBox("Margins (points from edge)")
         row = QHBoxLayout(group)
         for attr, label, default in [
-            ("_top_margin",    "Top:",       36),
-            ("_bottom_margin", "Bottom:",    36),
-            ("_side_margin",   "Left/Right:", 36),
+            ("_top_margin", "Top:", 36),
+            ("_bottom_margin", "Bottom:", 36),
+            ("_side_margin", "Left/Right:", 36),
         ]:
             row.addWidget(QLabel(label))
             spin = QSpinBox()
@@ -219,16 +226,16 @@ class HeaderFooterDialog(QDialog):
 
     def get_header_texts(self) -> Dict[str, str]:
         return {
-            "left":   self._header_left.text(),
+            "left": self._header_left.text(),
             "center": self._header_center.text(),
-            "right":  self._header_right.text(),
+            "right": self._header_right.text(),
         }
 
     def get_footer_texts(self) -> Dict[str, str]:
         return {
-            "left":   self._footer_left.text(),
+            "left": self._footer_left.text(),
             "center": self._footer_center.text(),
-            "right":  self._footer_right.text(),
+            "right": self._footer_right.text(),
         }
 
     def get_font_settings(self) -> Dict[str, Any]:
@@ -245,10 +252,10 @@ class HeaderFooterDialog(QDialog):
         else:
             fitz_font = variants["normal"]
         return {
-            "family":    name,
+            "family": name,
             "fitz_font": fitz_font,
-            "size":      self._font_size.value(),
-            "color":     self._color_btn.as_fitz_color(),
+            "size": self._font_size.value(),
+            "color": self._color_btn.as_fitz_color(),
         }
 
     def get_page_range(self) -> Tuple[int, int]:
@@ -259,7 +266,7 @@ class HeaderFooterDialog(QDialog):
 
     def get_margins(self) -> Dict[str, int]:
         return {
-            "top":    self._top_margin.value(),
+            "top": self._top_margin.value(),
             "bottom": self._bottom_margin.value(),
-            "side":   self._side_margin.value(),
+            "side": self._side_margin.value(),
         }

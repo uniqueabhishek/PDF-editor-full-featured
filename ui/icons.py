@@ -8,6 +8,7 @@ toolbars. These icons are simple vector drawings in a 24x24 grid, painted in
 the theme's text colour (white when a tool button is checked), so
 they follow the app's light/dark theme and need no font or image file.
 """
+
 import math
 from typing import Callable, Dict
 
@@ -237,17 +238,32 @@ def _stamp(p):
 
 
 _DRAW: Dict[str, Draw] = {
-    "open": _open, "save": _save, "save_as": _save_as,
-    "undo": lambda p: _curve_arrow(p, False), "redo": lambda p: _curve_arrow(p, True),
-    "rotate_ccw": lambda p: _rotate(p, False), "rotate_cw": lambda p: _rotate(p, True),
+    "open": _open,
+    "save": _save,
+    "save_as": _save_as,
+    "undo": lambda p: _curve_arrow(p, False),
+    "redo": lambda p: _curve_arrow(p, True),
+    "rotate_ccw": lambda p: _rotate(p, False),
+    "rotate_cw": lambda p: _rotate(p, True),
     "print": _print,
-    "first": _first, "prev": lambda p: _triangle(p, False),
-    "next": lambda p: _triangle(p, True), "last": _last,
-    "select": _select, "hand": _hand, "text_select": _text_select,
-    "highlight": _highlight, "underline": _underline, "strikethrough": _strikethrough,
-    "text_box": _text_box, "sticky_note": _sticky_note,
-    "rectangle": _rectangle, "circle": _circle, "line": _line, "arrow": _arrow,
-    "freehand": _freehand, "stamp": _stamp,
+    "first": _first,
+    "prev": lambda p: _triangle(p, False),
+    "next": lambda p: _triangle(p, True),
+    "last": _last,
+    "select": _select,
+    "hand": _hand,
+    "text_select": _text_select,
+    "highlight": _highlight,
+    "underline": _underline,
+    "strikethrough": _strikethrough,
+    "text_box": _text_box,
+    "sticky_note": _sticky_note,
+    "rectangle": _rectangle,
+    "circle": _circle,
+    "line": _line,
+    "arrow": _arrow,
+    "freehand": _freehand,
+    "stamp": _stamp,
 }
 
 
@@ -258,6 +274,7 @@ class _DrawnIconEngine(QIconEngine):
 
     def paint(self, painter: QPainter, rect, mode, state):
         from .theme import current_theme
+
         if state == QIcon.State.On:
             color = QColor("white")  # checked tool buttons have a blue fill
         elif mode == QIcon.Mode.Disabled:

@@ -8,6 +8,7 @@ points pytesseract at a bundled copy (for packaged builds) or a standard install
 location when the binary isn't already reachable, so OCR works without the user
 editing their PATH.
 """
+
 import logging
 import os
 import shutil
@@ -45,8 +46,7 @@ def _candidate_paths() -> Iterator[Path]:
             # UB-Mannheim per-user install.
             yield Path(local) / "Programs" / "Tesseract-OCR" / exe
     else:
-        for p in ("/usr/bin/tesseract", "/usr/local/bin/tesseract",
-                  "/opt/homebrew/bin/tesseract"):
+        for p in ("/usr/bin/tesseract", "/usr/local/bin/tesseract", "/opt/homebrew/bin/tesseract"):
             yield Path(p)
 
 
@@ -98,6 +98,5 @@ def configure_tesseract() -> bool:
         logger.info("Configured Tesseract at %s", found)
         return True
     except Exception:
-        logger.warning(
-            "Found tesseract at %s but it failed to run", found, exc_info=True)
+        logger.warning("Found tesseract at %s but it failed to run", found, exc_info=True)
         return False

@@ -4,12 +4,14 @@ Ultra PDF Editor - View operations mixin.
 Zoom, fit, rotate, view mode, sidebar and fullscreen toggles. Mixed into
 MainWindow; relies on ``self._viewer``, ``self._sidebar`` and ``self._statusbar``.
 """
+
 from typing import TYPE_CHECKING
 
 from ..pdf_viewer import ViewMode
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
+
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object

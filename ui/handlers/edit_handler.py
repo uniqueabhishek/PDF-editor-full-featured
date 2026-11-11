@@ -7,6 +7,7 @@ Mixed into MainWindow; relies on ``self._history_manager``, ``self._viewer``,
 (``self._search_results``, ``self._current_search_index``, ``self._find_dialog``,
 ``self._replace_dialog``).
 """
+
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
@@ -16,6 +17,7 @@ from ..dialogs import FindDialog, FindReplaceDialog
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
+
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object
@@ -78,8 +80,8 @@ class EditHandlerMixin(_MixinBase):
                 # holds; hand those to the render worker instead of
                 # re-serializing the whole document.
                 self._load_document_to_viewer(
-                    render_source=getattr(command, "last_restored", None),
-                    reuse_layout=True)
+                    render_source=getattr(command, "last_restored", None), reuse_layout=True
+                )
             else:
                 self._viewer._page_cache.clear()
                 # Single-page commands (annotation, rotation, page snapshots)
@@ -120,14 +122,13 @@ class EditHandlerMixin(_MixinBase):
     def _on_selection_copied(self, count: int):
         """Show a status-bar confirmation after text is copied to the clipboard."""
         noun = "character" if count == 1 else "characters"
-        self._statusbar.showMessage(
-            f"Copied {count} {noun} to clipboard", 2000)
+        self._statusbar.showMessage(f"Copied {count} {noun} to clipboard", 2000)
 
     def _on_selection_needs_ocr(self):
         """Hint to run OCR when selecting on a page with no text layer (a scan)."""
         self._statusbar.showMessage(
-            "No selectable text here — run Tools → OCR to make a "
-            "scanned page searchable", 4000)
+            "No selectable text here — run Tools → OCR to make a scanned page searchable", 4000
+        )
 
     def _paste(self):
         """Paste clipboard text as a text box on the current page."""
@@ -155,14 +156,17 @@ class EditHandlerMixin(_MixinBase):
             return
         selection = self._viewer.get_selection()
         if selection is None:
-            self._statusbar.showMessage(
-                "Select an area first (Select tool), then Delete", 3000)
+            self._statusbar.showMessage("Select an area first (Select tool), then Delete", 3000)
             return
         page_num, rect = selection
-        if self._run_snapshot_op(
+        if (
+            self._run_snapshot_op(
                 "Erase selection",
                 lambda: self._document.redact_area(page_num, rect),
-                pages=[page_num]) is not None:
+                pages=[page_num],
+            )
+            is not None
+        ):
             self._viewer.clear_selection()
             self._statusbar.showMessage("Erased selection (Undo to restore)", 3000)
 
@@ -205,8 +209,7 @@ class EditHandlerMixin(_MixinBase):
             self._replace_dialog.find_next.connect(self._find_next)
             self._replace_dialog.find_prev.connect(self._find_previous)
             self._replace_dialog.replace_requested.connect(self._do_replace)
-            self._replace_dialog.replace_all_requested.connect(
-                self._do_replace_all)
+            self._replace_dialog.replace_all_requested.connect(self._do_replace_all)
             self._replace_dialog.closed.connect(self._on_replace_closed)
 
         self._replace_dialog.show()
@@ -288,8 +291,9 @@ class EditHandlerMixin(_MixinBase):
         """Every match as (page, rect), built once per result list (Find
         Next/Previous used to walk all results to find the n-th)."""
         if getattr(self, "_search_flat_src", None) is not self._search_results:
-            self._search_flat_list = [(r["page"], rect) for r in self._search_results
-                                      for rect in r["rects"]]
+            self._search_flat_list = [
+                (r["page"], rect) for r in self._search_results for rect in r["rects"]
+            ]
             self._search_flat_src = self._search_results
         return self._search_flat_list
 
@@ -305,16 +309,19 @@ class EditHandlerMixin(_MixinBase):
         if target is None:
             return
         page_num, rect = target
-        if self._run_snapshot_op(
+        if (
+            self._run_snapshot_op(
                 "Replace text",
-                lambda: self._document.replace_text_one(
-                    page_num, rect, replacement), pages=[page_num]) is not None:
+                lambda: self._document.replace_text_one(page_num, rect, replacement),
+                pages=[page_num],
+            )
+            is not None
+        ):
             # Positions changed; re-run the search to refresh highlights/count.
             self._do_search(search, case_sensitive)
             self._statusbar.showMessage("Replaced 1 occurrence", 2000)
         else:
-            QMessageBox.critical(
-                self, "Error", "Failed to replace text. See log for details.")
+            QMessageBox.critical(self, "Error", "Failed to replace text. See log for details.")
 
     def _do_replace_all(self, replacement: str):
         """Replace all occurrences of the search term (redaction-based)."""
@@ -334,25 +341,26 @@ class EditHandlerMixin(_MixinBase):
             QMessageBox.critical(self, "Error", f"Could not prepare document:\n{e}")
             return
         progress = QProgressDialog(
-            "Replacing text...", "Cancel", 0, self._document.page_count, self)
+            "Replacing text...", "Cancel", 0, self._document.page_count, self
+        )
         progress.setWindowTitle("Replace All")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
         def work(progress_cb, is_cancelled):
             return self._document.replace_text_all_in_copy(
-                data, password, search, replacement, case_sensitive,
-                progress_cb, is_cancelled)
+                data, password, search, replacement, case_sensitive, progress_cb, is_cancelled
+            )
 
         def apply_result(result):
             new_bytes, count = result
             if new_bytes is None:
                 self._statusbar.showMessage("No occurrences replaced", 3000)
                 return
-            if self._run_snapshot_op(
-                    "Replace all",
-                    lambda: self._document.restore(new_bytes)) is None:
-                QMessageBox.critical(
-                    self, "Error", "Failed to replace text. See log for details.")
+            if (
+                self._run_snapshot_op("Replace all", lambda: self._document.restore(new_bytes))
+                is None
+            ):
+                QMessageBox.critical(self, "Error", "Failed to replace text. See log for details.")
                 return
             self._do_search(search, case_sensitive)  # matches are gone now
             self._statusbar.showMessage(f"Replaced {count} occurrence(s)", 3000)
@@ -375,7 +383,7 @@ class EditHandlerMixin(_MixinBase):
             return
 
         self._do_search(text, False)
-        total = sum(len(r['rects']) for r in self._search_results)
+        total = sum(len(r["rects"]) for r in self._search_results)
         if total > 0:
             self._statusbar.showMessage(f"Found {total} matches")
         else:

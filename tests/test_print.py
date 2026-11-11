@@ -1,4 +1,5 @@
 """Printing renders pages at a capped resolution and still fills the page."""
+
 import fitz
 import pytest
 
@@ -9,12 +10,14 @@ pytest.importorskip("pytestqt")
 @pytest.fixture
 def main_window(qtbot, tmp_path, monkeypatch):
     from config import config
+
     autosave = tmp_path / "autosave"
     autosave.mkdir()
     monkeypatch.setattr(config, "AUTOSAVE_DIR", autosave)
     monkeypatch.setattr(config, "SETTINGS_PATH", tmp_path / "settings.json")
 
     from ui.main_window import MainWindow
+
     window = MainWindow()
     window._settings.confirm_close_unsaved = False
     window._autosave_timer.stop()
@@ -23,8 +26,7 @@ def main_window(qtbot, tmp_path, monkeypatch):
     window.close()
 
 
-def test_print_caps_render_dpi_and_prints_every_page(main_window, make_pdf,
-                                                     tmp_path, monkeypatch):
+def test_print_caps_render_dpi_and_prints_every_page(main_window, make_pdf, tmp_path, monkeypatch):
     import PyQt6.QtPrintSupport as qps
     import ui.handlers.file_handler as fh
 
@@ -39,8 +41,7 @@ def test_print_caps_render_dpi_and_prints_every_page(main_window, make_pdf,
             self.setResolution(1200)  # far above the cap
 
     monkeypatch.setattr(qps, "QPrinter", FilePrinter)
-    monkeypatch.setattr(qps.QPrintDialog, "exec",
-                        lambda self: qps.QPrintDialog.DialogCode.Accepted)
+    monkeypatch.setattr(qps.QPrintDialog, "exec", lambda self: qps.QPrintDialog.DialogCode.Accepted)
 
     rendered = []
     real_get_pixmap = fitz.Page.get_pixmap
@@ -49,6 +50,7 @@ def test_print_caps_render_dpi_and_prints_every_page(main_window, make_pdf,
         pix = real_get_pixmap(page, *a, **k)
         rendered.append(pix.width / page.rect.width * 72)
         return pix
+
     monkeypatch.setattr(fitz.Page, "get_pixmap", spy)
 
     pdf = make_pdf("doc.pdf", pages=3)

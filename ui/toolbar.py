@@ -1,11 +1,20 @@
 """
 Ultra PDF Editor - Toolbar with all tools and actions
 """
+
 from PyQt6.QtWidgets import (
-    QToolBar, QWidget, QHBoxLayout, QLabel,
-    QSpinBox, QComboBox, QLineEdit,
-    QColorDialog, QSlider, QFrame, QToolButton,
-    QFontComboBox
+    QToolBar,
+    QWidget,
+    QHBoxLayout,
+    QLabel,
+    QSpinBox,
+    QComboBox,
+    QLineEdit,
+    QColorDialog,
+    QSlider,
+    QFrame,
+    QToolButton,
+    QFontComboBox,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QColor, QFont, QPixmap, QPainter
@@ -107,10 +116,9 @@ class ZoomWidget(QWidget):
         self.zoom_combo = QComboBox()
         self.zoom_combo.setEditable(True)
         self.zoom_combo.setMinimumWidth(80)
-        self.zoom_combo.addItems([
-            "50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%",
-            "Fit Width", "Fit Page"
-        ])
+        self.zoom_combo.addItems(
+            ["50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%", "Fit Width", "Fit Page"]
+        )
         self.zoom_combo.setCurrentText("100%")
         self.zoom_combo.currentTextChanged.connect(self._on_zoom_changed)
         layout.addWidget(self.zoom_combo)
@@ -234,7 +242,9 @@ class SearchWidget(QWidget):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
         self.search_input.setMinimumWidth(150)
-        self.search_input.returnPressed.connect(lambda: self.search_requested.emit(self.search_input.text()))
+        self.search_input.returnPressed.connect(
+            lambda: self.search_requested.emit(self.search_input.text())
+        )
         layout.addWidget(self.search_input)
 
         # Previous result
@@ -308,7 +318,7 @@ class MainToolbar(QToolBar):
     search_prev = pyqtSignal()
 
     # Cleanup signals
-    clean_pdf_requested            = pyqtSignal()
+    clean_pdf_requested = pyqtSignal()
     remove_header_footer_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -356,7 +366,9 @@ class MainToolbar(QToolBar):
         self.addSeparator()
 
         # === Rotation ===
-        self._add_action("Rotate Left", "rotate_ccw", "Rotate Counter-Clockwise", self.rotate_ccw_requested)
+        self._add_action(
+            "Rotate Left", "rotate_ccw", "Rotate Counter-Clockwise", self.rotate_ccw_requested
+        )
         self._add_action("Rotate Right", "rotate_cw", "Rotate Clockwise", self.rotate_cw_requested)
 
         self.addSeparator()
@@ -374,7 +386,6 @@ class MainToolbar(QToolBar):
         self._add_action("Print", "print", "Print (Ctrl+P)", self.print_requested)
 
         self.addSeparator()
-
 
     def _add_action(self, name: str, icon_name: str, tooltip: str, signal: Any):
         """Add an action button to the toolbar"""
@@ -466,15 +477,20 @@ class AnnotationToolbar(QToolBar):
         self._add_tool_button("Select", "select", ToolMode.SELECT, "Select tool")
         self._add_tool_button("Hand", "hand", ToolMode.HAND, "Hand tool (Pan)")
         self._add_tool_button(
-            "Text Select", "text_select", ToolMode.TEXT_SELECT,
-            "Text: drag to select, double-click a paragraph to edit it")
+            "Text Select",
+            "text_select",
+            ToolMode.TEXT_SELECT,
+            "Text: drag to select, double-click a paragraph to edit it",
+        )
 
         self.addSeparator()
 
         # === Text Markup ===
         self._add_tool_button("Highlight", "highlight", ToolMode.HIGHLIGHT, "Highlight text")
         self._add_tool_button("Underline", "underline", ToolMode.UNDERLINE, "Underline text")
-        self._add_tool_button("Strikethrough", "strikethrough", ToolMode.STRIKETHROUGH, "Strikethrough text")
+        self._add_tool_button(
+            "Strikethrough", "strikethrough", ToolMode.STRIKETHROUGH, "Strikethrough text"
+        )
 
         self.addSeparator()
 
@@ -494,7 +510,12 @@ class AnnotationToolbar(QToolBar):
         self.addSeparator()
 
         # === Redact & Stamp ===
-        self._add_tool_button("Erase Selection", "Erase Selection", ToolMode.REDACT, "Draw a rectangle to permanently erase that area")
+        self._add_tool_button(
+            "Erase Selection",
+            "Erase Selection",
+            ToolMode.REDACT,
+            "Draw a rectangle to permanently erase that area",
+        )
         self._add_tool_button("Stamp", "stamp", ToolMode.STAMP, "Add stamp")
 
         self.addSeparator()
@@ -570,7 +591,9 @@ class AnnotationToolbar(QToolBar):
         self.font_combo.setFixedWidth(120)
         self.font_combo.setToolTip("Font family for text annotations")
         self.font_combo.currentFontChanged.connect(
-            lambda: self.font_changed.emit(self.font_combo.currentFont().family(), self.font_size_spin.value())
+            lambda: self.font_changed.emit(
+                self.font_combo.currentFont().family(), self.font_size_spin.value()
+            )
         )
         font_layout.addWidget(self.font_combo)
 
@@ -585,7 +608,9 @@ class AnnotationToolbar(QToolBar):
         self.font_size_spin.setFixedWidth(50)
         self.font_size_spin.setToolTip("Font size for text annotations")
         self.font_size_spin.valueChanged.connect(
-            lambda: self.font_changed.emit(self.font_combo.currentFont().family(), self.font_size_spin.value())
+            lambda: self.font_changed.emit(
+                self.font_combo.currentFont().family(), self.font_size_spin.value()
+            )
         )
         font_layout.addWidget(self.font_size_spin)
 

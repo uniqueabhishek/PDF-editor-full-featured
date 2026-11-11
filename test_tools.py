@@ -1,4 +1,5 @@
 """Test script for debugging toolbar tools"""
+
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel
 from PyQt6.QtCore import Qt
@@ -6,6 +7,7 @@ from PyQt6.QtCore import Qt
 # Import our modules
 from ui.toolbar import AnnotationToolbar
 from ui.pdf_viewer import PDFViewer, ToolMode as ViewerToolMode
+
 
 class TestWindow(QMainWindow):
     def __init__(self):
@@ -46,6 +48,7 @@ class TestWindow(QMainWindow):
             print(f"Viewer tool mode set to: {mode}")
         except Exception as e:
             print(f"Error setting viewer tool mode: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,14 +1,27 @@
 """
 Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
+
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QApplication,
-    QListWidget, QListWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem,
-    QMenu, QInputDialog, QLineEdit, QFrame, QToolButton, QPushButton
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QScrollArea,
+    QLabel,
+    QApplication,
+    QListWidget,
+    QListWidgetItem,
+    QTabWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QMenu,
+    QInputDialog,
+    QLineEdit,
+    QFrame,
+    QToolButton,
+    QPushButton,
 )
-from PyQt6.QtCore import (
-    Qt, pyqtSignal, QPoint, QMimeData, QTimer
-)
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QMimeData, QTimer
 from PyQt6.QtGui import QPixmap, QImage, QDrag, QColor, QPainter, QPen
 import fitz
 from typing import Optional, List
@@ -25,6 +38,7 @@ _MAX_THUMBNAILS_PER_PASS = 2
 @dataclass
 class ThumbnailData:
     """Data for a page thumbnail"""
+
     page_num: int
     pixmap: Optional[QPixmap] = None
     label: str = ""
@@ -58,10 +72,8 @@ class _DeleteOverlay(QWidget):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         m = 6
-        painter.drawLine(rect.left() + m, rect.top() + m,
-                         rect.right() - m, rect.bottom() - m)
-        painter.drawLine(rect.right() - m, rect.top() + m,
-                         rect.left() + m, rect.bottom() - m)
+        painter.drawLine(rect.left() + m, rect.top() + m, rect.right() - m, rect.bottom() - m)
+        painter.drawLine(rect.right() - m, rect.top() + m, rect.left() + m, rect.bottom() - m)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -81,8 +93,8 @@ class ThumbnailWidget(QFrame):
         super().__init__(parent)
         self.page_num = page_num
         self._selected = False
-        self._marked = False        # marked for deletion
-        self._delete_mode = False   # delete-selection mode active (badges visible)
+        self._marked = False  # marked for deletion
+        self._delete_mode = False  # delete-selection mode active (badges visible)
         self._pixmap: Optional[QPixmap] = None
         self._drag_start_pos: Optional[QPoint] = None
 
@@ -184,8 +196,7 @@ class ThumbnailWidget(QFrame):
         """Keep the overlay over the image and the ✕ badge in the top-right corner."""
         self._overlay.setGeometry(self._image_label.geometry())
         margin = 6
-        self._mark_btn.move(
-            self.width() - self._mark_btn.width() - margin, margin)
+        self._mark_btn.move(self.width() - self._mark_btn.width() - margin, margin)
 
     def _toggle_mark(self, marked: bool):
         """Set the marked state from a user click and notify listeners."""
@@ -201,9 +212,10 @@ class ThumbnailWidget(QFrame):
         """
         dpr = pixmap.devicePixelRatio() or 1.0
         scaled = pixmap.scaled(
-            round(120 * dpr), round(160 * dpr),
+            round(120 * dpr),
+            round(160 * dpr),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
         scaled.setDevicePixelRatio(dpr)
         self._pixmap = scaled
@@ -266,9 +278,14 @@ class ThumbnailWidget(QFrame):
         mime.setData(_PAGE_MIME, str(self.page_num).encode())
         drag.setMimeData(mime)
         if self._pixmap is not None:
-            drag.setPixmap(self._pixmap.scaled(
-                80, 100, Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation))
+            drag.setPixmap(
+                self._pixmap.scaled(
+                    80,
+                    100,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         self._drag_start_pos = None
         drag.exec(Qt.DropAction.MoveAction)
 
@@ -373,8 +390,9 @@ class ThumbnailPanel(QScrollArea):
         bar_layout.addWidget(self._clear_btn)
         self._delete_bar.hide()
 
-    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False,
-                     keep_images: bool = False):
+    def set_document(
+        self, doc: Optional[fitz.Document], reuse_layout: bool = False, keep_images: bool = False
+    ):
         """Set the document for thumbnail generation.
 
         With ``reuse_layout`` (reloading the same document after an edit) and
@@ -382,8 +400,12 @@ class ThumbnailPanel(QScrollArea):
         re-rendered as they come into view; the old image shows until then.
         ``keep_images`` (content unchanged, e.g. after a save) keeps them as is.
         """
-        if (reuse_layout and doc is not None and self._thumbnails
-                and len(doc) == len(self._thumbnails)):
+        if (
+            reuse_layout
+            and doc is not None
+            and self._thumbnails
+            and len(doc) == len(self._thumbnails)
+        ):
             self._doc = doc
             if keep_images:
                 return
@@ -500,9 +522,10 @@ class ThumbnailPanel(QScrollArea):
         # freeze on 300 pages). Lay out first; if positions are still not
         # distinct, try again on the next pass.
         self._layout.activate()
-        if (len(self._thumbnails) > 1
-                and self._thumbnails[1].geometry().top()
-                <= self._thumbnails[0].geometry().top()):
+        if (
+            len(self._thumbnails) > 1
+            and self._thumbnails[1].geometry().top() <= self._thumbnails[0].geometry().top()
+        ):
             self._render_timer.start(50)
             return
 
@@ -549,8 +572,9 @@ class ThumbnailPanel(QScrollArea):
 
         pixmap = page.get_pixmap(matrix=matrix, alpha=False)
 
-        img = QImage(pixmap.samples, pixmap.width, pixmap.height,
-                     pixmap.stride, QImage.Format.Format_RGB888)
+        img = QImage(
+            pixmap.samples, pixmap.width, pixmap.height, pixmap.stride, QImage.Format.Format_RGB888
+        )
         qpixmap = QPixmap.fromImage(img)
         qpixmap.setDevicePixelRatio(dpr)
         return qpixmap
@@ -616,8 +640,12 @@ class ThumbnailPanel(QScrollArea):
         # Rotation submenu
         rotate_menu = menu.addMenu("Rotate")
         if rotate_menu:
-            rotate_menu.addAction("90° Clockwise", lambda: self.page_rotate_requested.emit(page_num, 90))
-            rotate_menu.addAction("90° Counter-Clockwise", lambda: self.page_rotate_requested.emit(page_num, -90))
+            rotate_menu.addAction(
+                "90° Clockwise", lambda: self.page_rotate_requested.emit(page_num, 90)
+            )
+            rotate_menu.addAction(
+                "90° Counter-Clockwise", lambda: self.page_rotate_requested.emit(page_num, -90)
+            )
             rotate_menu.addAction("180°", lambda: self.page_rotate_requested.emit(page_num, 180))
 
         menu.addSeparator()
@@ -686,8 +714,7 @@ class ThumbnailPanel(QScrollArea):
         if count == 0:
             self._delete_bar.hide()
             return
-        self._delete_btn.setText(
-            f"Delete {count} page" + ("s" if count != 1 else ""))
+        self._delete_btn.setText(f"Delete {count} page" + ("s" if count != 1 else ""))
         self._delete_bar.show()
         self._delete_bar.raise_()
         self._reposition_delete_bar()
@@ -868,9 +895,7 @@ class BookmarkPanel(QTreeWidget):
 
     def _add_bookmark_dialog(self):
         """Ask for a title and request a bookmark at the current page."""
-        text, ok = QInputDialog.getText(
-            self, "Add Bookmark", "Bookmark title:"
-        )
+        text, ok = QInputDialog.getText(self, "Add Bookmark", "Bookmark title:")
         if ok and text:
             self.bookmark_add_requested.emit(text)
 
@@ -967,12 +992,15 @@ class AnnotationPanel(QListWidget):
             text += f" - {content}"
 
         item = QListWidgetItem(text)
-        item.setData(Qt.ItemDataRole.UserRole, {
-            "page": page_num,
-            "type": annot_type,
-            "rect": tuple(annot.rect),
-            "xref": annot.xref,
-        })
+        item.setData(
+            Qt.ItemDataRole.UserRole,
+            {
+                "page": page_num,
+                "type": annot_type,
+                "rect": tuple(annot.rect),
+                "xref": annot.xref,
+            },
+        )
         # Note: only serializable data (page + xref) is stored on the item; live
         # fitz.Annot objects must not be kept, as undo/redo swaps the document and
         # would leave them dangling.
@@ -991,10 +1019,13 @@ class AnnotationPanel(QListWidget):
             data = item.data(Qt.ItemDataRole.UserRole)
             if data:
                 menu = QMenu(self)
-                menu.addAction("Go to Annotation",
-                              lambda: self.annotation_clicked.emit(data["page"], self.row(item)))
-                menu.addAction("Delete",
-                              lambda: self.annotation_deleted.emit(data["page"], data["xref"]))
+                menu.addAction(
+                    "Go to Annotation",
+                    lambda: self.annotation_clicked.emit(data["page"], self.row(item)),
+                )
+                menu.addAction(
+                    "Delete", lambda: self.annotation_deleted.emit(data["page"], data["xref"])
+                )
                 menu.exec(self.mapToGlobal(pos))
 
     def refresh(self):
@@ -1077,11 +1108,11 @@ class Sidebar(QTabWidget):
             }
         """)
 
-    def set_document(self, doc: Optional[fitz.Document], reuse_layout: bool = False,
-                     keep_images: bool = False):
+    def set_document(
+        self, doc: Optional[fitz.Document], reuse_layout: bool = False, keep_images: bool = False
+    ):
         """Set document for all panels"""
-        self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout,
-                                          keep_images=keep_images)
+        self.thumbnail_panel.set_document(doc, reuse_layout=reuse_layout, keep_images=keep_images)
         self.bookmark_panel.set_document(doc)
         self.annotation_panel.set_document(doc)
 
@@ -1093,7 +1124,7 @@ class Sidebar(QTabWidget):
 
     def pages_inserted(self, doc: fitz.Document, index: int, count: int = 1):
         self.thumbnail_panel.pages_inserted(index, count)
-        self.bookmark_panel.set_document(doc)     # page numbers shifted
+        self.bookmark_panel.set_document(doc)  # page numbers shifted
         self.annotation_panel.set_document(doc)
 
     def pages_removed(self, doc: fitz.Document, pages: List[int]):

@@ -6,9 +6,15 @@ signal wiring, settings and the top-level event handlers. The behaviour behind t
 menu/toolbar actions lives in cohesive handler mixins under ``ui.handlers`` (file,
 edit/search, view, page, tools and annotation), which MainWindow inherits.
 """
+
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter,
-    QStatusBar, QMessageBox, QLabel
+    QMainWindow,
+    QWidget,
+    QHBoxLayout,
+    QSplitter,
+    QStatusBar,
+    QMessageBox,
+    QLabel,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
@@ -23,8 +29,12 @@ from .pdf_viewer import PDFViewer, ViewMode
 from .sidebar import Sidebar
 from .toolbar import MainToolbar, AnnotationToolbar
 from .handlers import (
-    FileHandlerMixin, EditHandlerMixin, ViewHandlerMixin,
-    PageHandlerMixin, ToolsHandlerMixin, AnnotationHandlerMixin,
+    FileHandlerMixin,
+    EditHandlerMixin,
+    ViewHandlerMixin,
+    PageHandlerMixin,
+    ToolsHandlerMixin,
+    AnnotationHandlerMixin,
 )
 from core.pdf_document import PDFDocument
 from config import config, UserSettings
@@ -89,8 +99,7 @@ class MainWindow(
         self._current_file: Optional[Path] = None
 
         # Undo/Redo history manager
-        self._history_manager = HistoryManager(
-            config.UNDO_HISTORY_SIZE, config.UNDO_MEMORY_BUDGET)
+        self._history_manager = HistoryManager(config.UNDO_HISTORY_SIZE, config.UNDO_MEMORY_BUDGET)
 
         # Live background workers (OCR, export); kept referenced so they aren't
         # garbage-collected mid-run.
@@ -155,8 +164,7 @@ class MainWindow(
         self._splitter.addWidget(self._viewer)
 
         # Set initial sizes
-        self._splitter.setSizes(
-            [config.SIDEBAR_WIDTH, config.WINDOW_WIDTH - config.SIDEBAR_WIDTH])
+        self._splitter.setSizes([config.SIDEBAR_WIDTH, config.WINDOW_WIDTH - config.SIDEBAR_WIDTH])
 
         layout.addWidget(self._splitter)
 
@@ -173,8 +181,7 @@ class MainWindow(
         assert self._new_action is not None
         self._new_action.setShortcut(QKeySequence.StandardKey.New)
 
-        self._open_action = file_menu.addAction(
-            "&Open...", self._open_document)
+        self._open_action = file_menu.addAction("&Open...", self._open_document)
         assert self._open_action is not None
         self._open_action.setShortcut(QKeySequence.StandardKey.Open)
 
@@ -189,15 +196,13 @@ class MainWindow(
         assert self._save_action is not None
         self._save_action.setShortcut(QKeySequence.StandardKey.Save)
 
-        self._save_as_action = file_menu.addAction(
-            "Save &As...", self._save_document_as)
+        self._save_as_action = file_menu.addAction("Save &As...", self._save_document_as)
         assert self._save_as_action is not None
         self._save_as_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
 
         file_menu.addSeparator()
 
-        self._close_action = file_menu.addAction(
-            "&Close", self._close_document)
+        self._close_action = file_menu.addAction("&Close", self._close_document)
         assert self._close_action is not None
         self._close_action.setShortcut(QKeySequence.StandardKey.Close)
 
@@ -212,15 +217,13 @@ class MainWindow(
 
         file_menu.addSeparator()
 
-        self._print_action = file_menu.addAction(
-            "&Print...", self._print_document)
+        self._print_action = file_menu.addAction("&Print...", self._print_document)
         assert self._print_action is not None
         self._print_action.setShortcut(QKeySequence.StandardKey.Print)
 
         file_menu.addSeparator()
 
-        self._properties_action = file_menu.addAction(
-            "Properties...", self._show_properties)
+        self._properties_action = file_menu.addAction("Properties...", self._show_properties)
 
         file_menu.addSeparator()
 
@@ -258,8 +261,7 @@ class MainWindow(
 
         edit_menu.addSeparator()
 
-        self._select_all_action = edit_menu.addAction(
-            "Select &All", self._select_all)
+        self._select_all_action = edit_menu.addAction("Select &All", self._select_all)
         assert self._select_all_action is not None
         self._select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
 
@@ -269,15 +271,13 @@ class MainWindow(
         assert self._find_action is not None
         self._find_action.setShortcut(QKeySequence.StandardKey.Find)
 
-        self._replace_action = edit_menu.addAction(
-            "Find && &Replace...", self._show_replace)
+        self._replace_action = edit_menu.addAction("Find && &Replace...", self._show_replace)
         assert self._replace_action is not None
         self._replace_action.setShortcut(QKeySequence("Ctrl+H"))
 
         edit_menu.addSeparator()
 
-        self._preferences_action = edit_menu.addAction(
-            "&Preferences...", self._show_settings)
+        self._preferences_action = edit_menu.addAction("&Preferences...", self._show_settings)
         assert self._preferences_action is not None
         self._preferences_action.setShortcut(QKeySequence("Ctrl+,"))
 
@@ -327,12 +327,15 @@ class MainWindow(
         # View mode submenu
         view_mode_menu = view_menu.addMenu("View Mode")
         assert view_mode_menu is not None
-        view_mode_menu.addAction(self._create_action(
-            "Single Page", lambda: self._set_view_mode(ViewMode.SINGLE_PAGE)))
-        view_mode_menu.addAction(self._create_action(
-            "Two Pages", lambda: self._set_view_mode(ViewMode.TWO_PAGE)))
-        view_mode_menu.addAction(self._create_action(
-            "Continuous", lambda: self._set_view_mode(ViewMode.CONTINUOUS)))
+        view_mode_menu.addAction(
+            self._create_action("Single Page", lambda: self._set_view_mode(ViewMode.SINGLE_PAGE))
+        )
+        view_mode_menu.addAction(
+            self._create_action("Two Pages", lambda: self._set_view_mode(ViewMode.TWO_PAGE))
+        )
+        view_mode_menu.addAction(
+            self._create_action("Continuous", lambda: self._set_view_mode(ViewMode.CONTINUOUS))
+        )
 
         view_menu.addSeparator()
 
@@ -349,8 +352,7 @@ class MainWindow(
         self._main_toolbar_action.setCheckable(True)
         self._main_toolbar_action.setChecked(True)
 
-        self._annotation_toolbar_action = view_menu.addAction(
-            "Show Annotation Toolbar")
+        self._annotation_toolbar_action = view_menu.addAction("Show Annotation Toolbar")
         assert self._annotation_toolbar_action is not None
         self._annotation_toolbar_action.setCheckable(True)
         self._annotation_toolbar_action.setChecked(True)
@@ -358,51 +360,53 @@ class MainWindow(
         view_menu.addSeparator()
 
         fullscreen_action = self._create_action(
-            "Full Screen", self._toggle_fullscreen, QKeySequence("F11"))
+            "Full Screen", self._toggle_fullscreen, QKeySequence("F11")
+        )
         view_menu.addAction(fullscreen_action)
 
         # === Page Menu ===
         page_menu = menubar.addMenu("&Page")
         assert page_menu is not None
 
-        page_menu.addAction(self._create_action(
-            "Insert Blank Page...", self._insert_blank_page))
-        page_menu.addAction(self._create_action(
-            "Insert Pages from File...", self._insert_from_file))
+        page_menu.addAction(self._create_action("Insert Blank Page...", self._insert_blank_page))
+        page_menu.addAction(
+            self._create_action("Insert Pages from File...", self._insert_from_file)
+        )
         page_menu.addSeparator()
-        page_menu.addAction(self._create_action(
-            "Extract Pages...", self._extract_pages))
+        page_menu.addAction(self._create_action("Extract Pages...", self._extract_pages))
         page_menu.addSeparator()
-        page_menu.addAction(self._create_action(
-            "Rotate Clockwise", lambda: self._rotate_page(90)))
-        page_menu.addAction(self._create_action(
-            "Rotate Counter-Clockwise", lambda: self._rotate_page(-90)))
+        page_menu.addAction(self._create_action("Rotate Clockwise", lambda: self._rotate_page(90)))
+        page_menu.addAction(
+            self._create_action("Rotate Counter-Clockwise", lambda: self._rotate_page(-90))
+        )
         page_menu.addSeparator()
-        page_menu.addAction(self._create_action(
-            "Crop Page...", self._crop_page))
+        page_menu.addAction(self._create_action("Crop Page...", self._crop_page))
 
         # === Delete Pages Menu ===
         delete_menu = menubar.addMenu("&Delete Pages")
         assert delete_menu is not None
 
         self._select_delete_action = self._create_action(
-            "Select Pages to Delete", self._toggle_delete_mode, checkable=True)
+            "Select Pages to Delete", self._toggle_delete_mode, checkable=True
+        )
         self._select_delete_action.setStatusTip(
-            "Show a ✕ on each page thumbnail so you can mark pages for deletion")
+            "Show a ✕ on each page thumbnail so you can mark pages for deletion"
+        )
         delete_menu.addAction(self._select_delete_action)
 
         delete_menu.addSeparator()
 
-        delete_menu.addAction(self._create_action(
-            "Delete Current Page", self._delete_current_page))
+        delete_menu.addAction(self._create_action("Delete Current Page", self._delete_current_page))
 
         self._delete_marked_action = self._create_action(
-            "Delete Marked Pages...", self._delete_marked_pages)
+            "Delete Marked Pages...", self._delete_marked_pages
+        )
         self._delete_marked_action.setEnabled(False)
         delete_menu.addAction(self._delete_marked_action)
 
         self._clear_marks_action = self._create_action(
-            "Clear Marks", self._sidebar.clear_page_marks)
+            "Clear Marks", self._sidebar.clear_page_marks
+        )
         self._clear_marks_action.setEnabled(False)
         delete_menu.addAction(self._clear_marks_action)
 
@@ -410,40 +414,34 @@ class MainWindow(
         tools_menu = menubar.addMenu("&Tools")
         assert tools_menu is not None
 
-        tools_menu.addAction(self._create_action(
-            "Merge PDFs...", self._merge_pdfs))
-        tools_menu.addAction(self._create_action(
-            "Split PDF...", self._split_pdf))
+        tools_menu.addAction(self._create_action("Merge PDFs...", self._merge_pdfs))
+        tools_menu.addAction(self._create_action("Split PDF...", self._split_pdf))
         tools_menu.addSeparator()
-        tools_menu.addAction(self._create_action(
-            "Compress PDF...", self._compress_pdf))
-        tools_menu.addAction(self._create_action(
-            "Optimize PDF...", self._optimize_pdf))
+        tools_menu.addAction(self._create_action("Compress PDF...", self._compress_pdf))
+        tools_menu.addAction(self._create_action("Optimize PDF...", self._optimize_pdf))
         tools_menu.addSeparator()
-        tools_menu.addAction(self._create_action(
-            "OCR (Recognize Text)...", self._run_ocr))
+        tools_menu.addAction(self._create_action("OCR (Recognize Text)...", self._run_ocr))
         tools_menu.addSeparator()
-        tools_menu.addAction(self._create_action(
-            "Add Watermark...", self._add_watermark))
-        tools_menu.addAction(self._create_action(
-            "Add Header/Footer...", self._add_header_footer))
+        tools_menu.addAction(self._create_action("Add Watermark...", self._add_watermark))
+        tools_menu.addAction(self._create_action("Add Header/Footer...", self._add_header_footer))
         tools_menu.addSeparator()
-        tools_menu.addAction(self._create_action(
-            "Encrypt PDF...", self._encrypt_pdf))
-        tools_menu.addAction(self._create_action(
-            "Remove Password...", self._remove_password))
+        tools_menu.addAction(self._create_action("Encrypt PDF...", self._encrypt_pdf))
+        tools_menu.addAction(self._create_action("Remove Password...", self._remove_password))
         tools_menu.addSeparator()
-        tools_menu.addAction(self._create_action(
-            "Batch Process...", self._batch_process))
+        tools_menu.addAction(self._create_action("Batch Process...", self._batch_process))
 
         # === Trim Header/Footer Menu ===
         hf_menu = menubar.addMenu("&Trim Header/Footer")
         assert hf_menu is not None
         _manual_act = self._create_action("Manual Trim", self._remove_header_footer)
-        _manual_act.setStatusTip("Permanently erase a fixed-height strip from the top and/or bottom of selected pages")
+        _manual_act.setStatusTip(
+            "Permanently erase a fixed-height strip from the top and/or bottom of selected pages"
+        )
         hf_menu.addAction(_manual_act)
         _smart_act = self._create_action("Smart Detection && Trim", self._clean_pdf)
-        _smart_act.setStatusTip("Scan all pages for repeating text in margins, review findings, and remove what you select")
+        _smart_act.setStatusTip(
+            "Scan all pages for repeating text in margins, review findings, and remove what you select"
+        )
         hf_menu.addAction(_smart_act)
         hf_menu.addSeparator()
         _erase_act = self._create_action("Erase Selection", self._activate_erase_selection)
@@ -454,8 +452,7 @@ class MainWindow(
         help_menu = menubar.addMenu("&Help")
         assert help_menu is not None
         help_menu.addAction(self._create_action("&About", self._show_about))
-        help_menu.addAction(self._create_action(
-            "Keyboard Shortcuts", self._show_shortcuts))
+        help_menu.addAction(self._create_action("Keyboard Shortcuts", self._show_shortcuts))
 
     def _setup_toolbars(self):
         """Setup toolbars"""
@@ -468,8 +465,7 @@ class MainWindow(
 
         # Annotation toolbar (on second row for better visibility)
         self._annotation_toolbar = AnnotationToolbar()
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea,
-                        self._annotation_toolbar)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self._annotation_toolbar)
 
         # Connect toolbar signals
         self._main_toolbar.open_requested.connect(self._open_document)
@@ -483,15 +479,11 @@ class MainWindow(
         self._main_toolbar.zoom_out_requested.connect(self._zoom_out)
         self._main_toolbar.fit_width_requested.connect(self._fit_width)
         self._main_toolbar.fit_page_requested.connect(self._fit_page)
-        self._main_toolbar.rotate_cw_requested.connect(
-            lambda: self._rotate(90))
-        self._main_toolbar.rotate_ccw_requested.connect(
-            lambda: self._rotate(-90))
+        self._main_toolbar.rotate_cw_requested.connect(lambda: self._rotate(90))
+        self._main_toolbar.rotate_ccw_requested.connect(lambda: self._rotate(-90))
         self._main_toolbar.page_changed.connect(self._viewer.go_to_page)
-        self._main_toolbar.first_page_requested.connect(
-            self._viewer.first_page)
-        self._main_toolbar.prev_page_requested.connect(
-            self._viewer.previous_page)
+        self._main_toolbar.first_page_requested.connect(self._viewer.first_page)
+        self._main_toolbar.prev_page_requested.connect(self._viewer.previous_page)
         self._main_toolbar.next_page_requested.connect(self._viewer.next_page)
         self._main_toolbar.last_page_requested.connect(self._viewer.last_page)
         self._main_toolbar.search_requested.connect(self._search)
@@ -502,12 +494,9 @@ class MainWindow(
 
         # Annotation toolbar signals
         self._annotation_toolbar.tool_changed.connect(self._on_tool_changed)
-        self._annotation_toolbar.color_changed.connect(
-            self._viewer.set_annotation_color)
-        self._annotation_toolbar.opacity_changed.connect(
-            self._viewer.set_annotation_opacity)
-        self._annotation_toolbar.stroke_width_changed.connect(
-            self._viewer.set_stroke_width)
+        self._annotation_toolbar.color_changed.connect(self._viewer.set_annotation_color)
+        self._annotation_toolbar.opacity_changed.connect(self._viewer.set_annotation_opacity)
+        self._annotation_toolbar.stroke_width_changed.connect(self._viewer.set_stroke_width)
         self._annotation_toolbar.font_changed.connect(self._viewer.set_font)
 
     def _setup_statusbar(self):
@@ -536,8 +525,7 @@ class MainWindow(
         self._viewer.page_changed.connect(self._on_page_changed)
         self._viewer.zoom_changed.connect(self._on_zoom_changed)
         self._viewer.document_modified.connect(self._on_document_modified)
-        self._viewer.annotation_create_requested.connect(
-            self._create_annotation)
+        self._viewer.annotation_create_requested.connect(self._create_annotation)
         self._viewer.selection_copied.connect(self._on_selection_copied)
         self._viewer.selection_needs_ocr.connect(self._on_selection_needs_ocr)
         self._viewer.edit_text_committed.connect(self._on_edit_text_committed)
@@ -551,8 +539,7 @@ class MainWindow(
         self._sidebar.page_delete_requested.connect(self._delete_page)
         self._sidebar.pages_delete_requested.connect(self._delete_pages)
         self._sidebar.marked_pages_changed.connect(self._on_marked_pages_changed)
-        self._sidebar.page_extract_requested.connect(
-            self._extract_specific_pages)
+        self._sidebar.page_extract_requested.connect(self._extract_specific_pages)
         self._sidebar.pages_reordered.connect(self._reorder_page)
         self._sidebar.toc_changed.connect(self._apply_toc)
         self._sidebar.bookmark_add_requested.connect(self._add_bookmark)
@@ -565,6 +552,7 @@ class MainWindow(
         if self._settings.window_geometry:
             try:
                 import base64
+
                 geometry = base64.b64decode(self._settings.window_geometry)
                 self.restoreGeometry(geometry)
             except Exception:
@@ -579,8 +567,9 @@ class MainWindow(
     def _save_settings(self):
         """Save current settings"""
         import base64
+
         geometry_data = self.saveGeometry().data()  # Get raw bytes from QByteArray
-        self._settings.window_geometry = base64.b64encode(geometry_data).decode('utf-8')  # type: ignore[assignment]
+        self._settings.window_geometry = base64.b64encode(geometry_data).decode("utf-8")  # type: ignore[assignment]
         self._settings.sidebar_visible = self._sidebar.isVisible()
         self._settings.save(config.SETTINGS_PATH)
 
@@ -589,6 +578,7 @@ class MainWindow(
     def _show_settings(self):
         """Open the Preferences dialog."""
         from .dialogs import SettingsDialog
+
         dialog = SettingsDialog(self._settings, self)
         dialog.settings_changed.connect(self._on_settings_changed)
         dialog.exec()
@@ -598,6 +588,7 @@ class MainWindow(
         if "theme" in changes:
             from PyQt6.QtWidgets import QApplication
             from ui.theme import apply_theme
+
             app = QApplication.instance()
             if app is not None:
                 apply_theme(app, changes["theme"])
@@ -640,8 +631,7 @@ class MainWindow(
         # the recovery copy has no password, so this would leak its plaintext to
         # AUTOSAVE_DIR. Skip auto-save for protected files instead.
         if self._document.is_protected:
-            self._statusbar.showMessage(
-                "Auto-save skipped for password-protected document", 2000)
+            self._statusbar.showMessage("Auto-save skipped for password-protected document", 2000)
             return
         # Don't pile up writes if a previous recovery write is still in flight.
         if getattr(self, "_autosave_in_flight", False):
@@ -654,10 +644,12 @@ class MainWindow(
 
         pdf_path = config.AUTOSAVE_DIR / "recovery.pdf"
         meta_path = config.AUTOSAVE_DIR / "recovery.json"
-        meta_json = json.dumps({
-            "original": str(self._current_file) if self._current_file else None,
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
-        })
+        meta_json = json.dumps(
+            {
+                "original": str(self._current_file) if self._current_file else None,
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
 
         def _write(_progress, _is_cancelled):
             # Disk I/O only (no PyMuPDF access), so it is safe off the GUI thread.
@@ -666,6 +658,7 @@ class MainWindow(
             return True
 
         from ui.workers import FunctionWorker
+
         worker = FunctionWorker(_write, self)
         self._autosave_in_flight = True
 
@@ -712,12 +705,16 @@ class MainWindow(
         original = meta.get("original")
         saved_at = meta.get("saved_at", "an earlier session")
         name = Path(original).name if original else "an untitled document"
-        if QMessageBox.question(
-            self, "Recover Unsaved Changes",
-            f"Unsaved changes to {name} (from {saved_at}) were found.\n\n"
-            "Restore them? Choose No to discard.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        ) != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                "Recover Unsaved Changes",
+                f"Unsaved changes to {name} (from {saved_at}) were found.\n\n"
+                "Restore them? Choose No to discard.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             self._clear_autosave()
             return
 
@@ -731,12 +728,11 @@ class MainWindow(
             self._load_document_to_viewer()
             self._is_modified = True
             self._update_title()
-            self._statusbar.showMessage(
-                "Recovered unsaved changes — use Save to keep them", 5000)
+            self._statusbar.showMessage("Recovered unsaved changes — use Save to keep them", 5000)
         except Exception as e:
             QMessageBox.critical(
-                self, "Recovery Failed",
-                f"Could not restore the recovery file:\n{e}")
+                self, "Recovery Failed", f"Could not restore the recovery file:\n{e}"
+            )
             self._clear_autosave()
 
     # ==================== Event Handlers ====================
@@ -745,8 +741,7 @@ class MainWindow(
         """Handle page change"""
         self._main_toolbar.set_current_page(page)
         self._sidebar.set_current_page(page)
-        self._page_info_label.setText(
-            f"Page {page + 1} of {self._document.page_count}")
+        self._page_info_label.setText(f"Page {page + 1} of {self._document.page_count}")
 
     def _on_zoom_changed(self, zoom: float):
         """Handle zoom change"""
@@ -770,8 +765,7 @@ class MainWindow(
         """Show/hide the per-page ✕ badges used to mark pages for deletion."""
         self._sidebar.set_delete_mode(checked)
         if checked:
-            self._statusbar.showMessage(
-                "Click the ✕ on pages to mark them for deletion", 4000)
+            self._statusbar.showMessage("Click the ✕ on pages to mark them for deletion", 4000)
 
     def _delete_marked_pages(self):
         """Delete the pages currently marked with ✕ in the sidebar."""
@@ -783,8 +777,8 @@ class MainWindow(
         if getattr(self, "_delete_marked_action", None):
             self._delete_marked_action.setEnabled(has_marks)
             self._delete_marked_action.setText(
-                f"Delete Marked Pages ({len(pages)})..." if has_marks
-                else "Delete Marked Pages...")
+                f"Delete Marked Pages ({len(pages)})..." if has_marks else "Delete Marked Pages..."
+            )
         if getattr(self, "_clear_marks_action", None):
             self._clear_marks_action.setEnabled(has_marks)
 
@@ -799,7 +793,7 @@ class MainWindow(
             <p>Version {config.APP_VERSION}</p>
             <p>A powerful yet simple PDF editor with all the features you need.</p>
             <p>Built with Python, PyQt6, and PyMuPDF.</p>
-            """
+            """,
         )
 
     def _show_shortcuts(self):
@@ -837,8 +831,7 @@ class MainWindow(
             title = f"*{title}"
         self.setWindowTitle(title)
 
-    def _run_snapshot_op(self, description: str, operation, command_type=None,
-                         pages=None):
+    def _run_snapshot_op(self, description: str, operation, command_type=None, pages=None):
         """Run a destructive document mutation as an undoable snapshot command.
 
         ``operation`` is a no-argument callable that performs the in-place change
@@ -851,12 +844,16 @@ class MainWindow(
         snapshots and a reload (~0.4 s on a 36 MB scan), wherever the document
         allows it (see ``PDFDocument.can_snapshot_pages``).
         """
-        from utils.history import (DocumentSnapshotCommand, CommandType,
-                                   PageSnapshotCommand)
+        from utils.history import DocumentSnapshotCommand, CommandType, PageSnapshotCommand
+
         if pages and self._document.can_snapshot_pages(pages):
             page_cmd = PageSnapshotCommand(
-                self._document, list(pages), operation,
-                command_type or CommandType.METADATA_CHANGE, description)
+                self._document,
+                list(pages),
+                operation,
+                command_type or CommandType.METADATA_CHANGE,
+                description,
+            )
             if not self._history_manager.execute(page_cmd):
                 return None
             self._viewer.pages_edited(page_cmd.pages)
@@ -867,13 +864,12 @@ class MainWindow(
             return page_cmd
 
         command = DocumentSnapshotCommand(
-            self._document, operation,
-            command_type or CommandType.METADATA_CHANGE, description)
+            self._document, operation, command_type or CommandType.METADATA_CHANGE, description
+        )
         if self._history_manager.execute(command):
             # The after-snapshot already matches the document; reuse it for the
             # render worker instead of serializing everything a third time.
-            self._load_document_to_viewer(render_source=command.last_restored,
-                                          reuse_layout=True)
+            self._load_document_to_viewer(render_source=command.last_restored, reuse_layout=True)
             self._is_modified = True
             self._update_title()
             return command
@@ -994,16 +990,14 @@ class MainWindow(
         for filepath in self._settings.recent_files[:10]:
             if os.path.exists(filepath):
                 action = self._recent_menu.addAction(
-                    os.path.basename(filepath),
-                    lambda f=filepath: self._open_file(f)
+                    os.path.basename(filepath), lambda f=filepath: self._open_file(f)
                 )
                 if action:
                     action.setToolTip(filepath)
 
         if self._settings.recent_files:
             self._recent_menu.addSeparator()
-            self._recent_menu.addAction(
-                "Clear Recent Files", self._clear_recent_files)
+            self._recent_menu.addAction("Clear Recent Files", self._clear_recent_files)
 
     def _clear_recent_files(self):
         """Clear recent files list"""
@@ -1013,7 +1007,7 @@ class MainWindow(
     def _format_size(self, size_bytes: int) -> str:
         """Format file size for display"""
         size: float = float(size_bytes)
-        for unit in ['B', 'KB', 'MB', 'GB']:
+        for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024:
                 return f"{size:.1f} {unit}"
             size /= 1024
@@ -1040,7 +1034,7 @@ class MainWindow(
         """Handle drag enter"""
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith('.pdf'):
+                if url.toLocalFile().lower().endswith(".pdf"):
                     event.acceptProposedAction()
                     return
 
@@ -1048,6 +1042,6 @@ class MainWindow(
         """Handle file drop"""
         for url in event.mimeData().urls():
             filepath = url.toLocalFile()
-            if filepath.lower().endswith('.pdf'):
+            if filepath.lower().endswith(".pdf"):
                 self._open_file(filepath)
                 break

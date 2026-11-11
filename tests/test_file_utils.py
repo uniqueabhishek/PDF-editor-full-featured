@@ -1,11 +1,18 @@
 """Tests for the pure file-utility helpers (headless)."""
+
 import hashlib
 from pathlib import Path
 
 from utils.file_utils import (
-    format_file_size, sanitize_filename, ensure_extension,
-    get_unique_filename, validate_pdf, get_file_hash,
-    get_pdf_page_count, is_pdf_encrypted, list_pdfs_in_directory,
+    format_file_size,
+    sanitize_filename,
+    ensure_extension,
+    get_unique_filename,
+    validate_pdf,
+    get_file_hash,
+    get_pdf_page_count,
+    is_pdf_encrypted,
+    list_pdfs_in_directory,
 )
 
 
@@ -13,8 +20,8 @@ def test_format_file_size():
     assert format_file_size(0) == "0.0 B"
     assert format_file_size(1024) == "1.0 KB"
     assert format_file_size(1536) == "1.5 KB"
-    assert format_file_size(1024 ** 2) == "1.0 MB"
-    assert format_file_size(1024 ** 3) == "1.0 GB"
+    assert format_file_size(1024**2) == "1.0 MB"
+    assert format_file_size(1024**3) == "1.0 GB"
 
 
 def test_sanitize_filename_replaces_invalid_chars():

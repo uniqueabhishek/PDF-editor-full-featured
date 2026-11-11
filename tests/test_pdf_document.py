@@ -1,4 +1,5 @@
 """Tests for the core PDFDocument model (headless, no Qt)."""
+
 from pathlib import Path
 
 import fitz
@@ -120,9 +121,9 @@ def test_case_sensitive_matches_get_textbox_reference(tmp_path):
     p = tmp_path / "mixed.pdf"
     d = fitz.open()
     page = d.new_page()
-    page.insert_textbox(fitz.Rect(50, 50, 545, 800),
-                        "lorem Lorem LOREM xLoremx Loremipsum dolor. " * 6,
-                        fontsize=11)
+    page.insert_textbox(
+        fitz.Rect(50, 50, 545, 800), "lorem Lorem LOREM xLoremx Loremipsum dolor. " * 6, fontsize=11
+    )
     d.save(str(p))
     d.close()
 
@@ -133,8 +134,9 @@ def test_case_sensitive_matches_get_textbox_reference(tmp_path):
         for term in ("Lorem", "lorem", "LOREM", "m Lo"):
             hits = pg.search_for(term, flags=fitz.TEXT_PRESERVE_WHITESPACE)
             expected = [tuple(r) for r in hits if term in pg.get_textbox(r)]
-            got = [tuple(r) for res in doc.search_text(term, case_sensitive=True)
-                   for r in res["rects"]]
+            got = [
+                tuple(r) for res in doc.search_text(term, case_sensitive=True) for r in res["rects"]
+            ]
             assert got == expected, term
     finally:
         doc.close()
@@ -164,9 +166,13 @@ def test_replace_all_keeps_each_lines_font_size(tmp_path, monkeypatch):
     """Replacement text takes the size of its own line, not a neighbour's."""
     queued = []
     real = PDFDocument._queue_replacement
-    monkeypatch.setattr(PDFDocument, "_queue_replacement", staticmethod(
-        lambda page, rect, text, size: (queued.append(size),
-                                        real(page, rect, text, size))))
+    monkeypatch.setattr(
+        PDFDocument,
+        "_queue_replacement",
+        staticmethod(
+            lambda page, rect, text, size: (queued.append(size), real(page, rect, text, size))
+        ),
+    )
     p = tmp_path / "sizes.pdf"
     d = fitz.open()
     pg = d.new_page()
@@ -200,14 +206,16 @@ def test_replace_all_in_copy_reports_progress_and_cancels(tmp_path):
         data, pw = doc.worker_copy()
         seen = []
         new_bytes, count = PDFDocument.replace_text_all_in_copy(
-            data, pw, "alpha", "omega", False, lambda i, n: seen.append((i, n)))
+            data, pw, "alpha", "omega", False, lambda i, n: seen.append((i, n))
+        )
         assert count == 4 and seen == [(i, 4) for i in range(4)]
         assert doc.search_text("omega") == [], "the live document was touched"
         doc.restore(new_bytes)
         assert len(doc.search_text("omega")) == 4
 
         cancelled = PDFDocument.replace_text_all_in_copy(
-            data, pw, "alpha", "omega", False, None, lambda: True)
+            data, pw, "alpha", "omega", False, None, lambda: True
+        )
         assert cancelled == (None, 0)
     finally:
         doc.close()
@@ -240,8 +248,7 @@ def test_replace_text_all_case_sensitive(tmp_path):
     try:
         assert doc.replace_text_all("foo", "bar", case_sensitive=True) == 1
         # The capitalised "Foo" is untouched.
-        assert sum(len(r["rects"])
-                   for r in doc.search_text("Foo", case_sensitive=True)) == 1
+        assert sum(len(r["rects"]) for r in doc.search_text("Foo", case_sensitive=True)) == 1
     finally:
         doc.close()
 
@@ -321,8 +328,7 @@ def test_incremental_output_ok_rejects_repaired_file(opened, tmp_path):
     opened.doc.save(str(good))
     # Point startxref at a bogus offset so the reader can't find the xref table
     # and must rebuild it via a full scan — MuPDF sets is_repaired for this.
-    broken = re.sub(rb"startxref\s+\d+", b"startxref\n9999999",
-                    good.read_bytes(), count=1)
+    broken = re.sub(rb"startxref\s+\d+", b"startxref\n9999999", good.read_bytes(), count=1)
     broken_path = tmp_path / "broken.pdf"
     broken_path.write_bytes(broken)
     assert opened._incremental_output_ok(broken_path) is False
@@ -442,6 +448,7 @@ def test_close_resets_state(opened):
 
 # ==================== Encryption ====================
 
+
 def test_encrypt_then_save_requires_password(opened, tmp_path):
     out = tmp_path / "encrypted.pdf"
     assert opened.encrypt(user_password="s3cret") is True
@@ -529,6 +536,7 @@ def test_encrypt_requires_a_password(opened):
 
 # ==================== Snapshot / restore (undo support) ====================
 
+
 def test_snapshot_restore_round_trip(opened):
     original = opened.get_page_text(0)
     assert "page 1" in original
@@ -560,6 +568,7 @@ def test_snapshot_requires_open_document():
 
 # ==================== Bookmarks / TOC ====================
 
+
 def test_add_bookmark_persists_in_toc(opened):
     assert opened.get_toc() == []
     opened.add_bookmark("Chapter 1", page_num=0)
@@ -587,6 +596,7 @@ def test_set_toc_round_trips_through_save(opened, tmp_path):
 
 # ==================== Page reorder ====================
 
+
 def test_reorder_pages_changes_order(opened):
     before = [opened.get_page_text(i).strip() for i in range(3)]
     opened.reorder_pages([2, 0, 1])
@@ -611,6 +621,7 @@ def test_reorder_pages_requires_open_document():
 
 
 # ==================== Split ====================
+
 
 def test_split_by_pages_every_n(opened, tmp_path):
     files = opened.split_by_pages(tmp_path, pages_per_file=2)

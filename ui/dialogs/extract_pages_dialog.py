@@ -1,9 +1,18 @@
 """
 Ultra PDF Editor - Extract Pages Dialog
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QFileDialog, QMessageBox, QGroupBox, QRadioButton
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+    QFileDialog,
+    QMessageBox,
+    QGroupBox,
+    QRadioButton,
 )
 from PyQt6.QtCore import Qt
 from typing import List, Optional
@@ -55,8 +64,7 @@ class ExtractPagesDialog(QDialog):
 
         # Help text
         help_label = QLabel(
-            "Enter page numbers separated by commas.\n"
-            "Use hyphen for ranges (e.g., 1-5, 8, 10-12)"
+            "Enter page numbers separated by commas.\nUse hyphen for ranges (e.g., 1-5, 8, 10-12)"
         )
         help_label.setStyleSheet("color: #666; font-size: 11px;")
         selection_layout.addWidget(help_label)
@@ -105,14 +113,11 @@ class ExtractPagesDialog(QDialog):
     def _browse_output(self):
         """Browse for output file"""
         filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Extracted Pages",
-            "extracted_pages.pdf",
-            "PDF Files (*.pdf)"
+            self, "Save Extracted Pages", "extracted_pages.pdf", "PDF Files (*.pdf)"
         )
         if filepath:
-            if not filepath.lower().endswith('.pdf'):
-                filepath += '.pdf'
+            if not filepath.lower().endswith(".pdf"):
+                filepath += ".pdf"
             self._output_input.setText(filepath)
             self._output_path = filepath
 
@@ -124,12 +129,12 @@ class ExtractPagesDialog(QDialog):
         if not range_str:
             return pages
 
-        parts = range_str.split(',')
+        parts = range_str.split(",")
         for part in parts:
             part = part.strip()
-            if '-' in part:
+            if "-" in part:
                 # Range like "1-5"
-                match = re.match(r'(\d+)\s*-\s*(\d+)', part)
+                match = re.match(r"(\d+)\s*-\s*(\d+)", part)
                 if match:
                     start = int(match.group(1)) - 1  # Convert to 0-indexed
                     end = int(match.group(2)) - 1
@@ -151,11 +156,7 @@ class ExtractPagesDialog(QDialog):
         """Validate and accept"""
         # Check output path
         if not self._output_path:
-            QMessageBox.warning(
-                self,
-                "No Output File",
-                "Please select an output file location."
-            )
+            QMessageBox.warning(self, "No Output File", "Please select an output file location.")
             return
 
         # Get selected pages
@@ -167,11 +168,7 @@ class ExtractPagesDialog(QDialog):
             self._selected_pages = self._parse_page_range(self._range_input.text())
 
         if not self._selected_pages:
-            QMessageBox.warning(
-                self,
-                "Invalid Page Range",
-                "Please enter a valid page range."
-            )
+            QMessageBox.warning(self, "Invalid Page Range", "Please enter a valid page range.")
             return
 
         self.accept()

@@ -1,4 +1,5 @@
 """Find-as-you-type must not search the whole document on every keystroke."""
+
 import fitz
 import pytest
 
@@ -7,7 +8,10 @@ pytest.importorskip("pytestqt")
 
 from core.pdf_document import PDFDocument  # noqa: E402
 from ui.dialogs.find_dialog import (  # noqa: E402
-    _LIVE_SEARCH_DELAY_MS, FindDialog, FindReplaceDialog)
+    _LIVE_SEARCH_DELAY_MS,
+    FindDialog,
+    FindReplaceDialog,
+)
 
 
 @pytest.fixture(params=[FindDialog, FindReplaceDialog])

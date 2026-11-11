@@ -1,4 +1,5 @@
 """Long document operations run off the GUI thread and still produce results."""
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -8,12 +9,14 @@ pytest.importorskip("pytestqt")
 @pytest.fixture
 def main_window(qtbot, tmp_path, monkeypatch):
     from config import config
+
     autosave = tmp_path / "autosave"
     autosave.mkdir()
     monkeypatch.setattr(config, "AUTOSAVE_DIR", autosave)
     monkeypatch.setattr(config, "SETTINGS_PATH", tmp_path / "settings.json")
 
     from ui.main_window import MainWindow
+
     window = MainWindow()
     window._settings.confirm_close_unsaved = False
     window._autosave_timer.stop()
@@ -38,11 +41,12 @@ def _assert_view_matches_document(window):
         assert abs(viewer._page_widgets[i].height() - h) <= 1
 
 
-def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
-                                                       qtbot, monkeypatch):
+def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf, qtbot, monkeypatch):
     import ui.handlers.page_handler as ph
-    monkeypatch.setattr(ph.QMessageBox, "question",
-                        staticmethod(lambda *a, **k: ph.QMessageBox.StandardButton.Yes))
+
+    monkeypatch.setattr(
+        ph.QMessageBox, "question", staticmethod(lambda *a, **k: ph.QMessageBox.StandardButton.Yes)
+    )
     pdf = make_pdf("doc.pdf", pages=4)
     main_window._open_file(str(pdf))
     win = main_window
@@ -52,7 +56,7 @@ def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
     win._load_document_to_viewer = lambda *a, **k: (reloads.append(1), real_load(*a, **k))
 
     win._viewer._current_page = 1
-    win._insert_blank_page()             # new page at index 2
+    win._insert_blank_page()  # new page at index 2
     _assert_view_matches_document(win)
     win._delete_page(0)
     _assert_view_matches_document(win)
@@ -73,6 +77,7 @@ def test_page_structure_edits_update_the_view_in_place(main_window, make_pdf,
 def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, make_pdf):
     import fitz
     from utils.history import DocumentSnapshotCommand, PageSnapshotCommand
+
     win = main_window
     pdf = make_pdf("doc.pdf", pages=4)
     win._open_file(str(pdf))
@@ -82,8 +87,8 @@ def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, ma
     before = win._document.doc[2].get_pixmap(dpi=20).samples
 
     cmd = win._run_snapshot_op(
-        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 40, 400, 300)),
-        pages=[2])
+        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 40, 400, 300)), pages=[2]
+    )
     assert isinstance(cmd, PageSnapshotCommand)
     assert reloads == [], "a one-page edit reloaded the view"
     _assert_view_matches_document(win)
@@ -94,23 +99,24 @@ def test_single_page_edit_stores_only_that_page_and_skips_reload(main_window, ma
     _assert_view_matches_document(win)
 
     # Where a page swap is unsafe (links), it falls back to a full snapshot.
-    win._document.doc[0].insert_link({"kind": fitz.LINK_GOTO, "page": 2,
-                                      "from": fitz.Rect(10, 10, 60, 30)})
+    win._document.doc[0].insert_link(
+        {"kind": fitz.LINK_GOTO, "page": 2, "from": fitz.Rect(10, 10, 60, 30)}
+    )
     cmd = win._run_snapshot_op(
-        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 400, 400, 600)),
-        pages=[2])
+        "Erase area", lambda: win._document.redact_area(2, fitz.Rect(40, 400, 400, 600)), pages=[2]
+    )
     assert isinstance(cmd, DocumentSnapshotCommand)
 
 
 def test_annotation_edit_refreshes_only_that_thumbnail(main_window, make_pdf, qtbot):
     from PyQt6.QtCore import QRectF
+
     win = main_window
     win.resize(1200, 900)
     win.show()
     win._open_file(str(make_pdf("doc.pdf", pages=4)))
     panel = win._sidebar.thumbnail_panel
-    qtbot.waitUntil(lambda: all(t._pixmap is not None for t in panel._thumbnails),
-                    timeout=5000)
+    qtbot.waitUntil(lambda: all(t._pixmap is not None for t in panel._thumbnails), timeout=5000)
 
     def stale():
         return [i for i, t in enumerate(panel._thumbnails) if t._pixmap is None]
@@ -135,14 +141,14 @@ def test_autosave_skips_when_nothing_changed(main_window, make_pdf, qtbot):
     win._autosave()
     _wait_idle(qtbot, win)
     assert calls == [1]
-    win._autosave()           # no edit since: no new copy
+    win._autosave()  # no edit since: no new copy
     _wait_idle(qtbot, win)
     assert calls == [1]
-    win._rotate_page(1, 90)   # an edit: copy again
+    win._rotate_page(1, 90)  # an edit: copy again
     win._autosave()
     _wait_idle(qtbot, win)
     assert calls == [1, 1]
-    win._save_document()      # saved, then edited again: copy again
+    win._save_document()  # saved, then edited again: copy again
     win._rotate_page(2, 90)
     win._autosave()
     _wait_idle(qtbot, win)
@@ -150,7 +156,8 @@ def test_autosave_skips_when_nothing_changed(main_window, make_pdf, qtbot):
 
 
 def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
-        main_window, tmp_path, qtbot, monkeypatch):
+    main_window, tmp_path, qtbot, monkeypatch
+):
     pytesseract = pytest.importorskip("pytesseract")
     pytest.importorskip("PIL")
     import fitz
@@ -171,13 +178,13 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
 
     def fake_ocr(img, output_type=None, **_k):
         seen.append(img.size)
-        return {"text": ["scanned"], "left": [144], "top": [144],
-                "height": [30], "width": [100]}
+        return {"text": ["scanned"], "left": [144], "top": [144], "height": [30], "width": [100]}
 
     monkeypatch.setattr(utils.tesseract, "configure_tesseract", lambda: True)
     monkeypatch.setattr(pytesseract, "image_to_data", fake_ocr)
-    monkeypatch.setattr(th.QMessageBox, "question",
-                        staticmethod(lambda *a, **k: th.QMessageBox.StandardButton.Yes))
+    monkeypatch.setattr(
+        th.QMessageBox, "question", staticmethod(lambda *a, **k: th.QMessageBox.StandardButton.Yes)
+    )
 
     win = main_window
     win._open_file(str(path))
@@ -191,6 +198,7 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
 
 def test_clean_pdf_scans_in_the_background(main_window, tmp_path, qtbot):
     import fitz
+
     path = tmp_path / "footers.pdf"
     d = fitz.open()
     for i in range(6):
@@ -214,13 +222,11 @@ def test_clean_pdf_scans_in_the_background(main_window, tmp_path, qtbot):
 
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
-    monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS",
-                       "1" if request.param == "thread" else "0")
+    monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS", "1" if request.param == "thread" else "0")
     return request.param
 
 
-def test_save_keeps_the_view_and_can_overwrite_repeatedly(render_mode, main_window,
-                                                         make_pdf):
+def test_save_keeps_the_view_and_can_overwrite_repeatedly(render_mode, main_window, make_pdf):
     win = main_window
     pdf = make_pdf("doc.pdf", pages=3)
     win._open_file(str(pdf))
@@ -240,6 +246,7 @@ def test_save_keeps_the_view_and_can_overwrite_repeatedly(render_mode, main_wind
 
     assert serialized == [], "save re-serialized the document for the render copy"
     import fitz
+
     on_disk = fitz.open(str(win._current_file))
     try:
         assert on_disk[0].rotation == 270
@@ -252,23 +259,28 @@ def _wait_idle(qtbot, window, timeout=15000):
 
 
 @pytest.mark.parametrize("fmt, ext", [(0, "png"), (1, "jpg")])
-def test_export_as_images_in_background(main_window, make_pdf, tmp_path,
-                                        qtbot, monkeypatch, fmt, ext):
+def test_export_as_images_in_background(
+    main_window, make_pdf, tmp_path, qtbot, monkeypatch, fmt, ext
+):
     import ui.handlers.file_handler as fh
+
     pdf = make_pdf("doc.pdf", pages=3)
     main_window._open_file(str(pdf))
     out = tmp_path / "images"
     out.mkdir()
-    monkeypatch.setattr(fh.QFileDialog, "getExistingDirectory",
-                        staticmethod(lambda *a, **k: str(out)))
-    monkeypatch.setattr(fh.QInputDialog, "getItem",
-                        staticmethod(lambda _p, _t, _l, items, *a, **k: (items[fmt], True)))
+    monkeypatch.setattr(
+        fh.QFileDialog, "getExistingDirectory", staticmethod(lambda *a, **k: str(out))
+    )
+    monkeypatch.setattr(
+        fh.QInputDialog,
+        "getItem",
+        staticmethod(lambda _p, _t, _l, items, *a, **k: (items[fmt], True)),
+    )
 
     main_window._export_as_images()
     assert main_window._active_workers, "export ran on the GUI thread"
     _wait_idle(qtbot, main_window)
-    assert sorted(p.name for p in out.iterdir()) == [
-        f"page_{i:04d}.{ext}" for i in (1, 2, 3)]
+    assert sorted(p.name for p in out.iterdir()) == [f"page_{i:04d}.{ext}" for i in (1, 2, 3)]
 
 
 def test_replace_all_in_background_is_undoable(main_window, make_pdf, qtbot):

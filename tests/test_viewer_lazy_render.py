@@ -7,6 +7,7 @@ sized its container and run the layout — a turn of the event loop *after*
 position and the whole document looked visible. Opening an 84-page scan queued
 all 84 pages and froze the window for 7-11s behind a screen of blank pages.
 """
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -46,14 +47,16 @@ def test_open_does_not_queue_every_page(qtbot, many_pages):
     requested = []
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0, clip=None: requested.append(page_num))
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: (
+            requested.append(page_num)
+        )
         v._request_visible_pages()
 
         assert requested, "no page was requested — the view would stay blank"
         assert len(requested) < len(v._page_widgets), (
             f"requested {len(requested)} of {len(v._page_widgets)} pages; "
-            "visibility fell back to the whole document")
+            "visibility fell back to the whole document"
+        )
         assert len(requested) <= _MAX_QUEUED_PAGE_RENDERS
         # A page taller than the viewport means only the first page(s) show.
         assert 0 in requested
@@ -117,15 +120,17 @@ def test_request_is_capped_when_geometry_is_degenerate(qtbot, many_pages):
     requested = []
     v, model = _viewer(qtbot, many_pages)
     try:
-        v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0, clip=None: requested.append(page_num))
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: (
+            requested.append(page_num)
+        )
         # Zero-height pages make every page land at the same y — the degenerate
         # case the old geometry-based test hit on every open.
         v._page_pixel_size = lambda i: (100, 0)
         v._request_visible_pages()
 
         assert len(requested) <= _MAX_QUEUED_PAGE_RENDERS, (
-            f"queued {len(requested)} pages with degenerate geometry")
+            f"queued {len(requested)} pages with degenerate geometry"
+        )
     finally:
         v._render_worker.stop()
         model.close()
@@ -164,11 +169,12 @@ def test_zoom_burst_renders_only_the_final_zoom(qtbot, many_pages):
     v, model = _viewer(qtbot, many_pages)
     try:
         qtbot.wait(100)  # let the open-time render pass run
-        v._render_worker.request_page = (
-            lambda page_num, zoom, priority=0, clip=None: requested.append(round(zoom, 4)))
+        v._render_worker.request_page = lambda page_num, zoom, priority=0, clip=None: (
+            requested.append(round(zoom, 4))
+        )
         for _ in range(5):
             v.zoom_in()
-            qtbot.wait(40)          # notches closer together than the delay
+            qtbot.wait(40)  # notches closer together than the delay
         assert requested == [], f"rendered mid-burst at zooms {set(requested)}"
         qtbot.wait(_ZOOM_RENDER_DELAY_MS + 150)
         assert requested and set(requested) == {round(v._zoom, 4)}
@@ -180,6 +186,7 @@ def test_zoom_burst_renders_only_the_final_zoom(qtbot, many_pages):
 def test_very_high_zoom_renders_only_the_visible_part(qtbot, tmp_path):
     """At 800% a page is ~139 M pixels; only what is on screen gets rendered."""
     from ui.pdf_viewer import _MAX_RENDER_PIXELS, _ZOOM_RENDER_DELAY_MS
+
     path = tmp_path / "three.pdf"
     d = fitz.open()
     for i in range(3):
@@ -204,8 +211,7 @@ def test_very_high_zoom_renders_only_the_visible_part(qtbot, tmp_path):
         bar = v.verticalScrollBar()
         qtbot.waitUntil(lambda: bar.maximum() > full_h, timeout=5000)
         bar.setValue(full_h // 2)
-        qtbot.waitUntil(lambda: widget.partial_covers(v._render_clip_for(0)[1]),
-                        timeout=10000)
+        qtbot.waitUntil(lambda: widget.partial_covers(v._render_clip_for(0)[1]), timeout=10000)
         assert widget._partial[1][1] > 0, "still showing the top of the page"
         assert not v._page_cache, "partial renders must not be cached"
     finally:
@@ -235,6 +241,7 @@ def test_pages_never_overlap_even_past_qt_layout_limits(qtbot, many_pages):
 
 def test_two_page_and_single_page_modes_place_pages(qtbot, many_pages):
     from ui.pdf_viewer import ViewMode
+
     v, model = _viewer(qtbot, many_pages)
     try:
         v.set_view_mode(ViewMode.TWO_PAGE)
@@ -254,6 +261,7 @@ def test_two_page_and_single_page_modes_place_pages(qtbot, many_pages):
 
 def test_zoom_keeps_old_render_visible_until_the_new_one_lands(qtbot, many_pages):
     from ui.pdf_viewer import _ZOOM_RENDER_DELAY_MS
+
     v, model = _viewer(qtbot, many_pages)
     try:
         v.show()
@@ -277,14 +285,17 @@ def test_zoom_keeps_old_render_visible_until_the_new_one_lands(qtbot, many_pages
 def test_find_next_updates_only_the_two_affected_pages(qtbot, many_pages):
     v, model = _viewer(qtbot, many_pages)
     try:
-        results = [{"page": p, "rects": [(72, 90 + k, 120, 100 + k) for k in range(50)]}
-                   for p in range(60)]
+        results = [
+            {"page": p, "rects": [(72, 90 + k, 120, 100 + k) for k in range(50)]} for p in range(60)
+        ]
         v.set_search_results(results)
         calls = []
         for w in v._page_widgets:
             real = w.set_search_rects
-            w.set_search_rects = (lambda rects, cur=None, _w=w, _r=real:
-                                  (calls.append(_w.page_num), _r(rects, cur)))
+            w.set_search_rects = lambda rects, cur=None, _w=w, _r=real: (
+                calls.append(_w.page_num),
+                _r(rects, cur),
+            )
         v.scroll_to_search_result(3, results[3]["rects"][7])
         v.scroll_to_search_result(9, results[9]["rects"][0])
         assert calls == [3, 3, 9] or sorted(calls) == [3, 3, 9]
@@ -298,6 +309,7 @@ def test_find_next_updates_only_the_two_affected_pages(qtbot, many_pages):
 
 def test_thumbnails_render_a_couple_per_pass(qtbot, many_pages):
     from ui.sidebar import _MAX_THUMBNAILS_PER_PASS, ThumbnailPanel
+
     doc = fitz.open(str(many_pages))
     panel = ThumbnailPanel()
     qtbot.addWidget(panel)
@@ -321,8 +333,9 @@ def test_thumbnails_render_a_couple_per_pass(qtbot, many_pages):
         panel._render_timer.timeout.disconnect()
         panel._render_timer.timeout.connect(counting_pass)
         panel.set_document(doc)
-        qtbot.waitUntil(lambda: sum(t._pixmap is not None for t in panel._thumbnails) >= 6,
-                        timeout=5000)
+        qtbot.waitUntil(
+            lambda: sum(t._pixmap is not None for t in panel._thumbnails) >= 6, timeout=5000
+        )
         assert max(per_pass) == _MAX_THUMBNAILS_PER_PASS <= 2
     finally:
         panel._render_timer.stop()
@@ -362,6 +375,7 @@ def test_high_dpi_screens_get_full_resolution_renders(qtbot, many_pages):
 
 def test_thumbnails_are_sharp_on_high_dpi(qtbot, many_pages):
     from ui.sidebar import ThumbnailPanel
+
     doc = fitz.open(str(many_pages))
     panel = ThumbnailPanel()
     qtbot.addWidget(panel)
@@ -439,8 +453,7 @@ def test_render_source_is_used_instead_of_serializing(qtbot, many_pages, tmp_pat
 def test_locked_render_source_falls_back_to_serializing(qtbot, many_pages, tmp_path):
     locked = tmp_path / "locked.pdf"
     src = fitz.open(str(many_pages))
-    src.save(str(locked), encryption=fitz.PDF_ENCRYPT_AES_256,
-             user_pw="u", owner_pw="o")
+    src.save(str(locked), encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o")
     src.close()
     model = PDFDocument()
     model.open(locked, "u")
@@ -465,7 +478,7 @@ def test_reload_after_edit_reuses_page_widgets(qtbot, many_pages):
         v._current_page = 12
 
         model.doc[12].draw_rect(fitz.Rect(50, 50, 200, 200), color=(1, 0, 0))
-        model.restore(model.snapshot())          # swaps the document object
+        model.restore(model.snapshot())  # swaps the document object
         v.detach_document()
         v.set_document(model.doc, str(many_pages), reuse_layout=True)
         assert v._page_widgets == widgets, "page widgets were rebuilt"
@@ -530,7 +543,7 @@ def test_page_change_restyles_only_the_changed_thumbnails(qtbot, many_pages):
         panel.set_current_page(0)
         calls = []
         for t in panel._thumbnails:
-            t._update_style = (lambda n=t.page_num: calls.append(n))
+            t._update_style = lambda n=t.page_num: calls.append(n)
         panel.set_current_page(5)
         assert sorted(calls) == [0, 5], f"restyled {len(calls)} thumbnails"
     finally:

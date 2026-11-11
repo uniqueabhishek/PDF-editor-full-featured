@@ -5,9 +5,18 @@ Collects the ordered file list and merge options. The actual merge is performed
 by the caller via ``PDFDocument.merge_pdfs()`` so the tested core logic stays the
 single implementation.
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
-    QListWidgetItem, QFileDialog, QLabel, QGroupBox, QCheckBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QListWidget,
+    QListWidgetItem,
+    QFileDialog,
+    QLabel,
+    QGroupBox,
+    QCheckBox,
 )
 from PyQt6.QtCore import Qt
 from pathlib import Path
@@ -101,7 +110,8 @@ class MergeDialog(QDialog):
 
     def _add_files(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Select PDF Files to Merge", "", "PDF Files (*.pdf)")
+            self, "Select PDF Files to Merge", "", "PDF Files (*.pdf)"
+        )
         for filepath in files:
             if filepath not in self._files:
                 self._files.append(filepath)
@@ -161,7 +171,8 @@ class MergeDialog(QDialog):
         if len(files) < 2:
             return
         output_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Merged PDF", "merged.pdf", "PDF Files (*.pdf)")
+            self, "Save Merged PDF", "merged.pdf", "PDF Files (*.pdf)"
+        )
         if not output_path:
             return
         self._files = files

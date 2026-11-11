@@ -1,6 +1,7 @@
 """
 Ultra PDF Editor - Configuration
 """
+
 import os
 import json
 from pathlib import Path
@@ -38,10 +39,16 @@ class AppConfig:
 
     # Paths
     CONFIG_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor")
-    RECENT_FILES_PATH: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "recent_files.json")
-    SETTINGS_PATH: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "settings.json")
+    RECENT_FILES_PATH: Path = field(
+        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "recent_files.json"
+    )
+    SETTINGS_PATH: Path = field(
+        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "settings.json"
+    )
     TEMP_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "temp")
-    AUTOSAVE_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "autosave")
+    AUTOSAVE_DIR: Path = field(
+        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "autosave"
+    )
     STAMPS_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "stamps")
 
     # Window Settings
@@ -78,7 +85,9 @@ class AppConfig:
 
     # Rendering Settings
     RENDER_DPI: int = field(default_factory=lambda: int(os.environ.get("RENDER_DPI", 150)))
-    HIGH_QUALITY_DPI: int = field(default_factory=lambda: int(os.environ.get("HIGH_QUALITY_DPI", 300)))
+    HIGH_QUALITY_DPI: int = field(
+        default_factory=lambda: int(os.environ.get("HIGH_QUALITY_DPI", 300))
+    )
 
     # OCR Settings
     OCR_LANGUAGE: str = field(default_factory=lambda: os.environ.get("OCR_LANGUAGE", "eng"))
@@ -106,35 +115,37 @@ class AppConfig:
     DEFAULT_IMAGE_DPI: int = 150
 
     # Keyboard Shortcuts
-    SHORTCUTS: dict = field(default_factory=lambda: {
-        "open": "Ctrl+O",
-        "save": "Ctrl+S",
-        "save_as": "Ctrl+Shift+S",
-        "close": "Ctrl+W",
-        "print": "Ctrl+P",
-        "undo": "Ctrl+Z",
-        "redo": "Ctrl+Y",
-        "cut": "Ctrl+X",
-        "copy": "Ctrl+C",
-        "paste": "Ctrl+V",
-        "delete": "Delete",
-        "select_all": "Ctrl+A",
-        "find": "Ctrl+F",
-        "find_replace": "Ctrl+H",
-        "zoom_in": "Ctrl++",
-        "zoom_out": "Ctrl+-",
-        "zoom_fit": "Ctrl+0",
-        "fullscreen": "F11",
-        "next_page": "Page_Down",
-        "prev_page": "Page_Up",
-        "first_page": "Ctrl+Home",
-        "last_page": "Ctrl+End",
-        "rotate_cw": "Ctrl+R",
-        "rotate_ccw": "Ctrl+Shift+R",
-        "merge": "Ctrl+M",
-        "split": "Ctrl+Shift+M",
-        "properties": "Ctrl+D",
-    })
+    SHORTCUTS: dict = field(
+        default_factory=lambda: {
+            "open": "Ctrl+O",
+            "save": "Ctrl+S",
+            "save_as": "Ctrl+Shift+S",
+            "close": "Ctrl+W",
+            "print": "Ctrl+P",
+            "undo": "Ctrl+Z",
+            "redo": "Ctrl+Y",
+            "cut": "Ctrl+X",
+            "copy": "Ctrl+C",
+            "paste": "Ctrl+V",
+            "delete": "Delete",
+            "select_all": "Ctrl+A",
+            "find": "Ctrl+F",
+            "find_replace": "Ctrl+H",
+            "zoom_in": "Ctrl++",
+            "zoom_out": "Ctrl+-",
+            "zoom_fit": "Ctrl+0",
+            "fullscreen": "F11",
+            "next_page": "Page_Down",
+            "prev_page": "Page_Up",
+            "first_page": "Ctrl+Home",
+            "last_page": "Ctrl+End",
+            "rotate_cw": "Ctrl+R",
+            "rotate_ccw": "Ctrl+Shift+R",
+            "merge": "Ctrl+M",
+            "split": "Ctrl+Shift+M",
+            "properties": "Ctrl+D",
+        }
+    )
 
     def ensure_dirs(self) -> None:
         """Create the application's working directories.
@@ -143,8 +154,7 @@ class AppConfig:
         so that merely importing this module has no filesystem side effects —
         important for tests and tooling that import ``config``.
         """
-        for directory in (self.CONFIG_DIR, self.TEMP_DIR,
-                          self.AUTOSAVE_DIR, self.STAMPS_DIR):
+        for directory in (self.CONFIG_DIR, self.TEMP_DIR, self.AUTOSAVE_DIR, self.STAMPS_DIR):
             directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -200,18 +210,19 @@ class UserSettings:
     page_cache_size: int = 10  # Number of rendered pages to cache
 
     @classmethod
-    def load(cls, path: Path) -> 'UserSettings':
+    def load(cls, path: Path) -> "UserSettings":
         """Load settings from JSON file"""
         if path.exists():
             try:
                 import base64
-                with open(path, 'r', encoding='utf-8') as f:
+
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 # Convert base64 strings back to bytes for window geometry/state
-                if data.get('window_geometry') and isinstance(data['window_geometry'], str):
-                    data['window_geometry'] = base64.b64decode(data['window_geometry'])
-                if data.get('window_state') and isinstance(data['window_state'], str):
-                    data['window_state'] = base64.b64decode(data['window_state'])
+                if data.get("window_geometry") and isinstance(data["window_geometry"], str):
+                    data["window_geometry"] = base64.b64decode(data["window_geometry"])
+                if data.get("window_state") and isinstance(data["window_state"], str):
+                    data["window_state"] = base64.b64decode(data["window_state"])
                 return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
@@ -220,14 +231,15 @@ class UserSettings:
     def save(self, path: Path):
         """Save settings to JSON file"""
         import base64
+
         path.parent.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
         # Convert bytes to base64 for JSON serialization
-        if data.get('window_geometry') and isinstance(data['window_geometry'], bytes):
-            data['window_geometry'] = base64.b64encode(data['window_geometry']).decode('utf-8')
-        if data.get('window_state') and isinstance(data['window_state'], bytes):
-            data['window_state'] = base64.b64encode(data['window_state']).decode('utf-8')
-        with open(path, 'w', encoding='utf-8') as f:
+        if data.get("window_geometry") and isinstance(data["window_geometry"], bytes):
+            data["window_geometry"] = base64.b64encode(data["window_geometry"]).decode("utf-8")
+        if data.get("window_state") and isinstance(data["window_state"], bytes):
+            data["window_state"] = base64.b64encode(data["window_state"]).decode("utf-8")
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     def add_recent_file(self, filepath: str, max_files: int = 20):
@@ -244,15 +256,26 @@ class UserSettings:
 
 
 # File type definitions
-SUPPORTED_PDF_EXTENSIONS = ['.pdf']
+SUPPORTED_PDF_EXTENSIONS = [".pdf"]
 
-SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.tif', '.webp']
+SUPPORTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".tif", ".webp"]
 
-SUPPORTED_DOCUMENT_EXTENSIONS = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.html', '.htm', '.txt', '.rtf']
+SUPPORTED_DOCUMENT_EXTENSIONS = [
+    ".docx",
+    ".doc",
+    ".xlsx",
+    ".xls",
+    ".pptx",
+    ".ppt",
+    ".html",
+    ".htm",
+    ".txt",
+    ".rtf",
+]
 
-EXPORT_IMAGE_FORMATS = ['PNG', 'JPEG', 'TIFF', 'BMP', 'GIF', 'WEBP']
+EXPORT_IMAGE_FORMATS = ["PNG", "JPEG", "TIFF", "BMP", "GIF", "WEBP"]
 
-EXPORT_DOCUMENT_FORMATS = ['DOCX', 'XLSX', 'PPTX', 'HTML', 'TXT']
+EXPORT_DOCUMENT_FORMATS = ["DOCX", "XLSX", "PPTX", "HTML", "TXT"]
 
 # Stamp presets
 DEFAULT_STAMPS = [

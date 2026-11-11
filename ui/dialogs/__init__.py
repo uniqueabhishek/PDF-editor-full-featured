@@ -12,15 +12,15 @@ from .batch_dialog import BatchDialog
 from .clean_pdf_dialog import CleanPDFDialog
 
 __all__ = [
-    'MergeDialog',
-    'SplitDialog',
-    'SettingsDialog',
-    'FindDialog',
-    'FindReplaceDialog',
-    'ExtractPagesDialog',
-    'CropDialog',
-    'HeaderFooterDialog',
-    'RemoveHeaderFooterDialog',
-    'BatchDialog',
-    'CleanPDFDialog',
+    "MergeDialog",
+    "SplitDialog",
+    "SettingsDialog",
+    "FindDialog",
+    "FindReplaceDialog",
+    "ExtractPagesDialog",
+    "CropDialog",
+    "HeaderFooterDialog",
+    "RemoveHeaderFooterDialog",
+    "BatchDialog",
+    "CleanPDFDialog",
 ]

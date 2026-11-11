@@ -5,10 +5,21 @@ Collects the split mode and options. The actual split is performed by the caller
 via the ``PDFDocument.split_by_*`` methods, which operate on the in-memory
 document (so unsaved edits are honoured) and are covered by tests.
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QMessageBox, QGroupBox, QRadioButton, QSpinBox, QLineEdit,
-    QFileDialog, QButtonGroup, QFormLayout
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QMessageBox,
+    QGroupBox,
+    QRadioButton,
+    QSpinBox,
+    QLineEdit,
+    QFileDialog,
+    QButtonGroup,
+    QFormLayout,
 )
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -35,7 +46,9 @@ class SplitDialog(QDialog):
         # Source info
         info_group = QGroupBox("Source Document")
         info_layout = QFormLayout(info_group)
-        self._file_label = QLabel(Path(self._filepath).name if self._filepath else "Current document")
+        self._file_label = QLabel(
+            Path(self._filepath).name if self._filepath else "Current document"
+        )
         info_layout.addRow("File:", self._file_label)
         self._pages_label = QLabel(str(self._page_count))
         info_layout.addRow("Pages:", self._pages_label)
@@ -110,8 +123,10 @@ class SplitDialog(QDialog):
 
     def _browse_output(self):
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory",
-            str(Path(self._filepath).parent) if self._filepath else "")
+            self,
+            "Select Output Directory",
+            str(Path(self._filepath).parent) if self._filepath else "",
+        )
         if directory:
             self._output_dir.setText(directory)
 
@@ -122,11 +137,11 @@ class SplitDialog(QDialog):
     def _parse_ranges(self, text: str) -> List[Tuple[int, int]]:
         """Parse '1-5, 6-10' into validated 1-indexed (start, end) tuples."""
         ranges: List[Tuple[int, int]] = []
-        for part in text.split(','):
+        for part in text.split(","):
             part = part.strip()
-            if '-' in part:
+            if "-" in part:
                 try:
-                    start_s, end_s = part.split('-')
+                    start_s, end_s = part.split("-")
                     start, end = int(start_s.strip()), int(end_s.strip())
                     if 1 <= start <= end <= self._page_count:
                         ranges.append((start, end))

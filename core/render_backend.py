@@ -22,6 +22,7 @@ Both share one interface (all calls are serialized by the caller's lock):
 
 This module imports only fitz so the render process starts quickly.
 """
+
 import logging
 import multiprocessing
 from typing import List, Optional, Tuple, Union
@@ -45,16 +46,14 @@ def _release_cache() -> None:
 
 
 def _open_source(source: Source) -> Optional[fitz.Document]:
-    doc = fitz.open(source) if isinstance(source, str) else fitz.open(
-        stream=source, filetype="pdf")
+    doc = fitz.open(source) if isinstance(source, str) else fitz.open(stream=source, filetype="pdf")
     if doc.needs_pass:
         doc.close()
         return None
     return doc
 
 
-def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document,
-                 pages: List[int]) -> None:
+def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document, pages: List[int]) -> None:
     """Replace ``pages`` of ``doc`` with the pages of ``pages_pdf``, in order."""
     for idx, p in enumerate(pages):
         # A fresh graft map per insert, so objects copied by an earlier patch
@@ -65,8 +64,9 @@ def _apply_patch(doc: fitz.Document, pages_pdf: fitz.Document,
         doc.insert_pdf(pages_pdf, from_page=idx, to_page=idx, start_at=p)
 
 
-def render_page(doc: fitz.Document, page_num: int, scale: float, rotation: int,
-                clip: Optional[Clip] = None) -> Optional[Rendered]:
+def render_page(
+    doc: fitz.Document, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
+) -> Optional[Rendered]:
     """Render a page, or only the part ``clip`` covers.
 
     ``clip`` is ``(x0, y0, x1, y1)`` in the coordinates of the full rendered
@@ -86,8 +86,7 @@ def render_page(doc: fitz.Document, page_num: int, scale: float, rotation: int,
     origin = (page.rect * matrix).irect
     device = fitz.Rect(clip) + (origin.x0, origin.y0, origin.x0, origin.y0)
     pix = page.get_pixmap(matrix=matrix, clip=device * ~matrix, alpha=False)
-    return (pix.width, pix.height, pix.stride, pix.samples,
-            pix.x - origin.x0, pix.y - origin.y0)
+    return (pix.width, pix.height, pix.stride, pix.samples, pix.x - origin.x0, pix.y - origin.y0)
 
 
 class InProcessRenderer:
@@ -146,8 +145,9 @@ class InProcessRenderer:
         doc.insert_pdf(src, from_page=index, to_page=index + count - 1, start_at=index)
         return len(doc) == len(src)
 
-    def render(self, page_num: int, scale: float, rotation: int,
-               clip: Optional[Clip] = None) -> Optional[Rendered]:
+    def render(
+        self, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
+    ) -> Optional[Rendered]:
         if self._doc is None:
             return None
         return render_page(self._doc, page_num, scale, rotation, clip)
@@ -220,8 +220,7 @@ def serve(conn) -> None:
                     pages_pdf.close()
                 conn.send(("ok", len(doc) == expected_after))
             elif op == "render":
-                result = None if doc is None else render_page(
-                    doc, msg[1], msg[2], msg[3], msg[4])
+                result = None if doc is None else render_page(doc, msg[1], msg[2], msg[3], msg[4])
                 conn.send(("ok", result))
             elif op == "count":
                 conn.send(("ok", len(doc) if doc is not None else -1))
@@ -244,8 +243,7 @@ class ProcessRenderer:
     def __init__(self):
         ctx = multiprocessing.get_context("spawn")
         self._conn, child = ctx.Pipe()
-        self._proc = ctx.Process(target=serve, args=(child,), daemon=True,
-                                 name="ultra-pdf-render")
+        self._proc = ctx.Process(target=serve, args=(child,), daemon=True, name="ultra-pdf-render")
         self._proc.start()
         child.close()
 
@@ -303,8 +301,9 @@ class ProcessRenderer:
             pages_pdf.close()
         return bool(self._call("insert", index, len(src), data))
 
-    def render(self, page_num: int, scale: float, rotation: int,
-               clip: Optional[Clip] = None) -> Optional[Rendered]:
+    def render(
+        self, page_num: int, scale: float, rotation: int, clip: Optional[Clip] = None
+    ) -> Optional[Rendered]:
         return self._call("render", page_num, scale, rotation, clip)
 
     def page_count(self) -> int:

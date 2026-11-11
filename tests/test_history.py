@@ -1,11 +1,16 @@
 """Tests for the undo/redo history manager and commands (headless)."""
+
 import fitz
 import pytest
 
 from core.pdf_document import PDFDocument
 from utils.history import (
-    HistoryManager, PageAddCommand, PageDeleteCommand, PageRotateCommand,
-    AnnotationAddCommand, DocumentSnapshotCommand,
+    HistoryManager,
+    PageAddCommand,
+    PageDeleteCommand,
+    PageRotateCommand,
+    AnnotationAddCommand,
+    DocumentSnapshotCommand,
 )
 
 
@@ -88,8 +93,8 @@ def test_annotation_add_and_undo(doc):
     page = doc.get_page(0)
     before = len(list(page.annots()))
     cmd = AnnotationAddCommand(
-        doc, 0, "rectangle", (72, 92, 200, 150),
-        {"color": (1, 0, 0), "width": 2, "opacity": 1.0})
+        doc, 0, "rectangle", (72, 92, 200, 150), {"color": (1, 0, 0), "width": 2, "opacity": 1.0}
+    )
     assert hm.execute(cmd) is True
     assert len(list(doc.get_page(0).annots())) == before + 1
     assert hm.undo() is True
@@ -114,7 +119,7 @@ def test_snapshot_command_reports_memory(doc):
     cmd = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op")
     assert cmd.memory_bytes() == 0  # nothing captured until executed
     hm.execute(cmd)
-    assert cmd.memory_bytes() > 0   # before + after snapshots now held
+    assert cmd.memory_bytes() > 0  # before + after snapshots now held
 
 
 def test_history_memory_budget_evicts_oldest(doc):
@@ -122,8 +127,8 @@ def test_history_memory_budget_evicts_oldest(doc):
     hm = HistoryManager(max_size=100, max_bytes=1)
     for _ in range(3):
         assert hm.execute(
-            DocumentSnapshotCommand(
-                doc, lambda: doc.add_blank_page(), description="op"))
+            DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op")
+        )
     assert hm.get_undo_count() == 1
 
 
@@ -136,8 +141,7 @@ def test_back_to_back_snapshots_share_a_buffer(doc):
     second = DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="b")
     assert hm.execute(first) and hm.execute(second)
     assert second._before is first._after, "identical state stored twice"
-    assert hm._history_bytes() == sum(
-        len(b) for b in (first._before, first._after, second._after))
+    assert hm._history_bytes() == sum(len(b) for b in (first._before, first._after, second._after))
 
     assert hm.undo() and doc.page_count == start + 1
     assert hm.undo() and doc.page_count == start
@@ -160,11 +164,12 @@ def _pixels(document, page):
 
 def test_page_snapshot_undo_restores_only_that_page(doc):
     from utils.history import PageSnapshotCommand
+
     before = [_pixels(doc, i) for i in range(doc.page_count)]
     hm = HistoryManager()
     cmd = PageSnapshotCommand(
-        doc, [1], lambda: doc.redact_area(1, fitz.Rect(50, 50, 400, 300)),
-        description="erase")
+        doc, [1], lambda: doc.redact_area(1, fitz.Rect(50, 50, 400, 300)), description="erase"
+    )
     assert doc.can_snapshot_pages([1])
     assert hm.execute(cmd)
     assert _pixels(doc, 1) != before[1]
@@ -180,8 +185,7 @@ def test_page_snapshot_undo_restores_only_that_page(doc):
 
 def test_page_snapshot_refused_where_a_page_swap_would_break_links(doc):
     assert doc.can_snapshot_pages([0])
-    doc.doc[2].insert_link({"kind": fitz.LINK_GOTO, "page": 0,
-                            "from": fitz.Rect(10, 10, 60, 30)})
+    doc.doc[2].insert_link({"kind": fitz.LINK_GOTO, "page": 0, "from": fitz.Rect(10, 10, 60, 30)})
     assert not doc.can_snapshot_pages([0]), "link on another page targets page 0"
 
 
@@ -194,9 +198,7 @@ def test_page_snapshot_refused_for_bookmarked_pages(doc):
 def test_no_memory_budget_keeps_all_within_count(doc):
     hm = HistoryManager(max_size=100, max_bytes=None)
     for _ in range(3):
-        hm.execute(
-            DocumentSnapshotCommand(
-                doc, lambda: doc.add_blank_page(), description="op"))
+        hm.execute(DocumentSnapshotCommand(doc, lambda: doc.add_blank_page(), description="op"))
     assert hm.get_undo_count() == 3
 
 
@@ -215,6 +217,7 @@ def test_clear_history(doc):
 
 
 # ==================== Snapshot-based undo (destructive ops) ====================
+
 
 def test_document_snapshot_command_undo_redo(doc):
     """Destructive ops captured by snapshot must be reversible."""
@@ -246,8 +249,8 @@ def test_document_snapshot_command_rolls_back_on_failure(doc):
         raise RuntimeError("operation blew up midway")
 
     assert hm.execute(DocumentSnapshotCommand(doc, boom, description="boom")) is False
-    assert hm.can_undo() is False              # failed command not pushed
-    assert doc.get_page_text(0) == before      # rolled back to pre-op state
+    assert hm.can_undo() is False  # failed command not pushed
+    assert doc.get_page_text(0) == before  # rolled back to pre-op state
 
 
 def test_snapshot_command_sets_view_flags():

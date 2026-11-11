@@ -7,19 +7,19 @@ MainWindow; relies on ``self._document``, ``self._viewer``, ``self._sidebar``,
 ``self._update_title`` / ``self._update_actions_state`` /
 ``self._update_recent_files_menu`` / ``self._format_size``.
 """
+
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz
 from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtWidgets import (
-    QFileDialog, QMessageBox, QInputDialog, QProgressDialog, QApplication
-)
+from PyQt6.QtWidgets import QFileDialog, QMessageBox, QInputDialog, QProgressDialog, QApplication
 from PyQt6.QtGui import QImage, QPageLayout
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
+
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object
@@ -47,8 +47,7 @@ class FileHandlerMixin(_MixinBase):
             self._clear_autosave()  # discard any prior document's recovery copy
             self._update_title()
         except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to create new document:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed to create new document:\n{e}")
 
     def _open_document(self):
         """Open a document"""
@@ -59,7 +58,7 @@ class FileHandlerMixin(_MixinBase):
             self,
             "Open PDF",
             self._settings.last_opened_directory,
-            "PDF Files (*.pdf);;All Files (*)"
+            "PDF Files (*.pdf);;All Files (*)",
         )
 
         if filepath:
@@ -77,10 +76,12 @@ class FileHandlerMixin(_MixinBase):
             if not result and self._document.needs_password:
                 # Ask for password
                 from PyQt6.QtWidgets import QLineEdit
+
                 password, ok = QInputDialog.getText(
-                    self, "Password Required",
+                    self,
+                    "Password Required",
                     "This PDF is password protected. Enter password:",
-                    echo=QLineEdit.EchoMode.Password
+                    echo=QLineEdit.EchoMode.Password,
                 )
                 if ok:
                     self._document.open(path, password)
@@ -115,9 +116,12 @@ class FileHandlerMixin(_MixinBase):
         page and thumbnail widgets are kept when the page layout is unchanged.
         """
         if self._document.is_open and self._document.doc:
-            self._viewer.set_document(self._document.doc, str(
-                self._current_file) if self._current_file else "",
-                render_source=render_source, reuse_layout=reuse_layout)
+            self._viewer.set_document(
+                self._document.doc,
+                str(self._current_file) if self._current_file else "",
+                render_source=render_source,
+                reuse_layout=reuse_layout,
+            )
             self._sidebar.set_document(self._document.doc, reuse_layout=reuse_layout)
             self._main_toolbar.set_page_count(self._document.page_count)
             # Bind the Edit Text tool's paragraph lookup to the live document
@@ -154,11 +158,15 @@ class FileHandlerMixin(_MixinBase):
                     if self._document.is_open and self._document.doc:
                         path = str(self._current_file) if self._current_file else ""
                         self._viewer.set_document(
-                            self._document.doc, path,
+                            self._document.doc,
+                            path,
                             render_source=path if saved and path else None,
-                            reuse_layout=True, keep_images=saved)
+                            reuse_layout=True,
+                            keep_images=saved,
+                        )
                         self._sidebar.set_document(
-                            self._document.doc, reuse_layout=True, keep_images=saved)
+                            self._document.doc, reuse_layout=True, keep_images=saved
+                        )
                 self._is_modified = False
                 self._clear_autosave()  # saved — no unsaved changes to recover
                 self._update_title()
@@ -175,17 +183,14 @@ class FileHandlerMixin(_MixinBase):
             return
 
         filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save PDF As",
-            self._settings.last_saved_directory,
-            "PDF Files (*.pdf)"
+            self, "Save PDF As", self._settings.last_saved_directory, "PDF Files (*.pdf)"
         )
 
         if filepath:
             try:
                 path = Path(filepath)
-                if not path.suffix.lower() == '.pdf':
-                    path = path.with_suffix('.pdf')
+                if not path.suffix.lower() == ".pdf":
+                    path = path.with_suffix(".pdf")
 
                 self._settings.last_saved_directory = str(path.parent)
                 self._document.save(path)
@@ -224,9 +229,9 @@ class FileHandlerMixin(_MixinBase):
             self,
             "Unsaved Changes",
             "Do you want to save changes before closing?",
-            QMessageBox.StandardButton.Save |
-            QMessageBox.StandardButton.Discard |
-            QMessageBox.StandardButton.Cancel
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
         )
 
         if result == QMessageBox.StandardButton.Save:
@@ -246,8 +251,9 @@ class FileHandlerMixin(_MixinBase):
             from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
             from PyQt6.QtGui import QPainter
         except ImportError:
-            QMessageBox.warning(self, "Print Not Available",
-                                "Print support requires PyQt6 print modules.")
+            QMessageBox.warning(
+                self, "Print Not Available", "Print support requires PyQt6 print modules."
+            )
             return
 
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -258,8 +264,7 @@ class FileHandlerMixin(_MixinBase):
 
         if dialog.exec() == QPrintDialog.DialogCode.Accepted:
             # Create progress dialog
-            progress = QProgressDialog(
-                "Printing...", "Cancel", 0, self._document.page_count, self)
+            progress = QProgressDialog("Printing...", "Cancel", 0, self._document.page_count, self)
             progress.setWindowTitle("Printing")
             progress.setWindowModality(Qt.WindowModality.WindowModal)
             progress.show()
@@ -277,7 +282,8 @@ class FileHandlerMixin(_MixinBase):
 
                     progress.setValue(i)
                     progress.setLabelText(
-                        f"Printing page {i + 1} of {self._document.page_count}...")
+                        f"Printing page {i + 1} of {self._document.page_count}..."
+                    )
                     QApplication.processEvents()
 
                     if i > 0:
@@ -290,8 +296,9 @@ class FileHandlerMixin(_MixinBase):
                     dpi = min(printer.resolution(), _PRINT_MAX_DPI)
                     scale = dpi / 72.0
                     pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-                    img = QImage(pix.samples, pix.width, pix.height,
-                                 pix.stride, QImage.Format.Format_RGB888)
+                    img = QImage(
+                        pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888
+                    )
 
                     # Draw at the page's true size in printer pixels, shrunk to
                     # fit and centred; the printer scales the image itself, so
@@ -302,16 +309,14 @@ class FileHandlerMixin(_MixinBase):
                     h = page.rect.height * to_device
                     fit = min(1.0, page_rect.width() / w, page_rect.height() / h)
                     w, h = w * fit, h * fit
-                    target = QRectF((page_rect.width() - w) / 2,
-                                    (page_rect.height() - h) / 2, w, h)
+                    target = QRectF((page_rect.width() - w) / 2, (page_rect.height() - h) / 2, w, h)
                     painter.drawImage(target, img)
 
                 progress.setValue(self._document.page_count)
                 self._statusbar.showMessage("Document sent to printer", 3000)
 
             except Exception as e:
-                QMessageBox.critical(self, "Print Error",
-                                     f"Failed to print:\n{e}")
+                QMessageBox.critical(self, "Print Error", f"Failed to print:\n{e}")
             finally:
                 painter.end()
 
@@ -343,13 +348,13 @@ Encrypted: {metadata.encryption}
         if not self._document.is_open:
             return
 
-        output_dir = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory")
+        output_dir = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if not output_dir:
             return
         formats = ["PNG (lossless)", "JPEG (smaller, about 3x faster)"]
         choice, ok = QInputDialog.getItem(
-            self, "Export as Images", "Image format:", formats, 0, False)
+            self, "Export as Images", "Image format:", formats, 0, False
+        )
         if not ok:
             return
         ext = "jpg" if choice == formats[1] else "png"
@@ -409,7 +414,7 @@ Encrypted: {metadata.encryption}
                 self,
                 "Export Not Available",
                 "Word export requires the python-docx library.\n\n"
-                "Install with: pip install python-docx"
+                "Install with: pip install python-docx",
             )
             return
 
@@ -421,19 +426,20 @@ Encrypted: {metadata.encryption}
 
         try:
             src_bytes = self._document.doc.tobytes(
-                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE)
+                garbage=0, deflate=True, encryption=fitz.PDF_ENCRYPT_NONE
+            )
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
 
-        progress = QProgressDialog(
-            "Exporting to Word...", "Cancel", 0, total, self)
+        progress = QProgressDialog("Exporting to Word...", "Cancel", 0, total, self)
         progress.setWindowTitle("Exporting")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
         def work(progress_cb, is_cancelled):
             from docx import Document as WordDocument
+
             wdoc = fitz.open(stream=src_bytes, filetype="pdf")
             try:
                 out = WordDocument()
@@ -454,13 +460,16 @@ Encrypted: {metadata.encryption}
                 wdoc.close()
 
         def on_success(saved_path):
-            self._statusbar.showMessage(
-                f"Exported to {Path(saved_path).name}", 3000)
-            if QMessageBox.question(
-                self, "Open Word Document",
-                "Export complete. Do you want to open the Word document?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            ) == QMessageBox.StandardButton.Yes:
+            self._statusbar.showMessage(f"Exported to {Path(saved_path).name}", 3000)
+            if (
+                QMessageBox.question(
+                    self,
+                    "Open Word Document",
+                    "Export complete. Do you want to open the Word document?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                == QMessageBox.StandardButton.Yes
+            ):
                 self._open_with_default_app(saved_path)
 
         self._run_background(work, progress, on_success, error_title="Export Error")
@@ -471,6 +480,7 @@ Encrypted: {metadata.encryption}
         import os
         import sys
         import subprocess
+
         try:
             if sys.platform.startswith("win"):
                 os.startfile(filepath)  # type: ignore[attr-defined]
@@ -480,7 +490,8 @@ Encrypted: {metadata.encryption}
                 subprocess.Popen(["xdg-open", filepath])
         except Exception:
             logging.getLogger(__name__).warning(
-                "Could not open %s with the default app", filepath, exc_info=True)
+                "Could not open %s with the default app", filepath, exc_info=True
+            )
 
     def _export_as_text(self):
         """Export as plain text on a background worker (extracting every page's
@@ -488,9 +499,7 @@ Encrypted: {metadata.encryption}
         if not self._document.is_open or not self._document.doc:
             return
 
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "Export as Text", "", "Text Files (*.txt)"
-        )
+        filepath, _ = QFileDialog.getSaveFileName(self, "Export as Text", "", "Text Files (*.txt)")
         if not filepath:
             return
 
@@ -498,14 +507,14 @@ Encrypted: {metadata.encryption}
             # Serialize once on the GUI thread; the worker reads from its own copy
             # (PyMuPDF is not thread-safe). deflate=False keeps this fast.
             src_bytes = self._document.doc.tobytes(
-                garbage=0, deflate=False, encryption=fitz.PDF_ENCRYPT_NONE)
+                garbage=0, deflate=False, encryption=fitz.PDF_ENCRYPT_NONE
+            )
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Could not prepare document:\n{e}")
             return
         total = self._document.page_count
 
-        progress = QProgressDialog(
-            "Exporting to text...", "Cancel", 0, total, self)
+        progress = QProgressDialog("Exporting to text...", "Cancel", 0, total, self)
         progress.setWindowTitle("Exporting")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
 
@@ -525,7 +534,6 @@ Encrypted: {metadata.encryption}
                 tdoc.close()
 
         def on_success(saved_path):
-            self._statusbar.showMessage(
-                f"Exported to {Path(saved_path).name}", 3000)
+            self._statusbar.showMessage(f"Exported to {Path(saved_path).name}", 3000)
 
         self._run_background(work, progress, on_success, error_title="Export Error")

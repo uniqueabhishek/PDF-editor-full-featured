@@ -4,6 +4,7 @@ Shared pytest fixtures for Ultra PDF Editor.
 These tests exercise the headless core (no Qt / no display required): document
 model, undo/redo, settings and file utilities.
 """
+
 import os
 import sys
 from pathlib import Path
@@ -40,8 +41,10 @@ def _build_pdf(path: Path, pages: int, text: str) -> Path:
 @pytest.fixture
 def make_pdf(tmp_path):
     """Factory fixture: make_pdf(name, pages, text) -> Path to a created PDF."""
+
     def _factory(name: str = "sample.pdf", pages: int = 3, text: str = "Hello World") -> Path:
         return _build_pdf(tmp_path / name, pages, text)
+
     return _factory
 
 

@@ -8,6 +8,7 @@ the same MainWindow instance (shared ``self._document``, ``self._viewer``,
 relocated. MainWindow inherits every mixin, so all ``self`` references continue
 to resolve through the normal method-resolution order.
 """
+
 from .file_handler import FileHandlerMixin
 from .edit_handler import EditHandlerMixin
 from .view_handler import ViewHandlerMixin

@@ -1,4 +1,5 @@
 """GUI-level tests for the Edit Text tool (offscreen Qt via conftest)."""
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -45,7 +46,7 @@ def test_inline_edit_commit_emits_signal(qtbot, tmp_path):
         page_num, _bbox, text, _style = blocker.args
         assert page_num == 0
         assert text == "Hello there"
-        assert v._inline_editor is None        # torn down after commit
+        assert v._inline_editor is None  # torn down after commit
     finally:
         v._render_worker.stop()
         model.close()
@@ -55,7 +56,8 @@ def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
     # A long header would wrap out of a one-line box; the editor must size itself
     # so the whole paragraph is visible (regression for the clipped-text bug).
     v, model = _viewer_with_text(
-        qtbot, tmp_path, text="Electronic Reservation Slip (ERS)-Normal User")
+        qtbot, tmp_path, text="Electronic Reservation Slip (ERS)-Normal User"
+    )
     try:
         v.resize(900, 600)
         v._on_edit_text_requested(0, _block_center(model))
@@ -64,7 +66,7 @@ def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
         assert ed.toPlainText().endswith("Normal User")
         content_h = ed.document().size().height()
         viewport_h = ed.height() - 2 * ed.frameWidth()
-        assert viewport_h + 2 >= content_h      # nothing clipped vertically
+        assert viewport_h + 2 >= content_h  # nothing clipped vertically
     finally:
         v._render_worker.stop()
         model.close()
@@ -73,18 +75,22 @@ def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
 def test_double_click_in_text_tool_requests_edit(qtbot, tmp_path):
     from PyQt6.QtGui import QMouseEvent
     from PyQt6.QtCore import QEvent, Qt
+
     v, model = _viewer_with_text(qtbot, tmp_path)
     try:
         pw = v._page_widgets[0]
-        pw.set_tool_mode("text_select")        # the default tool — no separate button
+        pw.set_tool_mode("text_select")  # the default tool — no separate button
         got = []
         pw.edit_text_requested.connect(lambda p, pt: got.append(p))
         ev = QMouseEvent(
-            QEvent.Type.MouseButtonDblClick, QPointF(5, 5),
-            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier)
+            QEvent.Type.MouseButtonDblClick,
+            QPointF(5, 5),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
         pw.mouseDoubleClickEvent(ev)
-        assert got == [0]                      # double-click asked to edit page 0
+        assert got == [0]  # double-click asked to edit page 0
     finally:
         v._render_worker.stop()
         model.close()
@@ -112,8 +118,8 @@ def test_unchanged_text_emits_nothing(qtbot, tmp_path):
     try:
         v._on_edit_text_requested(0, _block_center(model))
         assert v._inline_editor is not None
-        v._inline_editor.commit()              # committed without editing
-        assert fired == []                     # no undoable op for a no-op edit
+        v._inline_editor.commit()  # committed without editing
+        assert fired == []  # no undoable op for a no-op edit
     finally:
         v._render_worker.stop()
         model.close()

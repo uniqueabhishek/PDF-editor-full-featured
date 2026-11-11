@@ -2,12 +2,16 @@
 
 Headless / no Qt — exercises core/pdf_document.py directly.
 """
+
 import fitz
 import pytest
 
 from core.pdf_document import (
     PDFDocument,
-    _SPAN_FLAG_BOLD, _SPAN_FLAG_ITALIC, _SPAN_FLAG_SERIF, _SPAN_FLAG_MONO,
+    _SPAN_FLAG_BOLD,
+    _SPAN_FLAG_ITALIC,
+    _SPAN_FLAG_SERIF,
+    _SPAN_FLAG_MONO,
     _MIN_EDIT_FONTSIZE,
 )
 
@@ -69,7 +73,7 @@ def test_replace_roundtrip(doc):
     assert res["truncated"] is False
     text = doc.doc[0].get_text("text")
     assert "cat" in text
-    assert "fox" not in text          # proves redact-then-write order
+    assert "fox" not in text  # proves redact-then-write order
     assert doc.is_modified is True
 
 
@@ -104,8 +108,9 @@ def test_overflow_shrinks_fontsize(doc):
     # A deliberately tiny target box with far too much text.
     x0, y0, _x1, _y1 = info["bbox"]
     tiny = (x0, y0, x0 + 40, y0 + 14)
-    long_text = ("alpha beta gamma delta epsilon zeta eta theta "
-                 "iota kappa lambda mu nu xi omicron pi")
+    long_text = (
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi"
+    )
     res = doc.replace_text_block(0, tiny, long_text, info["style"])
     assert res["fontsize_used"] < info["style"]["fontsize"]
     assert res["fontsize_used"] >= _MIN_EDIT_FONTSIZE

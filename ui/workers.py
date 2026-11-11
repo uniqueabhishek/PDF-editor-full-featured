@@ -10,6 +10,7 @@ bytes — never the editable document held by the main thread. Callers serialize
 the document on the GUI thread, hand the bytes to the worker, and apply any
 result back on the GUI thread (e.g. via an undoable snapshot).
 """
+
 import logging
 from typing import Any, Callable
 
@@ -26,9 +27,9 @@ WorkFn = Callable[[Callable[[int, int], None], Callable[[], bool]], Any]
 class FunctionWorker(QThread):
     """Runs a work function off the GUI thread with progress/cancel support."""
 
-    progress = pyqtSignal(int, int)   # done, total
-    succeeded = pyqtSignal(object)    # result returned by the work function
-    failed = pyqtSignal(str)          # error message
+    progress = pyqtSignal(int, int)  # done, total
+    succeeded = pyqtSignal(object)  # result returned by the work function
+    failed = pyqtSignal(str)  # error message
 
     def __init__(self, fn: WorkFn, parent=None):
         super().__init__(parent)

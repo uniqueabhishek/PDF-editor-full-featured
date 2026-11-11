@@ -4,9 +4,16 @@ Ultra PDF Editor - Clean PDF Dialog
 Shows repeating margin text found by scan_margin_text() and lets the user
 choose which items to permanently remove.
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTreeWidget, QTreeWidgetItem, QAbstractItemView,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QAbstractItemView,
 )
 from PyQt6.QtCore import Qt
 from typing import List, Dict, Any
@@ -20,18 +27,16 @@ class CleanPDFDialog(QDialog):
     can select exactly what to remove before anything is touched.
     """
 
-    _COL_TEXT     = 0
+    _COL_TEXT = 0
     _COL_LOCATION = 1
-    _COL_PAGES    = 2
-    _COL_TYPE     = 3
+    _COL_PAGES = 2
+    _COL_TYPE = 3
 
     def __init__(self, findings: List[Dict[str, Any]], parent=None):
         super().__init__(parent)
         self._findings = findings
         self.setWindowTitle("Clean PDF — Remove Repeating Text")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
-        )
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setMinimumSize(600, 380)
         self._setup_ui()
         self._populate(findings)
@@ -60,10 +65,10 @@ class CleanPDFDialog(QDialog):
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
         self._tree.header().setStretchLastSection(False)
-        self._tree.setColumnWidth(self._COL_TEXT,     300)
-        self._tree.setColumnWidth(self._COL_LOCATION,  70)
-        self._tree.setColumnWidth(self._COL_PAGES,     70)
-        self._tree.setColumnWidth(self._COL_TYPE,      90)
+        self._tree.setColumnWidth(self._COL_TEXT, 300)
+        self._tree.setColumnWidth(self._COL_LOCATION, 70)
+        self._tree.setColumnWidth(self._COL_PAGES, 70)
+        self._tree.setColumnWidth(self._COL_TYPE, 90)
         self._tree.itemChanged.connect(self._update_remove_btn)
         layout.addWidget(self._tree, 1)
 
@@ -101,12 +106,14 @@ class CleanPDFDialog(QDialog):
             display = sample if len(sample) <= 60 else sample[:57] + "…"
             pages_str = f"{finding['page_count']} / {finding['total_pages']}"
 
-            item = QTreeWidgetItem([
-                display,
-                finding["zone"],
-                pages_str,
-                finding["category"],
-            ])
+            item = QTreeWidgetItem(
+                [
+                    display,
+                    finding["zone"],
+                    pages_str,
+                    finding["category"],
+                ]
+            )
             item.setCheckState(self._COL_TEXT, Qt.CheckState.Checked)
             item.setData(self._COL_TEXT, Qt.ItemDataRole.UserRole, finding)
             item.setToolTip(self._COL_TEXT, sample)
@@ -118,25 +125,20 @@ class CleanPDFDialog(QDialog):
     def _select_all(self) -> None:
         self._tree.blockSignals(True)
         for i in range(self._tree.topLevelItemCount()):
-            self._tree.topLevelItem(i).setCheckState(
-                self._COL_TEXT, Qt.CheckState.Checked
-            )
+            self._tree.topLevelItem(i).setCheckState(self._COL_TEXT, Qt.CheckState.Checked)
         self._tree.blockSignals(False)
         self._update_remove_btn()
 
     def _deselect_all(self) -> None:
         self._tree.blockSignals(True)
         for i in range(self._tree.topLevelItemCount()):
-            self._tree.topLevelItem(i).setCheckState(
-                self._COL_TEXT, Qt.CheckState.Unchecked
-            )
+            self._tree.topLevelItem(i).setCheckState(self._COL_TEXT, Qt.CheckState.Unchecked)
         self._tree.blockSignals(False)
         self._update_remove_btn()
 
     def _update_remove_btn(self) -> None:
         has_checked = any(
-            self._tree.topLevelItem(i).checkState(self._COL_TEXT)
-            == Qt.CheckState.Checked
+            self._tree.topLevelItem(i).checkState(self._COL_TEXT) == Qt.CheckState.Checked
             for i in range(self._tree.topLevelItemCount())
         )
         self._remove_btn.setEnabled(has_checked)

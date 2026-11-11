@@ -1,11 +1,24 @@
 """
 Ultra PDF Editor - Batch Processing Dialog
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QGroupBox, QCheckBox, QTreeWidget, QTreeWidgetItem,
-    QFileDialog, QProgressBar, QLineEdit, QMessageBox,
-    QComboBox, QFrame, QAbstractItemView,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QGroupBox,
+    QCheckBox,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QFileDialog,
+    QProgressBar,
+    QLineEdit,
+    QMessageBox,
+    QComboBox,
+    QFrame,
+    QAbstractItemView,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QColor
@@ -15,13 +28,14 @@ import fitz
 
 
 # ── Status colour palette ────────────────────────────────────────────────────
-_S_PENDING    = ("Pending",      QColor(150, 150, 150))
-_S_PROCESSING = ("Processing…",  QColor(0,   120, 212))
-_S_DONE       = ("Done",         QColor(50,  185,  50))
-_S_FAILED     = ("Failed",       QColor(220,  60,  60))
+_S_PENDING = ("Pending", QColor(150, 150, 150))
+_S_PROCESSING = ("Processing…", QColor(0, 120, 212))
+_S_DONE = ("Done", QColor(50, 185, 50))
+_S_FAILED = ("Failed", QColor(220, 60, 60))
 
 
 # ── Worker thread ─────────────────────────────────────────────────────────────
+
 
 class BatchWorker(QThread):
     """Processes PDF files sequentially in a background thread."""
@@ -29,24 +43,24 @@ class BatchWorker(QThread):
     # (index, filename)
     file_started = pyqtSignal(int, str)
     # (index, success, error_message)
-    file_done    = pyqtSignal(int, bool, str)
+    file_done = pyqtSignal(int, bool, str)
     # (success_count, fail_count)
-    all_done     = pyqtSignal(int, int)
+    all_done = pyqtSignal(int, int)
 
     def __init__(
         self,
-        files:      List[str],
+        files: List[str],
         operations: Dict[str, Any],
         output_dir: str,
-        suffix:     str,
+        suffix: str,
         parent=None,
     ):
         super().__init__(parent)
-        self._files      = files
+        self._files = files
         self._operations = operations
         self._output_dir = output_dir
-        self._suffix     = suffix
-        self._cancelled  = False
+        self._suffix = suffix
+        self._cancelled = False
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -88,25 +102,26 @@ class BatchWorker(QThread):
                 )
 
         # Build output path
-        stem     = Path(filepath).stem
+        stem = Path(filepath).stem
         out_name = (stem + self._suffix + ".pdf") if self._suffix else Path(filepath).name
         out_path = Path(self._output_dir) / out_name
 
         save_opts: Dict[str, Any] = {"garbage": 4, "deflate": True}
         if ops.get("compress"):
             save_opts["deflate_images"] = True
-            save_opts["deflate_fonts"]  = True
+            save_opts["deflate_fonts"] = True
 
         if ops.get("encrypt") and ops.get("password"):
-            save_opts["encryption"] = 4          # PDF_ENCRYPT_AES_256
-            save_opts["user_pw"]    = ops["password"]
-            save_opts["owner_pw"]   = ops["password"]
+            save_opts["encryption"] = 4  # PDF_ENCRYPT_AES_256
+            save_opts["user_pw"] = ops["password"]
+            save_opts["owner_pw"] = ops["password"]
 
         doc.save(str(out_path), **save_opts)
         doc.close()
 
 
 # ── Drag-and-drop tree ────────────────────────────────────────────────────────
+
 
 class _DropTree(QTreeWidget):
     """QTreeWidget that accepts dragged PDF files."""
@@ -145,18 +160,17 @@ class _DropTree(QTreeWidget):
 
 # ── Main dialog ───────────────────────────────────────────────────────────────
 
+
 class BatchDialog(QDialog):
     """Dialog for batch processing multiple PDFs."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._files:  List[str]            = []
+        self._files: List[str] = []
         self._worker: Optional[BatchWorker] = None
 
         self.setWindowTitle("Batch Processing")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
-        )
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setMinimumSize(680, 580)
         self._setup_ui()
 
@@ -191,7 +205,7 @@ class BatchDialog(QDialog):
 
     def _build_files_group(self) -> QGroupBox:
         group = QGroupBox("Input Files  (drag & drop PDFs here)")
-        vbox  = QVBoxLayout(group)
+        vbox = QVBoxLayout(group)
 
         self._file_tree = _DropTree()
         self._file_tree.setColumnCount(2)
@@ -199,18 +213,16 @@ class BatchDialog(QDialog):
         self._file_tree.header().setStretchLastSection(False)
         self._file_tree.setColumnWidth(0, 460)
         self._file_tree.setColumnWidth(1, 110)
-        self._file_tree.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
+        self._file_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._file_tree.files_dropped.connect(self._add_paths)
         vbox.addWidget(self._file_tree)
 
         btn_row = QHBoxLayout()
         for label, slot in [
-            ("Add Files…",    self._add_files),
-            ("Add Folder…",   self._add_folder),
+            ("Add Files…", self._add_files),
+            ("Add Folder…", self._add_folder),
             ("Remove Selected", self._remove_selected),
-            ("Clear All",     self._clear_files),
+            ("Clear All", self._clear_files),
         ]:
             btn = QPushButton(label)
             btn.clicked.connect(slot)
@@ -221,7 +233,7 @@ class BatchDialog(QDialog):
 
     def _build_ops_group(self) -> QGroupBox:
         group = QGroupBox("Operations")
-        vbox  = QVBoxLayout(group)
+        vbox = QVBoxLayout(group)
 
         # Compress
         self._compress_check = QCheckBox("Compress / Optimize")
@@ -231,9 +243,7 @@ class BatchDialog(QDialog):
         rotate_row = QHBoxLayout()
         self._rotate_check = QCheckBox("Rotate all pages:")
         self._rotate_combo = QComboBox()
-        self._rotate_combo.addItems(
-            ["90° clockwise", "90° counter-clockwise", "180°"]
-        )
+        self._rotate_combo.addItems(["90° clockwise", "90° counter-clockwise", "180°"])
         self._rotate_combo.setEnabled(False)
         self._rotate_check.toggled.connect(self._rotate_combo.setEnabled)
         rotate_row.addWidget(self._rotate_check)
@@ -254,7 +264,7 @@ class BatchDialog(QDialog):
 
         # Encrypt
         enc_row = QHBoxLayout()
-        self._encrypt_check  = QCheckBox("Encrypt with password:")
+        self._encrypt_check = QCheckBox("Encrypt with password:")
         self._password_input = QLineEdit()
         self._password_input.setPlaceholderText("Password")
         self._password_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -268,7 +278,7 @@ class BatchDialog(QDialog):
 
     def _build_output_group(self) -> QGroupBox:
         group = QGroupBox("Output")
-        vbox  = QVBoxLayout(group)
+        vbox = QVBoxLayout(group)
 
         dir_row = QHBoxLayout()
         dir_row.addWidget(QLabel("Directory:"))
@@ -317,17 +327,13 @@ class BatchDialog(QDialog):
                 self._file_tree.addTopLevelItem(item)
 
     def _add_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "Select PDF Files", "", "PDF Files (*.pdf)"
-        )
+        files, _ = QFileDialog.getOpenFileNames(self, "Select PDF Files", "", "PDF Files (*.pdf)")
         self._add_paths(files)
 
     def _add_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
-            self._add_paths(
-                [str(f) for f in sorted(Path(folder).glob("*.pdf"))]
-            )
+            self._add_paths([str(f) for f in sorted(Path(folder).glob("*.pdf"))])
 
     def _remove_selected(self) -> None:
         for item in reversed(self._file_tree.selectedItems()):
@@ -362,43 +368,37 @@ class BatchDialog(QDialog):
 
         output_dir = self._output_input.text().strip()
         if not output_dir:
-            QMessageBox.warning(
-                self, "No Output Directory", "Please select an output directory."
-            )
+            QMessageBox.warning(self, "No Output Directory", "Please select an output directory.")
             return
 
         _angle_map = {0: 90, 1: 270, 2: 180}
         operations: Dict[str, Any] = {
-            "compress":      self._compress_check.isChecked(),
-            "rotate":        self._rotate_check.isChecked(),
-            "rotate_angle":  _angle_map[self._rotate_combo.currentIndex()],
-            "watermark":     self._watermark_check.isChecked(),
+            "compress": self._compress_check.isChecked(),
+            "rotate": self._rotate_check.isChecked(),
+            "rotate_angle": _angle_map[self._rotate_combo.currentIndex()],
+            "watermark": self._watermark_check.isChecked(),
             "watermark_text": self._watermark_input.text().strip(),
-            "encrypt":       self._encrypt_check.isChecked(),
-            "password":      self._password_input.text(),
+            "encrypt": self._encrypt_check.isChecked(),
+            "password": self._password_input.text(),
         }
 
-        if not any([
-            operations["compress"],
-            operations["rotate"],
-            operations["watermark"],
-            operations["encrypt"],
-        ]):
-            QMessageBox.warning(
-                self, "No Operations", "Please select at least one operation."
-            )
+        if not any(
+            [
+                operations["compress"],
+                operations["rotate"],
+                operations["watermark"],
+                operations["encrypt"],
+            ]
+        ):
+            QMessageBox.warning(self, "No Operations", "Please select at least one operation.")
             return
 
         if operations["watermark"] and not operations["watermark_text"]:
-            QMessageBox.warning(
-                self, "No Watermark Text", "Please enter watermark text."
-            )
+            QMessageBox.warning(self, "No Watermark Text", "Please enter watermark text.")
             return
 
         if operations["encrypt"] and not operations["password"]:
-            QMessageBox.warning(
-                self, "No Password", "Please enter an encryption password."
-            )
+            QMessageBox.warning(self, "No Password", "Please enter an encryption password.")
             return
 
         # Reset all statuses to Pending
@@ -411,9 +411,7 @@ class BatchDialog(QDialog):
         self._process_btn.setEnabled(False)
 
         suffix = self._suffix_input.text().strip()
-        self._worker = BatchWorker(
-            self._files, operations, output_dir, suffix, self
-        )
+        self._worker = BatchWorker(self._files, operations, output_dir, suffix, self)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.all_done.connect(self._on_all_done)
@@ -450,9 +448,7 @@ class BatchDialog(QDialog):
     def _on_all_done(self, success: int, fail: int) -> None:
         self._progress_bar.setValue(len(self._files))
         self._process_btn.setEnabled(True)
-        self._progress_label.setText(
-            f"Complete — {success} succeeded, {fail} failed."
-        )
+        self._progress_label.setText(f"Complete — {success} succeeded, {fail} failed.")
         msg = f"Processed {success} file(s) successfully."
         if fail:
             msg += (

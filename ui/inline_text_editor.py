@@ -5,6 +5,7 @@ retype it in place. Ctrl+Enter (or clicking away) commits; Esc cancels; a plain
 Enter inserts a newline. The widget is intentionally "dumb": the PDFViewer owns
 positioning/styling and reacts to the ``committed``/``cancelled`` signals.
 """
+
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent, QFocusEvent
@@ -13,7 +14,7 @@ from PyQt6.QtGui import QKeyEvent, QFocusEvent
 class InlineTextEditor(QTextEdit):
     """In-place paragraph editor; emits its final text on commit."""
 
-    committed = pyqtSignal(str)   # final plain text
+    committed = pyqtSignal(str)  # final plain text
     cancelled = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -33,8 +34,10 @@ class InlineTextEditor(QTextEdit):
             self.cancel()
             event.accept()
             return
-        if (key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-                and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+        if (
+            key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
             self.commit()
             event.accept()
             return

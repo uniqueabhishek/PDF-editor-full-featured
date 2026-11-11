@@ -4,6 +4,7 @@ Covers the selection algorithm (reading order, cross-line spans), the
 clipboard/status wiring, and tool-switch clearing. Run headless via the
 offscreen Qt platform configured in conftest.
 """
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -18,6 +19,7 @@ from PyQt6.QtCore import QPointF  # noqa: E402
 def viewer(qtbot):
     """A PDFViewer showing a 1-page doc with two known lines of text."""
     from ui.pdf_viewer import PDFViewer
+
     doc = fitz.open()
     page = doc.new_page(width=400, height=300)
     page.insert_text((72, 100), "Hello world foo", fontsize=14)
@@ -41,18 +43,17 @@ def _center(words, text):
 
 def test_words_are_in_reading_order(viewer):
     words = viewer.get_page_words(0)
-    assert [w[4] for w in words] == [
-        "Hello", "world", "foo", "second", "line", "here"]
+    assert [w[4] for w in words] == ["Hello", "world", "foo", "second", "line", "here"]
 
 
 def test_cross_line_selection_spans_partial_lines(viewer):
     from ui.pdf_viewer import PageWidget
+
     words = viewer.get_page_words(0)
     pw = PageWidget(0)
     pw._sel_words = words
 
-    rects, text = pw._selection_for(
-        _center(words, "world"), _center(words, "line"))
+    rects, text = pw._selection_for(_center(words, "world"), _center(words, "line"))
     # Tail of line 1 + head of line 2, one highlight rect per line.
     assert text == "world foo\nsecond line"
     assert len(rects) == 2
@@ -60,16 +61,15 @@ def test_cross_line_selection_spans_partial_lines(viewer):
 
 def test_single_word_and_full_selection(viewer):
     from ui.pdf_viewer import PageWidget
+
     words = viewer.get_page_words(0)
     pw = PageWidget(0)
     pw._sel_words = words
 
-    _, single = pw._selection_for(
-        _center(words, "Hello"), _center(words, "Hello"))
+    _, single = pw._selection_for(_center(words, "Hello"), _center(words, "Hello"))
     assert single == "Hello"
 
-    _, full = pw._selection_for(
-        _center(words, "Hello"), _center(words, "here"))
+    _, full = pw._selection_for(_center(words, "Hello"), _center(words, "here"))
     assert full == "Hello world foo\nsecond line here"
 
 
@@ -98,6 +98,7 @@ def test_context_menu_shows_only_copy_with_selection(viewer, monkeypatch):
     class _Evt:
         def globalPos(self):
             from PyQt6.QtCore import QPoint
+
             return QPoint(0, 0)
 
     viewer.contextMenuEvent(_Evt())
@@ -112,6 +113,7 @@ def test_context_menu_shows_only_copy_with_selection(viewer, monkeypatch):
 
 def test_switching_tool_clears_selection(viewer):
     from ui.pdf_viewer import ToolMode
+
     viewer._on_text_selection_made(0, "alpha beta", [])
     assert viewer.get_selected_text() == "alpha beta"
     viewer.set_tool_mode(ToolMode.HIGHLIGHT)
@@ -120,6 +122,7 @@ def test_switching_tool_clears_selection(viewer):
 
 def test_page_without_text_layer_has_no_words(qtbot):
     from ui.pdf_viewer import PDFViewer
+
     doc = fitz.open()
     doc.new_page()  # blank, image-less page: no extractable words
     v = PDFViewer()

@@ -4,9 +4,17 @@ Ultra PDF Editor - Remove Header/Footer Dialog
 Uses PyMuPDF redaction to permanently erase content in the top/bottom
 strip of each selected page.
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSpinBox, QGroupBox, QCheckBox, QFrame,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QGroupBox,
+    QCheckBox,
+    QFrame,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QPainter, QColor
@@ -19,7 +27,7 @@ class _StripPreview(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
-        self._header_frac: float = 0.0   # fraction of page height (0-1)
+        self._header_frac: float = 0.0  # fraction of page height (0-1)
         self._footer_frac: float = 0.0
 
         self.setMinimumSize(220, 300)
@@ -49,7 +57,7 @@ class _StripPreview(QLabel):
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-        ox = (wr.width()  - scaled.width())  // 2
+        ox = (wr.width() - scaled.width()) // 2
         oy = (wr.height() - scaled.height()) // 2
         painter.drawPixmap(ox, oy, scaled)
 
@@ -80,12 +88,10 @@ class RemoveHeaderFooterDialog(QDialog):
     ):
         super().__init__(parent)
         self._page_height = page_height
-        self._page_count  = page_count
+        self._page_count = page_count
 
         self.setWindowTitle("Remove Header / Footer")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
-        )
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setMinimumSize(460, 520)
         self._setup_ui()
         self._preview.set_pixmap(pixmap)
@@ -202,14 +208,15 @@ class RemoveHeaderFooterDialog(QDialog):
         f_pt = self._footer_spin.value()
         parts = []
         if h_pt:
-            parts.append(f"Header: {h_pt} pt ({h_pt / 72:.2f}\")")
+            parts.append(f'Header: {h_pt} pt ({h_pt / 72:.2f}")')
         if f_pt:
-            parts.append(f"Footer: {f_pt} pt ({f_pt / 72:.2f}\")")
+            parts.append(f'Footer: {f_pt} pt ({f_pt / 72:.2f}")')
         self._size_label.setText("  |  ".join(parts) if parts else "Nothing selected.")
 
     def _validate_and_accept(self) -> None:
         if self._header_spin.value() == 0 and self._footer_spin.value() == 0:
             from PyQt6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
                 self,
                 "Nothing to Remove",

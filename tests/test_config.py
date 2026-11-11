@@ -1,4 +1,5 @@
 """Tests for UserSettings persistence and recent-files handling (headless)."""
+
 from config import UserSettings
 
 

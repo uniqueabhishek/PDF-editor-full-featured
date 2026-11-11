@@ -2,6 +2,7 @@
 Ultra PDF Editor - File Utilities
 Helper functions for file operations
 """
+
 import os
 import shutil
 import tempfile
@@ -45,6 +46,7 @@ def safe_delete(filepath: Path) -> bool:
             # Try using send2trash if available
             try:
                 from send2trash import send2trash
+
                 send2trash(str(filepath))
             except ImportError:
                 filepath.unlink()
@@ -83,7 +85,7 @@ def get_file_hash(filepath: Path) -> str:
 def format_file_size(size_bytes: int) -> str:
     """Format file size for display"""
     size: float = float(size_bytes)
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
         if size < 1024.0:
             return f"{size:.1f} {unit}"
         size /= 1024.0
@@ -111,13 +113,13 @@ def validate_pdf(filepath: Path) -> Tuple[bool, str]:
     if not filepath.exists():
         return False, "File does not exist"
 
-    if filepath.suffix.lower() != '.pdf':
+    if filepath.suffix.lower() != ".pdf":
         return False, "File is not a PDF"
 
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             header = f.read(8)
-            if not header.startswith(b'%PDF-'):
+            if not header.startswith(b"%PDF-"):
                 return False, "Invalid PDF header"
         return True, "Valid PDF"
     except Exception as e:
@@ -128,6 +130,7 @@ def is_pdf_encrypted(filepath: Path) -> bool:
     """Check if a PDF file is encrypted"""
     try:
         import fitz
+
         doc = fitz.open(str(filepath))
         encrypted = doc.is_encrypted
         doc.close()
@@ -140,6 +143,7 @@ def get_pdf_page_count(filepath: Path) -> int:
     """Get the number of pages in a PDF"""
     try:
         import fitz
+
         doc = fitz.open(str(filepath))
         count = len(doc)
         doc.close()
@@ -155,11 +159,11 @@ def list_pdfs_in_directory(directory: Path, recursive: bool = False) -> List[Pat
     if recursive:
         for root, dirs, files in os.walk(directory):
             for file in files:
-                if file.lower().endswith('.pdf'):
+                if file.lower().endswith(".pdf"):
                     pdfs.append(Path(root) / file)
     else:
         for file in directory.iterdir():
-            if file.is_file() and file.suffix.lower() == '.pdf':
+            if file.is_file() and file.suffix.lower() == ".pdf":
                 pdfs.append(file)
 
     return sorted(pdfs)
@@ -205,8 +209,8 @@ def clean_temp_files(max_age_hours: int = 24):
 
 def ensure_extension(filepath: Path, extension: str) -> Path:
     """Ensure a file has the specified extension"""
-    if not extension.startswith('.'):
-        extension = '.' + extension
+    if not extension.startswith("."):
+        extension = "." + extension
 
     if filepath.suffix.lower() != extension.lower():
         return filepath.with_suffix(extension)
@@ -217,15 +221,15 @@ def sanitize_filename(filename: str) -> str:
     """Sanitize a filename by removing invalid characters"""
     invalid_chars = '<>:"/\\|?*'
     for char in invalid_chars:
-        filename = filename.replace(char, '_')
+        filename = filename.replace(char, "_")
 
     # Remove leading/trailing spaces and dots
-    filename = filename.strip(' .')
+    filename = filename.strip(" .")
 
     # Limit length
     max_length = 255
     if len(filename) > max_length:
         name, ext = os.path.splitext(filename)
-        filename = name[:max_length - len(ext)] + ext
+        filename = name[: max_length - len(ext)] + ext
 
     return filename

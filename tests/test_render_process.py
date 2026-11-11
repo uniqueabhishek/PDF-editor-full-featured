@@ -1,5 +1,6 @@
 """The render copy lives in a separate process so rendering never holds the
 GUI thread's GIL, and the viewer survives that process dying."""
+
 import threading
 import time
 
@@ -17,8 +18,12 @@ def scan_pdf(tmp_path):
     for i in range(6):
         page = doc.new_page()
         for k in range(400):
-            page.draw_circle((50 + (k * 37) % 500, 50 + (k * 53) % 740), 20 + k % 30,
-                             color=(k % 7 / 7, 0.3, 0.6), fill=(0.2, k % 5 / 5, 0.4))
+            page.draw_circle(
+                (50 + (k * 37) % 500, 50 + (k * 53) % 740),
+                20 + k % 30,
+                color=(k % 7 / 7, 0.3, 0.6),
+                fill=(0.2, k % 5 / 5, 0.4),
+            )
         page.insert_text((72, 72), f"page {i}", fontsize=20)
     doc.save(str(path))
     doc.close()
@@ -76,6 +81,7 @@ def test_page_insert_and_delete_mirror_the_live_document(scan_pdf, make):
 @pytest.mark.parametrize("rotation", [0, 90, 180, 270])
 def test_clipped_render_matches_the_same_region_of_a_full_render(scan_pdf, rotation):
     from core.render_backend import render_page
+
     doc = fitz.open(str(scan_pdf))
     try:
         w, h, stride, full, ox, oy = render_page(doc, 1, 0.8, rotation)
@@ -87,8 +93,8 @@ def test_clipped_render_matches_the_same_region_of_a_full_render(scan_pdf, rotat
         worst = 0
         for row in range(ch):
             start = (py + row) * stride + px * 3
-            a = part[row * cstride: row * cstride + cw * 3]
-            b = full[start: start + cw * 3]
+            a = part[row * cstride : row * cstride + cw * 3]
+            b = full[start : start + cw * 3]
             worst = max(worst, max(abs(x - y) for x, y in zip(a, b, strict=True)))
         assert worst <= 8, f"clipped render differs by up to {worst}"
     finally:
@@ -148,10 +154,10 @@ def test_viewer_falls_back_when_render_process_dies(qtbot, scan_pdf, monkeypatch
         assert worker.uses_render_process
         assert worker.page_count() == 6
 
-        worker._backend._proc.kill()          # simulate a crash in MuPDF
+        worker._backend._proc.kill()  # simulate a crash in MuPDF
         worker._backend._proc.join(5)
         with qtbot.waitSignal(worker.copy_lost, timeout=5000):
-            worker.page_count()               # the next call notices
+            worker.page_count()  # the next call notices
         assert not worker.uses_render_process
         qtbot.waitUntil(lambda: worker.page_count() == 6, timeout=5000)
     finally:

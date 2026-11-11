@@ -1,9 +1,16 @@
 """
 Ultra PDF Editor - Find and Replace Dialog
 """
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QCheckBox, QLabel, QMessageBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QCheckBox,
+    QLabel,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
@@ -311,7 +318,7 @@ class FindReplaceDialog(_DebouncedSearchMixin, QDialog):
             self,
             "Replace All",
             f"Replace all occurrences of '{self._search_input.text()}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if result == QMessageBox.StandardButton.Yes:
             self.replace_all_requested.emit(self._replace_input.text())

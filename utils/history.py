@@ -2,6 +2,7 @@
 Ultra PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
+
 import logging
 import re
 from typing import Callable, List, Optional, Any, Dict, Tuple
@@ -37,6 +38,7 @@ def _same_pdf_state(a: bytes, b: bytes) -> bool:
 
 class CommandType(Enum):
     """Types of commands that can be undone/redone"""
+
     PAGE_ADD = "page_add"
     PAGE_DELETE = "page_delete"
     PAGE_ROTATE = "page_rotate"
@@ -88,6 +90,7 @@ class Command(ABC):
 
 class PageAddCommand(Command):
     """Command for adding a page"""
+
     requires_reload = True  # page count changes — rebuild the viewer's pages
 
     def __init__(self, document, page_index: int, width: float = 595, height: float = 842):
@@ -100,8 +103,7 @@ class PageAddCommand(Command):
 
     def execute(self) -> bool:
         try:
-            self.document.add_blank_page(
-                self.width, self.height, self.page_index)
+            self.document.add_blank_page(self.width, self.height, self.page_index)
             return True
         except Exception:
             return False
@@ -120,11 +122,11 @@ class PageAddCommand(Command):
 
 class PageDeleteCommand(Command):
     """Command for deleting a page"""
+
     requires_reload = True  # page count changes — rebuild the viewer's pages
 
     def __init__(self, document, page_index: int):
-        super().__init__(CommandType.PAGE_DELETE,
-                         f"Delete page {page_index + 1}")
+        super().__init__(CommandType.PAGE_DELETE, f"Delete page {page_index + 1}")
         self.document = document
         self.page_index = page_index
         # The deleted page's content, captured as a single-page PDF so undo can
@@ -175,8 +177,7 @@ class PageRotateCommand(Command):
     """Command for rotating a page"""
 
     def __init__(self, document, page_index: int, rotation: int):
-        super().__init__(CommandType.PAGE_ROTATE,
-                         f"Rotate page {page_index + 1}")
+        super().__init__(CommandType.PAGE_ROTATE, f"Rotate page {page_index + 1}")
         self.document = document
         self.page_index = page_index
         self.rotation = rotation
@@ -203,7 +204,14 @@ class PageRotateCommand(Command):
 class AnnotationAddCommand(Command):
     """Command for adding an annotation"""
 
-    def __init__(self, document, page_index: int, annot_type: str, rect: Any, annot_data: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        document,
+        page_index: int,
+        annot_type: str,
+        rect: Any,
+        annot_data: Optional[Dict[str, Any]] = None,
+    ):
         super().__init__(CommandType.ANNOTATION_ADD, f"Add {annot_type}")
         self.document = document
         self.page_index = page_index
@@ -217,7 +225,7 @@ class AnnotationAddCommand(Command):
         if rect is None:
             return (0, 0, 0, 0)
         # Check if it's a QRectF (has x(), y(), width(), height() methods)
-        if hasattr(rect, 'x') and callable(rect.x):
+        if hasattr(rect, "x") and callable(rect.x):
             return (rect.x(), rect.y(), rect.x() + rect.width(), rect.y() + rect.height())
         # Already a tuple or list
         if isinstance(rect, (tuple, list)) and len(rect) >= 4:
@@ -228,6 +236,7 @@ class AnnotationAddCommand(Command):
         """Create a stamp annotation"""
         try:
             import fitz
+
             page = self.document.get_page(self.page_index)
             # PyMuPDF stamp constants use fitz.STAMP_* constants
             stamp_id = self.annot_data.get("stamp_id", 0)  # Default to "Approved"
@@ -270,32 +279,45 @@ class AnnotationAddCommand(Command):
 
             if self.annot_type == "highlight":
                 annot = self.document.add_highlight(
-                    self.page_index, rect_tuple,
-                    color=color or (1, 1, 0), opacity=opacity)
+                    self.page_index, rect_tuple, color=color or (1, 1, 0), opacity=opacity
+                )
             elif self.annot_type == "underline":
                 annot = self.document.add_underline(
-                    self.page_index, rect_tuple,
-                    color=color or (0, 0, 1), opacity=opacity)
+                    self.page_index, rect_tuple, color=color or (0, 0, 1), opacity=opacity
+                )
             elif self.annot_type == "strikethrough":
                 annot = self.document.add_strikethrough(
-                    self.page_index, rect_tuple,
-                    color=color or (1, 0, 0), opacity=opacity)
+                    self.page_index, rect_tuple, color=color or (1, 0, 0), opacity=opacity
+                )
             elif self.annot_type == "rectangle":
                 annot = self.document.add_rect_annotation(
-                    self.page_index, rect_tuple,
-                    stroke_color=color or (1, 0, 0), width=width, opacity=opacity)
+                    self.page_index,
+                    rect_tuple,
+                    stroke_color=color or (1, 0, 0),
+                    width=width,
+                    opacity=opacity,
+                )
             elif self.annot_type == "circle":
                 annot = self.document.add_circle_annotation(
-                    self.page_index, rect_tuple,
-                    stroke_color=color or (1, 0, 0), width=width, opacity=opacity)
+                    self.page_index,
+                    rect_tuple,
+                    stroke_color=color or (1, 0, 0),
+                    width=width,
+                    opacity=opacity,
+                )
             elif self.annot_type == "line":
                 # Use rect corners as start/end points for line
                 start = (rect_tuple[0], rect_tuple[1])
                 end = (rect_tuple[2], rect_tuple[3])
                 arrow = self.annot_data.get("arrow", False)
                 annot = self.document.add_line_annotation(
-                    self.page_index, start, end,
-                    color=color or (1, 0, 0), width=width, opacity=opacity)
+                    self.page_index,
+                    start,
+                    end,
+                    color=color or (1, 0, 0),
+                    width=width,
+                    opacity=opacity,
+                )
                 if arrow and annot:
                     # Add arrow head to the end
                     annot.set_line_ends(0, 5)  # 0=none, 5=closed arrow
@@ -311,8 +333,12 @@ class AnnotationAddCommand(Command):
                         stroke = [(float(p[0]), float(p[1])) for p in points]
                         strokes = [stroke]
                         annot = self.document.add_ink_annotation(
-                            self.page_index, strokes,
-                            color=color or (0, 0, 0), width=width, opacity=opacity)
+                            self.page_index,
+                            strokes,
+                            color=color or (0, 0, 0),
+                            width=width,
+                            opacity=opacity,
+                        )
             elif self.annot_type == "stamp":
                 # Create a stamp annotation using the rect
                 annot = self._create_stamp_annotation(rect_tuple)
@@ -325,13 +351,13 @@ class AnnotationAddCommand(Command):
                 # the toolbar Color control is markup/shape-oriented and defaults
                 # to yellow, which would be unreadable as body text.
                 annot = self.document.add_freetext(
-                    self.page_index, rect_tuple, text, font_size=font_size)
+                    self.page_index, rect_tuple, text, font_size=font_size
+                )
             elif self.annot_type == "sticky_note":
                 # Rect to point
                 point = (rect_tuple[0], rect_tuple[1])
                 text = self.annot_data.get("text", "")
-                annot = self.document.add_text_annotation(
-                    self.page_index, point, text)
+                annot = self.document.add_text_annotation(self.page_index, point, text)
 
             if annot:
                 self._annot_xref = annot.xref
@@ -367,9 +393,13 @@ class DocumentSnapshotCommand(Command):
     swaps_document = True
     requires_reload = True
 
-    def __init__(self, document: Any, operation: Callable[[], Any],
-                 command_type: CommandType = CommandType.METADATA_CHANGE,
-                 description: str = ""):
+    def __init__(
+        self,
+        document: Any,
+        operation: Callable[[], Any],
+        command_type: CommandType = CommandType.METADATA_CHANGE,
+        description: str = "",
+    ):
         super().__init__(command_type, description)
         self.document = document
         self._operation = operation
@@ -464,9 +494,14 @@ class PageSnapshotCommand(Command):
     Only used where :meth:`PDFDocument.can_snapshot_pages` allows it.
     """
 
-    def __init__(self, document: Any, pages: List[int], operation: Callable[[], Any],
-                 command_type: CommandType = CommandType.METADATA_CHANGE,
-                 description: str = ""):
+    def __init__(
+        self,
+        document: Any,
+        pages: List[int],
+        operation: Callable[[], Any],
+        command_type: CommandType = CommandType.METADATA_CHANGE,
+        description: str = "",
+    ):
         super().__init__(command_type, description)
         self.document = document
         self.pages = sorted(set(pages))
@@ -540,8 +575,7 @@ class HistoryManager:
 
         if self._max_bytes is not None:
             # Keep at least the most recent command so one undo is always possible.
-            while (self._history_bytes() > self._max_bytes
-                   and len(self._undo_stack) > 1):
+            while self._history_bytes() > self._max_bytes and len(self._undo_stack) > 1:
                 self._undo_stack.pop(0)
 
     def _history_bytes(self) -> int:

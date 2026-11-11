@@ -4,6 +4,7 @@ Ultra PDF Editor - Theme application
 Shared helper for applying the light/dark Qt stylesheet, used both at startup
 and when the user changes the theme in Preferences at runtime.
 """
+
 from pathlib import Path
 
 _STYLES_DIR = Path(__file__).parent.parent / "resources" / "styles"
@@ -34,6 +35,7 @@ def resolve_theme(theme: str) -> str:
         return "light"
     try:
         import darkdetect
+
         return "dark" if darkdetect.isDark() else "light"
     except Exception:
         return "light"

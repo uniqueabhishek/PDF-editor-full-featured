@@ -6,6 +6,7 @@ requests from the viewer through the undo/redo history, and performs area
 redaction. Mixed into MainWindow; relies on ``self._document``, ``self._viewer``,
 ``self._history_manager`` and ``self._statusbar``.
 """
+
 from typing import TYPE_CHECKING, Any, Dict
 
 from PyQt6.QtWidgets import QMessageBox
@@ -15,6 +16,7 @@ from utils.history import AnnotationAddCommand
 
 if TYPE_CHECKING:
     from ._context import MainWindowContext
+
     _MixinBase = MainWindowContext
 else:
     _MixinBase = object
@@ -31,36 +33,38 @@ class AnnotationHandlerMixin(_MixinBase):
         except ValueError:
             pass  # Ignore unknown tool modes
 
-    def _on_edit_text_committed(self, page_num: int, bbox, new_text: str,
-                                style: Dict) -> None:
+    def _on_edit_text_committed(self, page_num: int, bbox, new_text: str, style: Dict) -> None:
         """Apply a committed inline text edit (Edit Text tool), undoably."""
         if not self._document.is_open:
             return
         cmd = self._run_snapshot_op(
             "Edit text",
-            lambda: self._document.replace_text_block(
-                page_num, bbox, new_text, style), pages=[page_num])
+            lambda: self._document.replace_text_block(page_num, bbox, new_text, style),
+            pages=[page_num],
+        )
         if cmd is None:
-            QMessageBox.critical(
-                self, "Edit Text", "Failed to edit text. See log for details.")
+            QMessageBox.critical(self, "Edit Text", "Failed to edit text. See log for details.")
             return
         result = getattr(cmd, "result", None) or {}
         if result.get("truncated"):
             self._statusbar.showMessage(
-                "Text edited — too long for the box, shrunk to fit and clipped "
-                "(Undo to revert)", 4000)
+                "Text edited — too long for the box, shrunk to fit and clipped (Undo to revert)",
+                4000,
+            )
         elif str(result.get("font", "")).startswith("base14"):
             self._statusbar.showMessage(
                 "Text edited — original font lacked some glyphs, used a close "
-                "match (Undo to revert)", 4000)
+                "match (Undo to revert)",
+                4000,
+            )
         else:
             self._statusbar.showMessage("Text edited (Undo to revert)", 3000)
 
     def _on_edit_text_unavailable(self, _page_num: int) -> None:
         """Hint when the user double-clicks where there is no editable text."""
         self._statusbar.showMessage(
-            "No editable text there. If this is a scanned page, run "
-            "Tools → OCR first.", 4000)
+            "No editable text there. If this is a scanned page, run Tools → OCR first.", 4000
+        )
 
     def _create_annotation(self, page_num: int, annot_type: str, rect: Any, data: Dict):
         """Handle annotation creation request"""
@@ -71,8 +75,7 @@ class AnnotationHandlerMixin(_MixinBase):
             self._apply_area_redaction(page_num, rect)
             return
 
-        command = AnnotationAddCommand(
-            self._document, page_num, annot_type, rect, data)
+        command = AnnotationAddCommand(self._document, page_num, annot_type, rect, data)
         if self._history_manager.execute(command):
             # The edit is in place; refresh the render worker's copy and re-render
             # just this page (no full reload, so the view position is preserved).
@@ -109,8 +112,7 @@ class AnnotationHandlerMixin(_MixinBase):
         if self._run_snapshot_op("Delete annotation", _do, pages=[page_num]) is not None:
             self._statusbar.showMessage("Annotation deleted (Undo to restore)", 2000)
         else:
-            QMessageBox.critical(
-                self, "Error", "Failed to delete annotation. See log for details.")
+            QMessageBox.critical(self, "Error", "Failed to delete annotation. See log for details.")
 
     def _activate_erase_selection(self) -> None:
         """Switch to Erase Selection tool so the user can draw a rectangle to erase."""
@@ -136,16 +138,17 @@ class AnnotationHandlerMixin(_MixinBase):
             return
 
         import fitz
+
         fitz_rect = fitz.Rect(
-            rect.x(), rect.y(),
+            rect.x(),
+            rect.y(),
             rect.x() + rect.width(),
             rect.y() + rect.height(),
         )
         cmd = self._run_snapshot_op(
-            "Erase area", lambda: self._document.redact_area(page_num, fitz_rect),
-            pages=[page_num])
+            "Erase area", lambda: self._document.redact_area(page_num, fitz_rect), pages=[page_num]
+        )
         if cmd is not None:
             self._statusbar.showMessage("Area erased.", 3000)
         else:
-            QMessageBox.critical(
-                self, "Error", "Failed to erase area. See log for details.")
+            QMessageBox.critical(self, "Error", "Failed to erase area. See log for details.")
