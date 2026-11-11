@@ -1,311 +1,172 @@
+<div align="center">
+
+<img src="resources/assets/ultra-pdf-128.png" alt="Ultra PDF Editor logo" width="96">
+
 # Ultra PDF Editor
 
-A powerful, professional-grade PDF editor built with Python and PyQt6. Designed for users who need comprehensive PDF manipulation capabilities without cloud dependencies.
+**A free, offline desktop PDF editor. Edit text, annotate, merge, split, OCR and protect PDFs without uploading them anywhere.**
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![PyQt6](https://img.shields.io/badge/PyQt6-6.6+-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
+[![CI](https://github.com/uniqueabhishek/PDF-editor-full-featured/actions/workflows/ci.yml/badge.svg)](https://github.com/uniqueabhishek/PDF-editor-full-featured/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Built with PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://www.riverbankcomputing.com/software/pyqt/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+
+[Features](#features) · [Install](#install) · [Usage](#usage) · [Shortcuts](#keyboard-shortcuts) · [User Guide](docs/USER_GUIDE.md) · [Contributing](CONTRIBUTING.md)
+
+<img src="docs/images/screenshot.png" alt="Ultra PDF Editor with a report open, page thumbnails on the left and highlighted text" width="900">
+
+</div>
+
+## Why Ultra PDF Editor?
+
+- **Private.** Everything runs on your computer. No account, no upload, no telemetry.
+- **Free and open source.** MIT licensed, with no watermarks and no paid tier.
+- **Edits the text itself.** Double-click a paragraph and retype it, or find and replace across the whole file.
+- **Fast on large files.** Pages render in a separate process and only when they scroll into view, so even long PDFs open and scroll quickly.
+- **Every change can be undone** until you save, including OCR, crop, watermark and redaction.
 
 ## Features
 
-### Core Document Operations
-- **Open/Save PDF files** with full format preservation
-- **Create new PDFs** from scratch
-- **Auto-save & recovery** to prevent data loss
-- **Drag & drop** file support
+| Area | What you can do |
+|---|---|
+| **View** | Single page, two pages or continuous scroll · zoom and fit · full screen · thumbnails, bookmarks and annotations panels · dark and light themes |
+| **Edit text** | Edit a text block in place · find and replace · erase a selected area |
+| **Annotate** | Highlight, underline, strikethrough · sticky notes and text boxes · rectangles, circles, lines, arrows · freehand drawing · stamps · colour, opacity and width controls |
+| **Pages** | Insert blank pages or pages from another file · delete, rotate, crop, extract · reorder by dragging thumbnails |
+| **Merge and split** | Merge several PDFs (with a bookmark per file) · split by page count, page ranges or bookmarks |
+| **Clean up** | Detect and trim repeated headers and footers · add a watermark · add headers and footers with page numbers |
+| **Optimise** | Compress and optimise to shrink file size |
+| **OCR** | Add a searchable text layer to scanned pages with Tesseract |
+| **Security** | Password-protect with AES-256 · remove a password · redact content permanently |
+| **Export** | Pages as PNG images · text to Word (`.docx`) or plain text · print |
+| **Batch** | Run the same operation over a folder of PDFs |
 
-### Page Management
-- Add, insert, delete, and duplicate pages
-- Reorder pages via drag & drop
-- Rotate pages (90°, 180°, 270°)
-- Crop pages
-- Extract pages to new PDF
-- Page thumbnails sidebar with quick navigation
+## Install
 
-### Merge & Split
-- Merge multiple PDFs into a single document (with reordering)
-- Split PDF by page count, custom ranges, or bookmarks
+Ultra PDF Editor runs from source with [uv](https://docs.astral.sh/uv/), which installs the exact library versions the app was tested with.
 
-### Annotations & Markup
-- **Text markup**: Highlight, underline, strikethrough
-- **Sticky notes** and comments
-- **Text boxes** with customizable fonts
-- **Shapes**: Rectangle, circle, line, arrow
-- **Freehand drawing** tools
-- **Stamps**: Approved, Draft, Confidential, and more presets
-- Annotation color and opacity controls
+**1. Install the tools** (once per computer)
 
-### Security
-- **Password protection** (user and owner passwords)
-- **AES-256 encryption**
-- **Permission controls**: Print, copy, edit restrictions
-- **Redaction tools** for permanent content removal
+- [Python 3.10 or newer](https://www.python.org/downloads/) (3.13 recommended)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- [Git](https://git-scm.com/downloads)
 
-### OCR (Optical Character Recognition)
-- Add a searchable text layer to scanned PDFs (via Tesseract)
-
-### Export
-- Export pages as **images** (PNG)
-- Export text to **Microsoft Word** (`.docx`) or **plain text**
-
-### View & Navigation
-- Zoom controls (fit page, fit width, custom %)
-- Single page, two-page, and continuous scroll views
-- Full-screen mode
-- Dark mode / Light mode / System theme
-- Bookmarks panel
-- Search within document
-
-## System Requirements
-
-### Minimum Requirements
-- **OS**: Windows 10, macOS 10.14+, or Linux (Ubuntu 20.04+)
-- **Python**: 3.10 or higher
-- **RAM**: 4 GB
-- **Storage**: 500 MB free space
-
-### Recommended Requirements
-- **RAM**: 8 GB or more
-- **Storage**: 1 GB free space (for OCR language packs)
-- **Display**: 1920x1080 or higher resolution
-
-### For OCR Features
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) must be installed separately
-- Language packs for non-English OCR
-
-## Installation
-
-### Using uv (Recommended)
+**2. Get the app and start it**
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/ultra-pdf-editor.git
-cd ultra-pdf-editor
-
-# Install dependencies with uv
+git clone https://github.com/uniqueabhishek/PDF-editor-full-featured.git
+cd PDF-editor-full-featured
 uv sync
-
-# Run the application
-uv run python Ultra_PDF_Editor.py
+uv run ultra-pdf-editor
 ```
 
-### Using pip
+To open a file straight away: `uv run ultra-pdf-editor "path/to/file.pdf"`.
 
-```bash
-# Clone the repository
-git clone https://github.com/your-org/ultra-pdf-editor.git
-cd ultra-pdf-editor
+**3. Optional: OCR**
 
-# Create virtual environment
-python -m venv .venv
+OCR needs the free [Tesseract](https://github.com/tesseract-ocr/tesseract) engine. The app finds it on your `PATH` or in its usual install folder.
 
-# Activate virtual environment
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
+| System | Command |
+|---|---|
+| Windows | Download the installer from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) |
+| macOS | `brew install tesseract` |
+| Ubuntu / Debian | `sudo apt install tesseract-ocr` |
 
-# Install dependencies
-pip install -e .
+**4. Optional: open PDFs from Explorer (Windows)**
 
-# Run the application
-python Ultra_PDF_Editor.py
+```powershell
+powershell -ExecutionPolicy Bypass -File .\register_file_association.ps1
 ```
 
-### Installing Tesseract (for OCR)
+This adds Ultra PDF Editor to the right-click **Open with** menu and creates a Desktop shortcut, without administrator rights. Run it again with `-Unregister` to remove it.
 
-**Windows:**
-```bash
-# Using chocolatey
-choco install tesseract
+> Developed and tested on Windows 10 and 11. PyQt6 and PyMuPDF also run on macOS and Linux, but those platforms are not tested yet; reports are welcome.
 
-# Or download installer from:
-# https://github.com/UB-Mannheim/tesseract/wiki
-```
+## Usage
 
-**macOS:**
-```bash
-brew install tesseract
-```
+- **Open** a file with `Ctrl+O`, by dragging it onto the window, or from **File → Recent Files**.
+- **Edit text:** with the Text tool (`I` icon), double-click a paragraph, retype it, then press `Ctrl+Enter` or click away. `Esc` cancels.
+- **Annotate:** pick a tool on the second toolbar, set colour and width, then drag on the page.
+- **Reorder pages:** drag thumbnails in the **Pages** panel; right-click one for rotate, extract or delete.
+- **Merge, split, OCR, watermark, encrypt:** all live in the **Tools** menu.
+- **Save** with `Ctrl+S`. Until then, every change can be undone with `Ctrl+Z`.
 
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt install tesseract-ocr
-# For additional languages:
-sudo apt install tesseract-ocr-fra tesseract-ocr-deu  # French, German, etc.
-```
+The [User Guide](docs/USER_GUIDE.md) walks through every tool.
 
-## Quick Start
+## Keyboard shortcuts
 
-### Opening a PDF
-```
-File → Open (Ctrl+O)
-```
-Or drag and drop a PDF file onto the application window.
+| Action | Shortcut | Action | Shortcut |
+|---|---|---|---|
+| Open | `Ctrl+O` | Find | `Ctrl+F` |
+| Save | `Ctrl+S` | Find and replace | `Ctrl+H` |
+| Save as | `Ctrl+Shift+S` | Zoom in / out | `Ctrl++` / `Ctrl+-` |
+| Print | `Ctrl+P` | Fit width / fit page | `Ctrl+1` / `Ctrl+2` |
+| Undo / redo | `Ctrl+Z` / `Ctrl+Y` | Actual size | `Ctrl+0` |
+| Rotate page | `Ctrl+R` / `Ctrl+Shift+R` | Full screen | `F11` |
+| Preferences | `Ctrl+,` | Next / previous page | `Page Down` / `Page Up` |
 
-### Creating a New Document
-```
-File → New (Ctrl+N)
-```
-
-### Adding Annotations
-1. Select an annotation tool from the toolbar
-2. Click and drag on the page to create the annotation
-3. Adjust properties in the sidebar
-
-### Merging PDFs
-```
-Tools → Merge PDFs
-```
-Select multiple files and arrange their order.
-
-### Converting to Word
-```
-File → Export → Microsoft Word (.docx)
-```
-
-## Keyboard Shortcuts
-
-| Action | Windows/Linux | macOS |
-|--------|---------------|-------|
-| New Document | Ctrl+N | Cmd+N |
-| Open | Ctrl+O | Cmd+O |
-| Save | Ctrl+S | Cmd+S |
-| Save As | Ctrl+Shift+S | Cmd+Shift+S |
-| Close | Ctrl+W | Cmd+W |
-| Print | Ctrl+P | Cmd+P |
-| Undo | Ctrl+Z | Cmd+Z |
-| Redo | Ctrl+Y | Cmd+Shift+Z |
-| Find | Ctrl+F | Cmd+F |
-| Zoom In | Ctrl++ | Cmd++ |
-| Zoom Out | Ctrl+- | Cmd+- |
-| Fit Page | Ctrl+0 | Cmd+0 |
-| Fit Width | Ctrl+1 | Cmd+1 |
-| Full Screen | F11 | Cmd+Ctrl+F |
-| Next Page | Page Down | Page Down |
-| Previous Page | Page Up | Page Up |
-
-## Project Structure
-
-```
-ultra-pdf-editor/
-├── Ultra_PDF_Editor.py     # Application entry point
-├── config.py               # Configuration and settings
-├── pyproject.toml          # Project dependencies
-│
-├── core/                   # Core PDF model
-│   └── pdf_document.py     # Document model
-│
-├── ui/                     # User interface
-│   ├── main_window.py      # Main application window
-│   ├── pdf_viewer.py       # PDF rendering widget
-│   ├── sidebar.py          # Side panels
-│   ├── toolbar.py          # Toolbars
-│   └── dialogs/            # Dialog windows
-│
-└── utils/                  # Utilities
-```
+**Help → Keyboard Shortcuts** in the app lists them all.
 
 ## Configuration
 
-User settings are stored at:
-- **Windows**: `%APPDATA%\UltraPDF\settings.json`
-- **macOS**: `~/Library/Application Support/UltraPDF/settings.json`
-- **Linux**: `~/.config/UltraPDF/settings.json`
+Settings are saved in `~/.ultra_pdf_editor/settings.json` (on Windows, `C:\Users\<you>\.ultra_pdf_editor\`), next to the log file `ultra_pdf.log`. Most of them are set from **Edit → Preferences**.
 
-### Available Settings
+A few advanced options are read from environment variables; copy `.env.example` to `.env` to change them.
 
-```json
-{
-  "theme": "system",          // "light", "dark", or "system"
-  "zoom_level": 100.0,
-  "view_mode": "continuous",  // "single", "two_page", or "continuous"
-  "autosave_enabled": true,
-  "autosave_interval": 300,   // seconds
-  "ocr_language": "eng",
-  "default_image_dpi": 150
-}
-```
-
-## Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| PyQt6 | GUI framework |
-| PyMuPDF (fitz) | PDF rendering & manipulation |
-| pypdf | PDF merging, splitting, metadata |
-| pikepdf | Advanced PDF manipulation |
-| reportlab | PDF generation |
-| Pillow | Image processing |
-| pytesseract | OCR integration |
-| python-docx | Word (.docx) export |
-| cryptography | Encryption support |
+| Variable | Default | Purpose |
+|---|---|---|
+| `TESSERACT_CMD` | (found automatically) | Full path to `tesseract.exe` |
+| `OCR_LANGUAGE` | `eng` | Tesseract language code, e.g. `eng+deu` |
+| `RENDER_DPI` | `150` | Screen render quality; lower it on slow machines |
+| `HIGH_QUALITY_DPI` | `300` | Export and print quality |
 
 ## Troubleshooting
 
-### Common Issues
+- **The app does not start:** run `uv sync` again, then `uv run ultra-pdf-editor` in a terminal and read the error it prints.
+- **OCR says Tesseract was not found:** check `tesseract --version` works, or set `TESSERACT_CMD` in `.env`.
+- **A PDF will not open:** it may be damaged (try another viewer) or need a password, which the app asks for.
+- **Scrolling feels slow on a huge file:** lower `RENDER_DPI` to `120` or `100`.
+- **Something else:** the log at `~/.ultra_pdf_editor/ultra_pdf.log` usually says why. Please attach it to a [bug report](https://github.com/uniqueabhishek/PDF-editor-full-featured/issues/new/choose).
 
-**Application won't start**
-- Ensure Python 3.10+ is installed
-- Run `uv sync` to install all dependencies
-- Check for error messages in the terminal
+## Built with
 
-**OCR not working**
-- Verify Tesseract is installed: `tesseract --version`
-- Install required language packs
-- Check Tesseract is in your system PATH
-
-**PDF won't open**
-- File may be corrupted - try opening in another PDF reader
-- File may be encrypted - enter the password when prompted
-- Check file permissions
-
-**Slow performance with large PDFs**
-- Close the document when you're done with it to free memory
-- Lower the rendering DPI with the `RENDER_DPI` environment variable
-
-### Getting Help
-
-1. Check the [User Guide](docs/USER_GUIDE.md) for detailed instructions
-2. Search [existing issues](https://github.com/your-org/ultra-pdf-editor/issues)
-3. Open a new issue with:
-   - Your OS and Python version
-   - Steps to reproduce the problem
-   - Error messages (if any)
+| Library | Used for |
+|---|---|
+| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) | The desktop interface |
+| [PyMuPDF](https://pymupdf.readthedocs.io/) | Rendering and editing PDFs |
+| [Pillow](https://python-pillow.org/) | Image handling for OCR and export |
+| [pytesseract](https://github.com/madmaze/pytesseract) | Talking to the Tesseract OCR engine |
+| [python-docx](https://python-docx.readthedocs.io/) | Word export |
+| [darkdetect](https://github.com/albertosottile/darkdetect) | Following the system light or dark theme |
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Bug reports, ideas and pull requests are welcome.
 
-### Development Setup
+- **Found a bug?** [Open an issue](https://github.com/uniqueabhishek/PDF-editor-full-featured/issues/new/choose) with the steps and the log file.
+- **Want a feature?** Open a feature request and describe what you are trying to do.
+- **Want to write code?** Read [CONTRIBUTING.md](CONTRIBUTING.md). In short:
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/ultra-pdf-editor.git
-cd ultra-pdf-editor
-
-# Install with dev dependencies
-uv sync --group dev
-
-# Run tests
-uv run pytest
-
-# Run linter
-uv run ruff check .
+uv sync
+uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+uv run pytest -p no:faulthandler
 ```
+
+Ruff and mypy run on every commit and the test suite on every push. The [architecture notes](docs/ARCHITECTURE.md) explain how the code is laid out.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+[MIT](LICENSE). Free to use, change and share, including commercially.
 
-## Acknowledgments
-
-- [PyMuPDF](https://pymupdf.readthedocs.io/) for excellent PDF handling
-- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) for the GUI framework
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for OCR capabilities
-- All open-source contributors
+Note that PyMuPDF is licensed under the [GNU AGPL](https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright) and PyQt6 under the [GPL](https://www.riverbankcomputing.com/static/Docs/PyQt6/introduction.html#license), so a program you distribute that bundles them must follow those licenses too.
 
 ---
 
-**Ultra PDF Editor** - Professional PDF editing made simple.
+<div align="center">
+
+If Ultra PDF Editor saves you time, please **star the repository** so more people can find it.
+
+</div>

@@ -38,7 +38,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 - Python 3.10 or higher
 - Git
-- uv package manager (recommended) or pip
+- [uv](https://docs.astral.sh/uv/) (the environment is locked by `uv.lock`)
 
 ### Setting Up Your Development Environment
 
@@ -46,22 +46,19 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 2. **Clone your fork**
    ```bash
-   git clone https://github.com/YOUR-USERNAME/ultra-pdf-editor.git
-   cd ultra-pdf-editor
+   git clone https://github.com/<your-username>/PDF-editor-full-featured.git
+   cd PDF-editor-full-featured
    ```
 
 3. **Add upstream remote**
    ```bash
-   git remote add upstream https://github.com/original-org/ultra-pdf-editor.git
+   git remote add upstream https://github.com/uniqueabhishek/PDF-editor-full-featured.git
    ```
 
 4. **Install dependencies**
    ```bash
-   # Using uv (recommended)
-   uv sync --group dev
-
-   # Or using pip
-   pip install -e ".[dev]"
+   uv sync
+   uv run pre-commit install --hook-type pre-commit --hook-type pre-push
    ```
 
 5. **Verify installation**
@@ -170,24 +167,15 @@ ultra-pdf-editor/
    i = 0
    ```
 
-### Ruff Configuration
+### Lint, format and types
 
-We use Ruff for linting. Configuration is in `pyproject.toml`:
+Ruff formats and lints the code and mypy checks the types; both are configured in `pyproject.toml`. The pre-commit hooks run them on every commit and the tests on every push.
 
-```toml
-[tool.ruff]
-line-length = 100
-target-version = "py310"
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
-ignore = ["E501"]  # Line length handled separately
-```
-
-Run linting:
 ```bash
-uv run ruff check .
-uv run ruff check --fix .  # Auto-fix issues
+uv run ruff format .
+uv run ruff check --fix .
+uv run mypy .
+uv run pytest -p no:faulthandler
 ```
 
 ### Import Organization
@@ -477,7 +465,7 @@ Use the bug report template and include:
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/your-org/ultra-pdf-editor/discussions) for general questions
+- Open a [Discussion](https://github.com/uniqueabhishek/PDF-editor-full-featured/discussions) for general questions
 - Join our community chat (if available)
 - Email maintainers for sensitive issues
 
