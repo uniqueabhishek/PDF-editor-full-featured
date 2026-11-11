@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - page render backends for the viewer's render worker.
+Open PDF Editor - page render backends for the viewer's render worker.
 
 PyMuPDF holds Python's GIL for the whole of every call, so a render running
 on a background *thread* still freezes the GUI thread: while one rendered, the
@@ -244,7 +244,7 @@ class ProcessRenderer:
     def __init__(self):
         ctx = multiprocessing.get_context("spawn")
         self._conn, child = ctx.Pipe()
-        self._proc = ctx.Process(target=serve, args=(child,), daemon=True, name="ultra-pdf-render")
+        self._proc = ctx.Process(target=serve, args=(child,), daemon=True, name="open-pdf-render")
         self._proc.start()
         child.close()
 

@@ -1,11 +1,15 @@
 # Changelog
 
-All notable changes to Ultra PDF Editor will be documented in this file.
+All notable changes to Open PDF Editor will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+- Renamed from Ultra PDF Editor to Open PDF Editor, with a new logo. Start it with `uv run Open_PDF_Editor.py`. Settings, recent files and stamps are copied from `~/.ultra_pdf_editor` to `~/.open_pdf_editor` on first start; the old folder is left in place.
+- If you used `register_file_association.ps1`, run it again: it removes the old Ultra PDF Editor entry and shortcut and adds the new ones.
 
 ### Added
 - Continuous integration on Windows: ruff, mypy and the test suite run on every push and pull request

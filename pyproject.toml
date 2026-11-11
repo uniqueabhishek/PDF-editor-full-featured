@@ -1,5 +1,5 @@
 [project]
-name = "ultra-pdf-editor"
+name = "open-pdf-editor"
 version = "1.0.0"
 description = "Free, offline desktop PDF editor: edit text, annotate, merge, split, OCR and protect PDFs"
 readme = "README.md"
@@ -45,7 +45,7 @@ Issues = "https://github.com/uniqueabhishek/PDF-editor-full-featured/issues"
 Changelog = "https://github.com/uniqueabhishek/PDF-editor-full-featured/blob/main/CHANGELOG.md"
 
 [project.scripts]
-ultra-pdf-editor = "Ultra_PDF_Editor:main"
+open-pdf-editor = "Open_PDF_Editor:main"
 
 [tool.uv]
 # Windows Smart App Control blocks unsigned executables. uv's managed CPython

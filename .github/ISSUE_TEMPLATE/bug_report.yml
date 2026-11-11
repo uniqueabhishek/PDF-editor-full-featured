@@ -43,7 +43,7 @@ body:
     id: log
     attributes:
       label: Log file
-      description: Paste the last lines of `~/.ultra_pdf_editor/ultra_pdf.log` (on Windows, `C:\Users\<you>\.ultra_pdf_editor\ultra_pdf.log`).
+      description: Paste the last lines of `~/.open_pdf_editor/open_pdf_editor.log` (on Windows, `C:\Users\<you>\.open_pdf_editor\open_pdf_editor.log`).
       render: text
 
   - type: markdown

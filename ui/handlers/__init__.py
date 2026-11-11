@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - MainWindow handler mixins.
+Open PDF Editor - MainWindow handler mixins.
 
 The MainWindow used to be a single ~1,900 line class. Its behaviour is split
 here into cohesive mixin classes grouped by menu/concern. Each mixin operates on

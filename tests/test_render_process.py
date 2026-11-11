@@ -139,7 +139,7 @@ def test_password_locked_source_is_refused(tmp_path, scan_pdf, process_renderer)
 def test_viewer_falls_back_when_render_process_dies(qtbot, scan_pdf, monkeypatch):
     pytest.importorskip("PyQt6")
     pytest.importorskip("pytestqt")
-    monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS", "0")
+    monkeypatch.setenv("OPEN_PDF_RENDER_IN_PROCESS", "0")
     from core.pdf_document import PDFDocument
     from ui.pdf_viewer import PDFViewer
 

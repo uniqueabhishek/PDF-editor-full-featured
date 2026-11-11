@@ -1,4 +1,4 @@
-# Performance Audit — Ultra PDF Editor
+# Performance Audit — Open PDF Editor
 
 Audit of the rendering pipeline, sidebar, document model, undo history, and
 edit/refresh wiring. Findings are ordered by impact. Most of the architecture is

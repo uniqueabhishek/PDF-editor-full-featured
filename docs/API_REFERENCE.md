@@ -1,6 +1,6 @@
-# Ultra PDF Editor - API Reference
+# Open PDF Editor - API Reference
 
-This document provides detailed API documentation for the core modules of Ultra PDF Editor.
+This document provides detailed API documentation for the core modules of Open PDF Editor.
 
 ## Table of Contents
 
@@ -622,7 +622,7 @@ Application-wide configuration constants.
 from config import config
 
 # Access configuration
-print(config.APP_NAME)        # "Ultra PDF Editor"
+print(config.APP_NAME)        # "Open PDF Editor"
 print(config.APP_VERSION)     # "1.0.0"
 print(config.SETTINGS_PATH)   # Path to settings file
 print(config.TEMP_DIR)        # Temporary files directory

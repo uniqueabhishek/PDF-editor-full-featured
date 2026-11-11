@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="resources/assets/ultra-pdf-128.png" alt="Ultra PDF Editor logo" width="96">
+<img src="resources/assets/open-pdf-128.png" alt="Open PDF Editor logo" width="96">
 
-# Ultra PDF Editor
+# Open PDF Editor
 
 **A free, offline desktop PDF editor. Edit text, annotate, merge, split, OCR and protect PDFs without uploading them anywhere.**
 
@@ -15,11 +15,11 @@
 
 [Features](#features) · [Install](#install) · [Usage](#usage) · [Shortcuts](#keyboard-shortcuts) · [User Guide](docs/USER_GUIDE.md) · [Contributing](CONTRIBUTING.md)
 
-<img src="docs/images/screenshot.png" alt="Ultra PDF Editor with a report open, page thumbnails on the left and highlighted text" width="900">
+<img src="docs/images/screenshot.png" alt="Open PDF Editor with a report open, page thumbnails on the left and highlighted text" width="900">
 
 </div>
 
-## Why Ultra PDF Editor?
+## Why Open PDF Editor?
 
 - **Private.** Everything runs on your computer. No account, no upload, no telemetry.
 - **Free and open source.** MIT licensed, with no watermarks and no paid tier.
@@ -45,7 +45,7 @@
 
 ## Install
 
-Ultra PDF Editor runs from source with [uv](https://docs.astral.sh/uv/), which installs the exact library versions the app was tested with.
+Open PDF Editor runs from source with [uv](https://docs.astral.sh/uv/), which installs the exact library versions the app was tested with.
 
 **1. Install the tools** (once per computer)
 
@@ -59,10 +59,10 @@ Ultra PDF Editor runs from source with [uv](https://docs.astral.sh/uv/), which i
 git clone https://github.com/uniqueabhishek/PDF-editor-full-featured.git
 cd PDF-editor-full-featured
 uv sync
-uv run ultra-pdf-editor
+uv run Open_PDF_Editor.py
 ```
 
-To open a file straight away: `uv run ultra-pdf-editor "path/to/file.pdf"`.
+To open a file straight away: `uv run Open_PDF_Editor.py "path/to/file.pdf"`.
 
 **3. Optional: OCR**
 
@@ -80,7 +80,7 @@ OCR needs the free [Tesseract](https://github.com/tesseract-ocr/tesseract) engin
 powershell -ExecutionPolicy Bypass -File .\register_file_association.ps1
 ```
 
-This adds Ultra PDF Editor to the right-click **Open with** menu and creates a Desktop shortcut, without administrator rights. Run it again with `-Unregister` to remove it.
+This adds Open PDF Editor to the right-click **Open with** menu and creates a Desktop shortcut, without administrator rights. Run it again with `-Unregister` to remove it.
 
 > Developed and tested on Windows 10 and 11. PyQt6 and PyMuPDF also run on macOS and Linux, but those platforms are not tested yet; reports are welcome.
 
@@ -111,7 +111,7 @@ The [User Guide](docs/USER_GUIDE.md) walks through every tool.
 
 ## Configuration
 
-Settings are saved in `~/.ultra_pdf_editor/settings.json` (on Windows, `C:\Users\<you>\.ultra_pdf_editor\`), next to the log file `ultra_pdf.log`. Most of them are set from **Edit → Preferences**.
+Settings are saved in `~/.open_pdf_editor/settings.json` (on Windows, `C:\Users\<you>\.open_pdf_editor\`), next to the log file `open_pdf_editor.log`. Most of them are set from **Edit → Preferences**.
 
 A few advanced options are read from environment variables; copy `.env.example` to `.env` to change them.
 
@@ -124,11 +124,11 @@ A few advanced options are read from environment variables; copy `.env.example` 
 
 ## Troubleshooting
 
-- **The app does not start:** run `uv sync` again, then `uv run ultra-pdf-editor` in a terminal and read the error it prints.
+- **The app does not start:** run `uv sync` again, then `uv run Open_PDF_Editor.py` in a terminal and read the error it prints.
 - **OCR says Tesseract was not found:** check `tesseract --version` works, or set `TESSERACT_CMD` in `.env`.
 - **A PDF will not open:** it may be damaged (try another viewer) or need a password, which the app asks for.
 - **Scrolling feels slow on a huge file:** lower `RENDER_DPI` to `120` or `100`.
-- **Something else:** the log at `~/.ultra_pdf_editor/ultra_pdf.log` usually says why. Please attach it to a [bug report](https://github.com/uniqueabhishek/PDF-editor-full-featured/issues/new/choose).
+- **Something else:** the log at `~/.open_pdf_editor/open_pdf_editor.log` usually says why. Please attach it to a [bug report](https://github.com/uniqueabhishek/PDF-editor-full-featured/issues/new/choose).
 
 ## Built with
 
@@ -167,6 +167,6 @@ Note that PyMuPDF is licensed under the [GNU AGPL](https://pymupdf.readthedocs.i
 
 <div align="center">
 
-If Ultra PDF Editor saves you time, please **star the repository** so more people can find it.
+If Open PDF Editor saves you time, please **star the repository** so more people can find it.
 
 </div>

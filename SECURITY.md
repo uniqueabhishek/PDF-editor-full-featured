@@ -21,6 +21,6 @@ You should get a first reply within a week. Once a fix is ready, it is released 
 
 ## Scope
 
-Ultra PDF Editor works offline and opens files you choose. The most relevant problems are PDFs crafted to crash the app, run code, or read or write files they should not, and redaction or encryption that does not remove or protect content as promised.
+Open PDF Editor works offline and opens files you choose. The most relevant problems are PDFs crafted to crash the app, run code, or read or write files they should not, and redaction or encryption that does not remove or protect content as promised.
 
 Flaws in PyMuPDF, Qt or Tesseract themselves should also be reported to those projects.

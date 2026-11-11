@@ -1,4 +1,4 @@
-/* Ultra PDF Editor - Dark theme */
+/* Open PDF Editor - Dark theme */
 QMainWindow {
     background-color: #1e1e1e;
 }

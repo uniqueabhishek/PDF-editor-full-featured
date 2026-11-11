@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Tools mixin.
+Open PDF Editor - Tools mixin.
 
 Merge, split, compress/optimize, OCR, watermark, header/footer (add, remove and
 smart-clean), encryption and batch processing. Mixed into MainWindow; relies on

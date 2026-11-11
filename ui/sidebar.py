@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
+Open PDF Editor - Sidebar with Thumbnails, Bookmarks, and Annotations
 """
 
 from dataclasses import dataclass

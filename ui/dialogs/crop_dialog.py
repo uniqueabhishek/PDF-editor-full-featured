@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Crop Page Dialog
+Open PDF Editor - Crop Page Dialog
 """
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal

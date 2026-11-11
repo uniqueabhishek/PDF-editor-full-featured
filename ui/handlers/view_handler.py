@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - View operations mixin.
+Open PDF Editor - View operations mixin.
 
 Zoom, fit, rotate, view mode, sidebar and fullscreen toggles. Mixed into
 MainWindow; relies on ``self._viewer``, ``self._sidebar`` and ``self._statusbar``.

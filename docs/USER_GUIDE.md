@@ -1,6 +1,6 @@
-# Ultra PDF Editor - User Guide
+# Open PDF Editor - User Guide
 
-A comprehensive guide to using Ultra PDF Editor for all your PDF editing needs.
+A comprehensive guide to using Open PDF Editor for all your PDF editing needs.
 
 ## Table of Contents
 
@@ -28,20 +28,20 @@ A comprehensive guide to using Ultra PDF Editor for all your PDF editing needs.
 **Windows:**
 ```bash
 # Using uv
-uv run python Ultra_PDF_Editor.py
+uv run python Open_PDF_Editor.py
 
 # Or directly
-.venv\Scripts\python.exe Ultra_PDF_Editor.py
+.venv\Scripts\python.exe Open_PDF_Editor.py
 ```
 
 **macOS/Linux:**
 ```bash
-uv run python Ultra_PDF_Editor.py
+uv run python Open_PDF_Editor.py
 ```
 
 ### First Launch
 
-On first launch, Ultra PDF Editor will:
+On first launch, Open PDF Editor will:
 1. Create a settings directory for your preferences
 2. Display the main window with an empty workspace
 3. Set the theme based on your system preference
@@ -55,11 +55,11 @@ On first launch, Ultra PDF Editor will:
 
 **Method 2: Drag and Drop**
 1. Drag a PDF file from your file explorer
-2. Drop it onto the Ultra PDF Editor window
+2. Drop it onto the Open PDF Editor window
 
 **Method 3: Command Line**
 ```bash
-uv run python Ultra_PDF_Editor.py "path/to/document.pdf"
+uv run python Open_PDF_Editor.py "path/to/document.pdf"
 ```
 
 ---
@@ -713,4 +713,4 @@ Available exports:
 
 ---
 
-*Ultra PDF Editor - Professional PDF editing made simple.*
+*Open PDF Editor - Professional PDF editing made simple.*

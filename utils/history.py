@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Undo/Redo History Manager
+Open PDF Editor - Undo/Redo History Manager
 Implements command pattern for unlimited undo/redo
 """
 

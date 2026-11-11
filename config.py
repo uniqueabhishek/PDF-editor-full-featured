@@ -1,9 +1,11 @@
 """
-Ultra PDF Editor - Configuration
+Open PDF Editor - Configuration
 """
 
 import json
+import logging
 import os
+import shutil
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -21,6 +23,14 @@ class ViewMode(Enum):
     CONTINUOUS = "continuous"
 
 
+def _app_dir() -> Path:
+    return Path.home() / ".open_pdf_editor"
+
+
+# Settings folder used before the app was renamed from Ultra PDF Editor.
+_LEGACY_APP_DIR_NAME = ".ultra_pdf_editor"
+
+
 class ZoomMode(Enum):
     FIT_PAGE = "fit_page"
     FIT_WIDTH = "fit_width"
@@ -32,23 +42,17 @@ class AppConfig:
     """Application configuration settings"""
 
     # Application Info
-    APP_NAME: str = "Ultra PDF Editor"
+    APP_NAME: str = "Open PDF Editor"
     APP_VERSION: str = "1.0.0"
-    APP_AUTHOR: str = "Ultra PDF Team"
+    APP_AUTHOR: str = "Open PDF Editor contributors"
 
     # Paths
-    CONFIG_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor")
-    RECENT_FILES_PATH: Path = field(
-        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "recent_files.json"
-    )
-    SETTINGS_PATH: Path = field(
-        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "settings.json"
-    )
-    TEMP_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "temp")
-    AUTOSAVE_DIR: Path = field(
-        default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "autosave"
-    )
-    STAMPS_DIR: Path = field(default_factory=lambda: Path.home() / ".ultra_pdf_editor" / "stamps")
+    CONFIG_DIR: Path = field(default_factory=_app_dir)
+    RECENT_FILES_PATH: Path = field(default_factory=lambda: _app_dir() / "recent_files.json")
+    SETTINGS_PATH: Path = field(default_factory=lambda: _app_dir() / "settings.json")
+    TEMP_DIR: Path = field(default_factory=lambda: _app_dir() / "temp")
+    AUTOSAVE_DIR: Path = field(default_factory=lambda: _app_dir() / "autosave")
+    STAMPS_DIR: Path = field(default_factory=lambda: _app_dir() / "stamps")
 
     # Window Settings
     WINDOW_WIDTH: int = 1400
@@ -153,8 +157,28 @@ class AppConfig:
         so that merely importing this module has no filesystem side effects —
         important for tests and tooling that import ``config``.
         """
+        self._migrate_legacy_dir()
         for directory in (self.CONFIG_DIR, self.TEMP_DIR, self.AUTOSAVE_DIR, self.STAMPS_DIR):
             directory.mkdir(parents=True, exist_ok=True)
+
+    def _migrate_legacy_dir(self) -> None:
+        """Copy settings, recent files and stamps from the pre-rename folder.
+
+        Runs once: only when the new folder does not exist yet and the old one
+        does. The old folder is left in place, so nothing is lost if the copy
+        fails part-way.
+        """
+        legacy = self.CONFIG_DIR.parent / _LEGACY_APP_DIR_NAME
+        if self.CONFIG_DIR.exists() or not legacy.is_dir():
+            return
+        try:
+            shutil.copytree(
+                legacy, self.CONFIG_DIR, ignore=shutil.ignore_patterns("temp", "*.log*")
+            )
+        except OSError:
+            logging.getLogger(__name__).warning(
+                "Could not copy settings from %s", legacy, exc_info=True
+            )
 
 
 @dataclass

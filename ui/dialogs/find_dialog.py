@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Find and Replace Dialog
+Open PDF Editor - Find and Replace Dialog
 """
 
 from typing import Any, cast

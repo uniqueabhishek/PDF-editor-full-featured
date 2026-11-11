@@ -224,7 +224,7 @@ def test_clean_pdf_scans_in_the_background(main_window, tmp_path, qtbot):
 
 @pytest.fixture(params=["thread", "process"])
 def render_mode(request, monkeypatch):
-    monkeypatch.setenv("ULTRA_PDF_RENDER_IN_PROCESS", "1" if request.param == "thread" else "0")
+    monkeypatch.setenv("OPEN_PDF_RENDER_IN_PROCESS", "1" if request.param == "thread" else "0")
     return request.param
 
 

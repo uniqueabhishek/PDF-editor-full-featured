@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Toolbar with all tools and actions
+Open PDF Editor - Toolbar with all tools and actions
 """
 
 from enum import Enum

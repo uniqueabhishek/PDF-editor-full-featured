@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Batch Processing Dialog
+Open PDF Editor - Batch Processing Dialog
 """
 
 from pathlib import Path

@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - File Utilities
+Open PDF Editor - File Utilities
 Helper functions for file operations
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 def get_temp_dir() -> Path:
     """Get temporary directory for the application"""
-    temp_dir = Path(tempfile.gettempdir()) / "ultra_pdf_editor"
+    temp_dir = Path(tempfile.gettempdir()) / "open_pdf_editor"
     temp_dir.mkdir(parents=True, exist_ok=True)
     return temp_dir
 

@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - PDF Document Model
+Open PDF Editor - PDF Document Model
 Handles PDF loading, manipulation, and saving using PyMuPDF (fitz)
 """
 

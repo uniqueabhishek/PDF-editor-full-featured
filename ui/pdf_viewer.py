@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - PDF Viewer Widget
+Open PDF Editor - PDF Viewer Widget
 High-performance PDF rendering and interaction widget
 """
 
@@ -170,7 +170,7 @@ class PageRenderWorker(QThread):
         from core.render_backend import InProcessRenderer, ProcessRenderer
 
         backend: Any = None
-        if os.environ.get("ULTRA_PDF_RENDER_IN_PROCESS") != "1":
+        if os.environ.get("OPEN_PDF_RENDER_IN_PROCESS") != "1":
             try:
                 backend = ProcessRenderer()
                 backend.page_count()  # wait until the process is up

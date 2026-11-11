@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Header and Footer Dialog
+Open PDF Editor - Header and Footer Dialog
 """
 
 from typing import Any

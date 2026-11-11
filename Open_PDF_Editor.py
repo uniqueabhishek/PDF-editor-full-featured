@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Main Application Entry Point
+Open PDF Editor - Main Application Entry Point
 A powerful yet simple PDF editor with all professional features.
 
 Features:
@@ -14,7 +14,7 @@ Features:
 - Batch processing for multiple files
 - And much more...
 
-Author: Ultra PDF Team
+Author: Open PDF Editor contributors
 Version: 1.0.0
 """
 
@@ -35,13 +35,13 @@ def setup_logging():
 
     Modules across the app log via ``logging.getLogger(__name__)`` and several
     error dialogs tell the user to "see the log" — without a configured handler
-    those records went nowhere. Logs to ``CONFIG_DIR/ultra_pdf.log`` (1 MB x 3
-    rotation). The level can be overridden with the ``ULTRA_PDF_LOG_LEVEL``
+    those records went nowhere. Logs to ``CONFIG_DIR/open_pdf_editor.log`` (1 MB x 3
+    rotation). The level can be overridden with the ``OPEN_PDF_LOG_LEVEL``
     environment variable (e.g. ``DEBUG``).
     """
     from config import config
 
-    level_name = os.environ.get("ULTRA_PDF_LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("OPEN_PDF_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
     root = logging.getLogger()
@@ -52,7 +52,10 @@ def setup_logging():
     try:
         config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
-            config.CONFIG_DIR / "ultra_pdf.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+            config.CONFIG_DIR / "open_pdf_editor.log",
+            maxBytes=1_000_000,
+            backupCount=3,
+            encoding="utf-8",
         )
         file_handler.setFormatter(fmt)
         file_handler.setLevel(level)
@@ -102,14 +105,14 @@ def setup_application():
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 
     # Windows: declare an explicit AppUserModelID *before* any window is shown so
-    # the taskbar uses our own icon and groups windows under "Ultra PDF Editor"
+    # the taskbar uses our own icon and groups windows under "Open PDF Editor"
     # instead of the host pythonw.exe.
     if sys.platform == "win32":
         try:
             import ctypes
 
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "UltraPDFTeam.UltraPDFEditor.1"
+                "OpenPDFEditor.OpenPDFEditor.1"
             )
         except Exception:  # noqa: BLE001 - taskbar grouping is cosmetic; never block start-up
             pass
@@ -122,7 +125,7 @@ def setup_application():
     # Application icon (window title bar + taskbar). The multi-resolution .ico
     # gives crisp results at every Windows icon size; fall back to the PNG.
     assets_dir = project_root / "resources" / "assets"
-    for icon_name in ("UltraPDF.ico", "ultra-pdf-256.png"):
+    for icon_name in ("OpenPDF.ico", "open-pdf-256.png"):
         icon_file = assets_dir / icon_name
         if icon_file.exists():
             app.setWindowIcon(QIcon(str(icon_file)))
@@ -161,7 +164,7 @@ def main():
 
     config.ensure_dirs()
     setup_logging()
-    logging.getLogger(__name__).info("Starting Ultra PDF Editor")
+    logging.getLogger(__name__).info("Starting Open PDF Editor")
 
     # Create application
     app = setup_application()

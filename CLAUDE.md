@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 PyQt6 PDF editor on PyMuPDF with OCR via pytesseract. Environment is
-uv-managed: `uv sync`, then `uv run ultra-pdf-editor`; tests with `uv run pytest`.
+uv-managed: `uv sync`, then `uv run Open_PDF_Editor.py`; tests with `uv run pytest`.
 
 `[tool.uv] python-preference = "only-system"` is deliberate and must stay: uv's
 managed CPython builds are unsigned and Smart App Control blocks their

@@ -1,4 +1,4 @@
-# Ultra PDF Editor — Improvements Audit
+# Open PDF Editor — Improvements Audit
 
 Second-pass review of the v1.0.0 tree, after the original `AUDIT_TODO.md`
 remediation (#1–#10) was completed. These are the next layer of findings:
@@ -40,7 +40,7 @@ implements the fix.
 - [x] **#B1 — Autosave writes decrypted copies of encrypted PDFs to disk.**
   `_autosave` → `save_copy(AUTOSAVE_DIR/recovery.pdf)` and `save_copy` saves with
   no encryption, so editing a password-protected PDF leaks plaintext to
-  `~/.ultra_pdf_editor/autosave/`. **Fix:** skip the unencrypted recovery write
+  `~/.open_pdf_editor/autosave/`. **Fix:** skip the unencrypted recovery write
   for protected documents (and document the behaviour).
 
 - [x] **#B2 — No logging is configured.** Modules log heavily and error dialogs

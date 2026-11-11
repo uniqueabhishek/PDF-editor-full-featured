@@ -1,6 +1,6 @@
-# Ultra PDF Editor - Architecture Documentation
+# Open PDF Editor - Architecture Documentation
 
-This document describes the software architecture, design decisions, and implementation details of Ultra PDF Editor.
+This document describes the software architecture, design decisions, and implementation details of Open PDF Editor.
 
 ## Table of Contents
 
@@ -20,13 +20,13 @@ This document describes the software architecture, design decisions, and impleme
 
 ## System Overview
 
-Ultra PDF Editor is a desktop application for PDF manipulation, built with a layered architecture that separates concerns between business logic and user interface.
+Open PDF Editor is a desktop application for PDF manipulation, built with a layered architecture that separates concerns between business logic and user interface.
 
 ### High-Level Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Ultra PDF Editor                         │
+│                        Open PDF Editor                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │

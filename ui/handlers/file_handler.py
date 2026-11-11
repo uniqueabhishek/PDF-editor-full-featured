@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - File operations mixin.
+Open PDF Editor - File operations mixin.
 
 Open/new/save/close, print, properties and the Export submenu. Mixed into
 MainWindow; relies on ``self._document``, ``self._viewer``, ``self._sidebar``,

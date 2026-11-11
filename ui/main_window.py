@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Main Application Window
+Open PDF Editor - Main Application Window
 
 MainWindow owns the application shell: window layout, menus, toolbars, status bar,
 signal wiring, settings and the top-level event handlers. The behaviour behind the

@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Extract Pages Dialog
+Open PDF Editor - Extract Pages Dialog
 """
 
 import re

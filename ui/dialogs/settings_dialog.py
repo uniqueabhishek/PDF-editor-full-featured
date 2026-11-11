@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Preferences Dialog
+Open PDF Editor - Preferences Dialog
 
 Exposes only settings that actually take effect. Emits ``settings_changed`` with
 the changed values so the main window can apply them live and persist them.

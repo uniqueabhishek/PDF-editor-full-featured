@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Split PDF Dialog
+Open PDF Editor - Split PDF Dialog
 
 Collects the split mode and options. The actual split is performed by the caller
 via the ``PDFDocument.split_by_*`` methods, which operate on the in-memory

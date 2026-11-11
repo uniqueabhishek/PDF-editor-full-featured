@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Theme application
+Open PDF Editor - Theme application
 
 Shared helper for applying the light/dark Qt stylesheet, used both at startup
 and when the user changes the theme in Preferences at runtime.

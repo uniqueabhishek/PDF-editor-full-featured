@@ -1,6 +1,6 @@
-# Contributing to Ultra PDF Editor
+# Contributing to Open PDF Editor
 
-Thank you for your interest in contributing to Ultra PDF Editor! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Open PDF Editor! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 
@@ -63,7 +63,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 5. **Verify installation**
    ```bash
-   uv run python Ultra_PDF_Editor.py
+   uv run python Open_PDF_Editor.py
    ```
 
 ## Development Environment
@@ -91,8 +91,8 @@ We are committed to providing a welcoming and inclusive environment for all cont
 ### Project Structure Overview
 
 ```
-ultra-pdf-editor/
-├── Ultra_PDF_Editor.py     # Entry point - application startup
+open-pdf-editor/
+├── Open_PDF_Editor.py     # Entry point - application startup
 ├── config.py               # Configuration classes and constants
 ├── pyproject.toml          # Dependencies and project metadata
 │
@@ -397,7 +397,7 @@ Use the bug report template and include:
 1. **Environment**:
    - OS and version
    - Python version
-   - Ultra PDF Editor version
+   - Open PDF Editor version
 
 2. **Steps to reproduce**:
    ```
@@ -471,4 +471,4 @@ Use the bug report template and include:
 
 ---
 
-Thank you for contributing to Ultra PDF Editor!
+Thank you for contributing to Open PDF Editor!

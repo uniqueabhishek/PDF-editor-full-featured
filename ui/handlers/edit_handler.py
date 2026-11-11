@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Edit and Search operations mixin.
+Open PDF Editor - Edit and Search operations mixin.
 
 Undo/redo, clipboard, select-all, and the Find / Find & Replace workflow.
 Mixed into MainWindow; relies on ``self._history_manager``, ``self._viewer``,

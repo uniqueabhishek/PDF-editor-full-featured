@@ -60,3 +60,41 @@ def test_clear_recent_files():
     s.add_recent_file("a.pdf")
     s.clear_recent_files()
     assert s.recent_files == []
+
+
+def _config_in(home):
+    from config import AppConfig
+
+    new = home / ".open_pdf_editor"
+    return AppConfig(
+        CONFIG_DIR=new,
+        TEMP_DIR=new / "temp",
+        AUTOSAVE_DIR=new / "autosave",
+        STAMPS_DIR=new / "stamps",
+    )
+
+
+def test_settings_copied_from_pre_rename_folder(tmp_path):
+    legacy = tmp_path / ".ultra_pdf_editor"
+    (legacy / "temp").mkdir(parents=True)
+    (legacy / "settings.json").write_text('{"theme": "dark"}')
+    (legacy / "ultra_pdf.log").write_text("old log")
+
+    cfg = _config_in(tmp_path)
+    cfg.ensure_dirs()
+
+    assert (cfg.CONFIG_DIR / "settings.json").read_text() == '{"theme": "dark"}'
+    assert not (cfg.CONFIG_DIR / "ultra_pdf.log").exists()
+    assert (legacy / "settings.json").exists()
+
+
+def test_existing_folder_is_not_overwritten(tmp_path):
+    (tmp_path / ".ultra_pdf_editor").mkdir()
+    (tmp_path / ".ultra_pdf_editor" / "settings.json").write_text("old")
+    cfg = _config_in(tmp_path)
+    cfg.CONFIG_DIR.mkdir()
+    (cfg.CONFIG_DIR / "settings.json").write_text("new")
+
+    cfg.ensure_dirs()
+
+    assert (cfg.CONFIG_DIR / "settings.json").read_text() == "new"

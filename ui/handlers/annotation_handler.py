@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Annotation and redaction mixin.
+Open PDF Editor - Annotation and redaction mixin.
 
 Handles tool-mode changes from the annotation toolbar, routes annotation-creation
 requests from the viewer through the undo/redo history, and performs area

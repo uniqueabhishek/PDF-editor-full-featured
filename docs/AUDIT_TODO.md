@@ -1,4 +1,4 @@
-# Ultra PDF Editor — Audit Remediation To-Do
+# Open PDF Editor — Audit Remediation To-Do
 
 Living checklist derived from the code audit of the v1.0.0 tree.
 **Last updated:** 2026-05-31.

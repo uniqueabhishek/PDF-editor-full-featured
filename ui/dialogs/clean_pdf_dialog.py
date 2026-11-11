@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Clean PDF Dialog
+Open PDF Editor - Clean PDF Dialog
 
 Shows repeating margin text found by scan_margin_text() and lets the user
 choose which items to permanently remove.

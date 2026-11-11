@@ -1,4 +1,4 @@
-/* Ultra PDF Editor - Light theme */
+/* Open PDF Editor - Light theme */
 QMainWindow {
     background-color: #f5f5f5;
 }

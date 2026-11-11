@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Page operations mixin.
+Open PDF Editor - Page operations mixin.
 
 Insert, delete, extract, rotate and crop pages. Mixed into MainWindow; relies on
 ``self._document``, ``self._viewer``, ``self._history_manager`` and the shared

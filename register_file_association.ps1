@@ -1,20 +1,20 @@
 <#
 .SYNOPSIS
-    Register Ultra PDF Editor as a per-user handler for .pdf files and create a
+    Register Open PDF Editor as a per-user handler for .pdf files and create a
     Desktop shortcut.
 
 .DESCRIPTION
-    Adds a per-user (HKCU) ProgID so Windows can open PDFs in Ultra PDF Editor,
+    Adds a per-user (HKCU) ProgID so Windows can open PDFs in Open PDF Editor,
     lists the app in the right-click "Open with" menu, and drops a Desktop
     shortcut that launches the editor with no document.
 
     No administrator rights are needed (everything lives under HKCU). Windows
     protects the *default* PDF handler with a per-user hash, so this script
-    cannot silently make Ultra PDF Editor the default. After running it, set the
+    cannot silently make Open PDF Editor the default. After running it, set the
     default once by hand:
 
         Right-click any .pdf -> Open with -> Choose another app ->
-        Ultra PDF Editor -> check "Always" -> OK.
+        Open PDF Editor -> check "Always" -> OK.
 
 .PARAMETER Unregister
     Remove everything this script creates (ProgID, Open-With entry, shortcut).
@@ -35,13 +35,29 @@ $ErrorActionPreference = 'Stop'
 # --- Resolve paths relative to this script so the project can be moved -------
 $ProjectDir  = $PSScriptRoot
 $Pythonw     = Join-Path $ProjectDir '.venv\Scripts\pythonw.exe'
-$EntryScript = Join-Path $ProjectDir 'Ultra_PDF_Editor.py'
-$IconPath    = Join-Path $ProjectDir 'resources\assets\UltraPDF.ico'
+$EntryScript = Join-Path $ProjectDir 'Open_PDF_Editor.py'
+$IconPath    = Join-Path $ProjectDir 'resources\assets\OpenPDF.ico'
 
-$ProgId        = 'UltraPDFEditor.pdf'
+$ProgId        = 'OpenPDFEditor.pdf'
 $ProgIdKey     = "HKCU:\Software\Classes\$ProgId"
 $OpenWithKey   = 'HKCU:\Software\Classes\.pdf\OpenWithProgids'
-$ShortcutPath  = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Ultra PDF Editor.lnk'
+$ShortcutPath  = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Open PDF Editor.lnk'
+
+# Left behind by versions released as Ultra PDF Editor; removed on every run.
+$LegacyProgId    = 'UltraPDFEditor.pdf'
+$LegacyShortcut  = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Ultra PDF Editor.lnk'
+
+function Remove-Legacy {
+    $key = "HKCU:\Software\Classes\$LegacyProgId"
+    if (Test-Path $key) { Remove-Item $key -Recurse -Force; Write-Host "Removed old ProgID $LegacyProgId" }
+    if (Test-Path $OpenWithKey) {
+        $prop = Get-ItemProperty $OpenWithKey -ErrorAction SilentlyContinue
+        if ($prop -and $prop.PSObject.Properties.Name -contains $LegacyProgId) {
+            Remove-ItemProperty $OpenWithKey -Name $LegacyProgId -Force
+        }
+    }
+    if (Test-Path $LegacyShortcut) { Remove-Item $LegacyShortcut -Force; Write-Host "Removed old Desktop shortcut" }
+}
 
 function Remove-Registration {
     if (Test-Path $ProgIdKey) {
@@ -59,7 +75,7 @@ function Remove-Registration {
         Remove-Item $ShortcutPath -Force
         Write-Host "Removed Desktop shortcut"
     }
-    Write-Host "`nUnregistered. Windows may still list Ultra PDF Editor under" `
+    Write-Host "`nUnregistered. Windows may still list Open PDF Editor under" `
         "'Open with' until you pick a different default for .pdf once."
 }
 
@@ -78,7 +94,7 @@ function New-Registration {
     Set-ItemProperty -Path $cmdKey -Name '(default)' -Value $command
 
     # A friendly label for the "Open with" list
-    Set-ItemProperty -Path (Join-Path $ProgIdKey 'shell\open') -Name 'FriendlyAppName' -Value 'Ultra PDF Editor'
+    Set-ItemProperty -Path (Join-Path $ProgIdKey 'shell\open') -Name 'FriendlyAppName' -Value 'Open PDF Editor'
 
     # Icon shown for PDFs handled by this ProgID (and in the Open-With list)
     if (Test-Path $IconPath) {
@@ -102,7 +118,7 @@ function New-Registration {
     $lnk.TargetPath       = $Pythonw
     $lnk.Arguments        = '"{0}"' -f $EntryScript
     $lnk.WorkingDirectory = $ProjectDir
-    $lnk.Description       = 'Ultra PDF Editor'
+    $lnk.Description       = 'Open PDF Editor'
     if (Test-Path $IconPath) { $lnk.IconLocation = ('{0},0' -f $IconPath) }
     $lnk.Save()
     Write-Host "Created Desktop shortcut: $ShortcutPath"
@@ -118,7 +134,8 @@ public static extern void SHChangeNotify(int eventId, int flags, System.IntPtr i
 
     Write-Host ""
     Write-Host "Next step (one time): right-click any .pdf -> Open with ->"
-    Write-Host "Choose another app -> 'Ultra PDF Editor' -> check 'Always'."
+    Write-Host "Choose another app -> 'Open PDF Editor' -> check 'Always'."
 }
 
+Remove-Legacy
 if ($Unregister) { Remove-Registration } else { New-Registration }

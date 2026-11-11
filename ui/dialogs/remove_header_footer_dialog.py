@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Remove Header/Footer Dialog
+Open PDF Editor - Remove Header/Footer Dialog
 
 Uses PyMuPDF redaction to permanently erase content in the top/bottom
 strip of each selected page.

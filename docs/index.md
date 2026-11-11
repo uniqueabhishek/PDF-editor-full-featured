@@ -1,6 +1,6 @@
-# Ultra PDF Editor Documentation
+# Open PDF Editor Documentation
 
-Welcome to the Ultra PDF Editor documentation. This guide covers everything from basic usage to advanced development.
+Welcome to the Open PDF Editor documentation. This guide covers everything from basic usage to advanced development.
 
 ## Quick Links
 
@@ -68,4 +68,4 @@ Found an issue with the documentation? Please:
 
 ---
 
-*Ultra PDF Editor - Professional PDF editing made simple.*
+*Open PDF Editor - Professional PDF editing made simple.*

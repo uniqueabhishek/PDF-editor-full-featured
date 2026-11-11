@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - Merge PDFs Dialog
+Open PDF Editor - Merge PDFs Dialog
 
 Collects the ordered file list and merge options. The actual merge is performed
 by the caller via ``PDFDocument.merge_pdfs()`` so the tested core logic stays the

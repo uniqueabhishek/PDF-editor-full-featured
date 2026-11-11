@@ -1,5 +1,5 @@
 """
-Ultra PDF Editor - toolbar icons drawn with QPainter.
+Open PDF Editor - toolbar icons drawn with QPainter.
 
 The toolbar used emoji and symbol characters as button labels. Segoe UI has
 none of them, so the first time Qt measured each one it searched the system
