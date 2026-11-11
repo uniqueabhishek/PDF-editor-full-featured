@@ -213,6 +213,20 @@ def test_replace_all_in_copy_reports_progress_and_cancels(tmp_path):
         doc.close()
 
 
+@pytest.mark.parametrize("angle", [45, 30, 90, 0])
+def test_add_watermark_works_at_any_angle(opened, angle):
+    """insert_text's rotate= only takes multiples of 90, so the default 45
+    used to fail every time and the whole operation rolled back."""
+    assert opened.add_watermark("DRAFT", rotation=angle) is True
+    for i in range(opened.page_count):
+        page = opened.doc[i]
+        assert "DRAFT" in page.get_text()
+        # Centred on the page.
+        box = page.search_for("DRAFT")[0]
+        cx, cy = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+        assert abs(cx - page.rect.width / 2) < 30 and abs(cy - page.rect.height / 2) < 30
+
+
 def test_replace_text_all_case_sensitive(tmp_path):
     p = tmp_path / "repc.pdf"
     d = fitz.open()

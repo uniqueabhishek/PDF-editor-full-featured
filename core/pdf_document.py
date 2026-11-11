@@ -1730,27 +1730,27 @@ class PDFDocument:
 
         target_pages = pages if pages else range(self.page_count)
 
+        # insert_text's ``rotate`` only accepts multiples of 90 ("bad rotate
+        # value" for the default 45, so every watermark failed and rolled
+        # back). Rotate with a morph about the page centre instead, which
+        # takes any angle, and centre the text on that point.
+        length = fitz.get_text_length(text, fontname="helv", fontsize=font_size)
         for page_num in target_pages:
             page = self.get_page(page_num)
             rect = page.rect
-
-            # Create watermark shape
-            shape = page.new_shape()
-
-            # Calculate center position
-            center = fitz.Point(rect.width / 2, rect.height / 2)
-
-            # Insert text with rotation
-            shape.insert_text(
-                center,
+            center = fitz.Point(rect.x0 + rect.width / 2, rect.y0 + rect.height / 2)
+            start = fitz.Point(center.x - length / 2, center.y + font_size / 3)
+            page.insert_text(
+                start,
                 text,
                 fontsize=font_size,
+                fontname="helv",
                 color=color,
-                rotate=int(rotation),
+                fill_opacity=opacity,
+                # A positive angle runs the text up from bottom-left to
+                # top-right on screen.
+                morph=(center, fitz.Matrix(rotation)),
             )
-
-            shape.finish(color=color, fill=color, fill_opacity=opacity)
-            shape.commit()
 
         self._is_modified = True
         return True
