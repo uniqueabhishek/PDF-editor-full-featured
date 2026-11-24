@@ -1,21 +1,8 @@
 """
 Open PDF Editor - Main Application Entry Point
-A powerful yet simple PDF editor with all professional features.
-
-Features:
-- View, navigate, and zoom PDFs
-- Merge, split, rotate, and reorder pages
-- Annotations: highlight, underline, shapes, text boxes, stamps
-- Text editing and image insertion
-- Forms: fill and create fillable forms
-- Security: encryption, digital signatures, redaction
-- OCR: convert scanned documents to searchable text
-- Conversion: PDF to/from Word, Excel, images
-- Batch processing for multiple files
-- And much more...
-
-Author: Open PDF Editor contributors
-Version: 1.0.0
+A free, offline desktop PDF editor: view, edit text, annotate, merge, split,
+OCR, redact and password-protect PDFs. The version lives in pyproject.toml
+and config.APP_VERSION.
 """
 
 import importlib.util
@@ -176,14 +163,74 @@ def main():
     window = MainWindow()
     window.show()
 
+    smoke_pdf = os.environ.get(SMOKE_TEST_ENV)
+    if smoke_pdf:
+        start_smoke_test(app, window, smoke_pdf)
     # Handle command line arguments (open file if provided)
-    if len(sys.argv) > 1:
+    elif len(sys.argv) > 1:
         filepath = sys.argv[1]
         if os.path.exists(filepath) and filepath.lower().endswith(".pdf"):
             window._open_file(filepath)
 
     # Run application
     sys.exit(app.exec())
+
+
+# Set to a PDF path to check a build end to end without anyone at the screen:
+# the app opens the file, waits for the render process to deliver the first
+# page, logs "SMOKE OK", and exits 0. Any error or a timeout exits non-zero.
+# Used by the release workflow on the packaged exe.
+SMOKE_TEST_ENV = "OPEN_PDF_SMOKE_TEST"
+SMOKE_TEST_TIMEOUT_MS = 60_000
+
+
+def start_smoke_test(app, window, pdf_path: str) -> None:
+    """Open ``pdf_path`` and exit once its first page has rendered."""
+    from PyQt6.QtCore import QTimer
+
+    log = logging.getLogger("smoke_test")
+    done = False
+
+    def finish(code: int, message: str) -> None:
+        nonlocal done
+        if done:
+            return
+        done = True
+        (log.info if code == 0 else log.error)(message)
+        # Leave every event loop, including a message box's, and skip the
+        # unsaved-changes prompt (nothing is edited, but be safe).
+        window._is_modified = False
+        # Queued, because a failure can happen before app.exec() has started,
+        # and exit() is ignored while no event loop is running.
+        QTimer.singleShot(0, lambda: app.exit(code))
+
+    def on_rendered(page_num, *_args) -> None:
+        finish(0, f"SMOKE OK {window._document.page_count} pages, page {page_num + 1} rendered")
+
+    previous_hook = sys.excepthook
+
+    def on_exception(exc_type, exc, tb) -> None:
+        log.error("Smoke test failed", exc_info=(exc_type, exc, tb))
+        finish(1, f"SMOKE FAILED {exc_type.__name__}: {exc}")
+        previous_hook(exc_type, exc, tb)
+
+    sys.excepthook = on_exception
+
+    # A message box would wait for a click that never comes; fail instead.
+    from PyQt6.QtWidgets import QMessageBox
+
+    def no_dialog(_parent, title, text, *_args, **_kwargs):
+        finish(4, f"SMOKE FAILED dialog '{title}': {text}")
+        return QMessageBox.StandardButton.Ok
+
+    for name in ("critical", "warning", "information", "question"):
+        setattr(QMessageBox, name, staticmethod(no_dialog))
+
+    window._viewer._render_worker.page_rendered.connect(on_rendered)
+    QTimer.singleShot(SMOKE_TEST_TIMEOUT_MS, lambda: finish(2, "SMOKE FAILED timeout"))
+    window._open_file(pdf_path)
+    if not window._document.is_open:
+        QTimer.singleShot(0, lambda: finish(3, f"SMOKE FAILED could not open {pdf_path}"))
 
 
 if __name__ == "__main__":

@@ -198,6 +198,20 @@ def test_ocr_skips_pages_with_text_and_passes_pixels_directly(
     assert texts == ["already has text", "scanned", "scanned"]
 
 
+def test_ocr_without_tesseract_explains_instead_of_crashing(main_window, make_pdf, monkeypatch):
+    import utils.tesseract
+    from ui.handlers import tools_handler as th
+
+    warnings = []
+    monkeypatch.setattr(utils.tesseract, "configure_tesseract", lambda: False)
+    monkeypatch.setattr(
+        th.QMessageBox, "warning", staticmethod(lambda _p, title, *_a: warnings.append(title))
+    )
+    main_window._open_file(str(make_pdf("doc.pdf", pages=1)))
+    main_window._run_ocr()
+    assert warnings == ["Tesseract Not Found"]
+
+
 def test_clean_pdf_scans_in_the_background(main_window, tmp_path, qtbot):
     import fitz
 
