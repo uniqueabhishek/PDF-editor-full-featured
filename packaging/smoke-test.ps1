@@ -51,3 +51,6 @@ if ($proc.ExitCode -ne 0 -or $text -notmatch 'SMOKE OK') {
     exit 1
 }
 Write-Host "Smoke test passed: $exePath"
+# Set the exit code explicitly: callers check $LASTEXITCODE, which a script
+# that just ends would leave at whatever an earlier program returned.
+exit 0
