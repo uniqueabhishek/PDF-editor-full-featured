@@ -6,18 +6,36 @@
 
 **A free, offline desktop PDF editor. Edit text, annotate, merge, split, OCR and protect PDFs without uploading them anywhere.**
 
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%2010%2F11-0078d4?style=for-the-badge&logo=windows)](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/latest/download/OpenPDFEditor-Setup.exe)
+
+[![Latest release](https://img.shields.io/github/v/release/uniqueabhishek/PDF-editor-full-featured)](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/uniqueabhishek/PDF-editor-full-featured/total)](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases)
 [![CI](https://github.com/uniqueabhishek/PDF-editor-full-featured/actions/workflows/ci.yml/badge.svg)](https://github.com/uniqueabhishek/PDF-editor-full-featured/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://www.riverbankcomputing.com/software/pyqt/)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
-[Features](#features) · [Install](#install) · [Usage](#usage) · [Shortcuts](#keyboard-shortcuts) · [User Guide](docs/USER_GUIDE.md) · [Contributing](CONTRIBUTING.md)
+[Download](#download) · [Features](#features) · [Usage](#usage) · [Shortcuts](#keyboard-shortcuts) · [User Guide](docs/USER_GUIDE.md) · [Run from source](#run-from-source) · [Contributing](CONTRIBUTING.md)
 
 <img src="docs/images/screenshot.png" alt="Open PDF Editor with a report open, page thumbnails on the left and highlighted text" width="900">
 
 </div>
+
+## Download
+
+For Windows 10 and 11 (64-bit). Free, no account, nothing else to install.
+
+| Download | What it is |
+|---|---|
+| [**OpenPDFEditor-Setup.exe**](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/latest/download/OpenPDFEditor-Setup.exe) | Installer. No administrator rights needed. Adds a Start-menu entry and, if you tick it, an "Open with" entry for PDF files. |
+| [**OpenPDFEditor-Portable.zip**](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/latest/download/OpenPDFEditor-Portable.zip) | No install: unzip anywhere (even a USB stick) and run `Open PDF Editor.exe`. |
+
+All versions and their checksums are on the [Releases page](https://github.com/uniqueabhishek/PDF-editor-full-featured/releases).
+
+**First launch:** the app is not code-signed yet, so Windows may show *"Windows protected your PC"*. Click **More info → Run anyway**; it only asks once. On PCs with **Smart App Control** turned on, Windows blocks unsigned apps completely; there, [run it from source](#run-from-source) for now.
+
+**OCR (optional):** reading scanned pages needs the free Tesseract engine. Install it from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) and restart the app.
+
+**Uninstall:** Windows Settings → Apps → Open PDF Editor. Your settings in `C:\Users\<you>\.open_pdf_editor` are kept.
 
 ## Why Open PDF Editor?
 
@@ -43,9 +61,9 @@
 | **Export** | Pages as PNG images · text to Word (`.docx`) or plain text · print |
 | **Batch** | Run the same operation over a folder of PDFs |
 
-## Install
+## Run from source
 
-Open PDF Editor runs from source with [uv](https://docs.astral.sh/uv/), which installs the exact library versions the app was tested with.
+For developers, or for macOS, Linux and PCs with Smart App Control. [uv](https://docs.astral.sh/uv/) installs the exact library versions the app was tested with.
 
 **1. Install the tools** (once per computer)
 

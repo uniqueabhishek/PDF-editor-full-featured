@@ -1,6 +1,6 @@
 [project]
 name = "open-pdf-editor"
-version = "1.0.0"
+version = "1.1.0"
 description = "Free, offline desktop PDF editor: edit text, annotate, merge, split, OCR and protect PDFs"
 readme = "README.md"
 license = "MIT"

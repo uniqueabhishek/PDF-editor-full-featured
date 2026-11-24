@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Multi-tab document support
+- Batch processing wizard
+- Digital signature support
+- PDF comparison tool
+- Plugin architecture
+
+---
+
+## [1.1.0] - 2026-11-24
+
+### Added
+- Windows download: an installer (`OpenPDFEditor-Setup.exe`, no administrator rights needed) and a portable zip, so Python is no longer needed to use the app
+- The installer can add Open PDF Editor to the "Open with" menu for PDF files, and keeps your settings when uninstalled
+- Every download includes the licences of the libraries it contains
+
 ### Changed
 - Renamed from Ultra PDF Editor to Open PDF Editor, with a new logo. Start it with `uv run Open_PDF_Editor.py`. Settings, recent files and stamps are copied from `~/.ultra_pdf_editor` to `~/.open_pdf_editor` on first start; the old folder is left in place.
 - If you used `register_file_association.ps1`, run it again: it removes the old Ultra PDF Editor entry and shortcut and adds the new ones.
@@ -18,13 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Light theme is readable when Windows is in dark mode (menus and labels were white on white)
 - Status bar shows the page number as soon as a PDF opens, instead of "No document"
-
-### Planned
-- Multi-tab document support
-- Batch processing wizard
-- Digital signature support
-- PDF comparison tool
-- Plugin architecture
 
 ---
 
@@ -142,5 +151,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/tag/v1.1.0
 [1.0.0]: https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/tag/v1.0.0

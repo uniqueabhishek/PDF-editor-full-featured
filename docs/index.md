@@ -16,8 +16,8 @@ Welcome to the Open PDF Editor documentation. This guide covers everything from 
 ## For Users
 
 ### Getting Started
-1. [Installation](../README.md#installation)
-2. [Quick Start](../README.md#quick-start)
+1. [Download](../README.md#download)
+2. [Usage](../README.md#usage)
 3. [User Guide](USER_GUIDE.md)
 
 ### Common Tasks
