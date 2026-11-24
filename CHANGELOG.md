@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `TESSERACT_CMD` setting: point the app at `tesseract.exe` when it is installed somewhere unusual (it was documented before but not read)
 
+### Fixed
+- Editing a paragraph that spans several lines shows it at its real size, wrapped like on the page, instead of squeezed onto one line in tiny text
+
 ### Planned
 - Multi-tab document support
 - Batch processing wizard

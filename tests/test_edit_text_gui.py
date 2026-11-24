@@ -52,6 +52,43 @@ def test_inline_edit_commit_emits_signal(qtbot, tmp_path):
         model.close()
 
 
+def test_wrapped_paragraph_keeps_its_size(qtbot, tmp_path):
+    # A paragraph over several lines used to be squeezed onto one line in tiny
+    # text; it must keep its on-page size and wrap inside the editor instead.
+    p = tmp_path / "para.pdf"
+    d = fitz.open()
+    page = d.new_page(width=595, height=842)
+    page.insert_textbox(
+        fitz.Rect(48, 150, 547, 260),
+        "Revenue grew steadily across all three regions this quarter, led by strong "
+        "demand for the subscription plans introduced in the spring. Operating costs "
+        "stayed within budget.",
+        fontsize=12,
+        fontname="helv",
+    )
+    d.save(str(p))
+    d.close()
+    model = PDFDocument()
+    model.open(p)
+    v = PDFViewer()
+    qtbot.addWidget(v)
+    v.set_document(model.doc, str(p))
+    v.set_text_block_provider(model.detect_text_block)
+    try:
+        assert model.detect_text_block(0, (100, 160))["line_count"] >= 2
+        v._on_edit_text_requested(0, QPointF(100, 160))
+        editor = v._inline_editor
+        assert editor is not None
+        widget = v._page_widgets[0]
+        on_page_px = int(12 * widget._zoom * widget._render_dpi / 72)
+        assert editor.font().pixelSize() == max(8, on_page_px)
+        line_h = editor.fontMetrics().height()
+        assert editor.height() >= 2 * line_h  # wrapped, not one squeezed line
+    finally:
+        v._render_worker.stop()
+        model.close()
+
+
 def test_editor_sizes_to_show_full_text(qtbot, tmp_path):
     # A long header would wrap out of a one-line box; the editor must size itself
     # so the whole paragraph is visible (regression for the clipped-text bug).

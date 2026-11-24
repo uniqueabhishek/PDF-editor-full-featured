@@ -1393,6 +1393,9 @@ class PDFDocument:
             "text": text,
             "style": style,
             "align": self._infer_align(best),
+            # Lines as laid out on the page: the editor keeps a one-line heading
+            # on one line, but lets a paragraph wrap at its real size.
+            "line_count": sum(1 for t in lines_text if t.strip()),
         }
 
     def replace_text_block(

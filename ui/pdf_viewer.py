@@ -2253,7 +2253,7 @@ class PDFViewer(QScrollArea):
             self._open_inline_editor(page_num, block)
 
     def _open_inline_editor(self, page_num: int, block: dict):
-        from PyQt6.QtGui import QFont, QFontMetricsF
+        from PyQt6.QtGui import QFontMetricsF
 
         from ui.inline_text_editor import InlineTextEditor
 
@@ -2270,10 +2270,7 @@ class PDFViewer(QScrollArea):
         text_doc.setDocumentMargin(2)
         editor.setPlainText(block["text"])
 
-        font = QFont()
-        flags = int(style.get("flags", 0))
-        font.setBold(bool(flags & (1 << 4)))
-        font.setItalic(bool(flags & (1 << 1)))
+        font = self._editor_font(int(style.get("flags", 0)))
         r, g, b = style.get("color", (0, 0, 0))
         editor.setStyleSheet(
             "QTextEdit { background: rgba(255,255,255,238);"
@@ -2281,12 +2278,13 @@ class PDFViewer(QScrollArea):
             f" color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); }}"
         )
 
-        # Geometry. The editor's font metrics don't match the PDF's (the same
-        # text is usually much wider on screen), so forcing the original size
-        # would wrap the text out of the one-line box. Instead: keep the box at
-        # the selection's width and SHRINK the editor font (to a floor) until the
-        # text fits — a one-line header stays one line — then size the height to
-        # whatever the content needs so nothing is clipped.
+        # Geometry. The editor shows the text at its size on the page. For a
+        # one-line heading the screen font is often a little wider than the
+        # PDF's, so the font is shrunk (to a floor) until the line fits and the
+        # heading stays one line. A paragraph that spans several lines is NOT
+        # shrunk: its lines are joined into one string, and squeezing that onto
+        # a single line made the text unreadably small. It wraps at the box
+        # width instead. Either way the height then grows to fit the content.
         pad = 2
         frame = editor.frameWidth()
         chrome_w = 2 * frame + 2 * int(text_doc.documentMargin())
@@ -2303,10 +2301,13 @@ class PDFViewer(QScrollArea):
         font.setPixelSize(px)
         lines = editor.toPlainText().split("\n")
         widest = max((QFontMetricsF(font).horizontalAdvance(ln) for ln in lines), default=0.0)
-        if widest > text_area:
+        single_line = int(block.get("line_count", 1)) <= 1
+        if single_line and widest > text_area:
             px = max(9, int(px * text_area / widest))
             font.setPixelSize(px)
         editor.setFont(font)
+
+        self._match_line_spacing(editor, font, block_h, int(block.get("line_count", 1)))
 
         text_doc.setTextWidth(text_area)
         content_h = text_doc.size().height()
@@ -2327,6 +2328,44 @@ class PDFViewer(QScrollArea):
         editor.show()
         editor.raise_()
         editor.setFocus()
+
+    @staticmethod
+    def _editor_font(flags: int):
+        """The closest screen font to a PDF span's (PyMuPDF span flags: 2 =
+        italic, 4 = serif, 8 = monospaced, 16 = bold), so the edited text wraps
+        about where it does on the page."""
+        from PyQt6.QtGui import QFont
+
+        font = QFont()
+        if flags & (1 << 3):
+            font.setFamily("Courier New")
+        elif flags & (1 << 2):
+            font.setFamily("Times New Roman")
+        else:
+            font.setFamily("Arial")
+        font.setBold(bool(flags & (1 << 4)))
+        font.setItalic(bool(flags & (1 << 1)))
+        return font
+
+    @staticmethod
+    def _match_line_spacing(editor, font, block_h: float, line_count: int) -> None:
+        """Space the editor's lines like the page's, so it sits on the original lines."""
+        from PyQt6.QtGui import QFontMetricsF, QTextBlockFormat, QTextCursor
+
+        if line_count < 2:
+            return
+        pitch = block_h / line_count
+        if pitch <= QFontMetricsF(font).height():
+            return
+        fmt = QTextBlockFormat()
+        # PyQt6 wants the plain int here; its stubs type .value as the enum.
+        fixed = cast(int, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+        fmt.setLineHeight(pitch, fixed)
+        text_doc = editor.document()
+        cursor = QTextCursor(text_doc)
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.mergeBlockFormat(fmt)
+        editor.setTextCursor(QTextCursor(text_doc))
 
     def _on_inline_committed(self, text: str):
         ctx = self._edit_ctx

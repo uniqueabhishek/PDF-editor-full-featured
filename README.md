@@ -40,9 +40,9 @@ All versions, release notes and checksums are on the [Releases page](https://git
 
 ## Screenshots
 
-| Light theme | Merge PDFs |
-|---|---|
-| <img src="docs/images/screenshot-light.png" alt="Open PDF Editor in the light theme" width="440"> | <img src="docs/images/screenshot-merge.png" alt="The Merge PDFs dialog with four files listed" width="440"> |
+| Edit text in place | Light theme | Merge PDFs |
+|---|---|---|
+| <img src="docs/images/screenshot-edit-text.png" alt="A paragraph open for editing directly on the page, with a sentence being added" width="290"> | <img src="docs/images/screenshot-light.png" alt="Open PDF Editor in the light theme" width="290"> | <img src="docs/images/screenshot-merge.png" alt="The Merge PDFs dialog with four files listed" width="290"> |
 
 ## Why Open PDF Editor?
 
