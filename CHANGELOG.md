@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `TESSERACT_CMD` setting: point the app at `tesseract.exe` when it is installed somewhere unusual (it was documented before but not read)
+
 ### Planned
 - Multi-tab document support
 - Batch processing wizard
@@ -22,14 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows download: an installer (`OpenPDFEditor-Setup.exe`, no administrator rights needed) and a portable zip, so Python is no longer needed to use the app
 - The installer can add Open PDF Editor to the "Open with" menu for PDF files, and keeps your settings when uninstalled
 - Every download includes the licences of the libraries it contains
-
-### Changed
-- Renamed from Ultra PDF Editor to Open PDF Editor, with a new logo. Start it with `uv run Open_PDF_Editor.py`. Settings, recent files and stamps are copied from `~/.ultra_pdf_editor` to `~/.open_pdf_editor` on first start; the old folder is left in place.
-- If you used `register_file_association.ps1`, run it again: it removes the old Ultra PDF Editor entry and shortcut and adds the new ones.
-
-### Added
 - Continuous integration on Windows: ruff, mypy and the test suite run on every push and pull request
 - Issue and pull request templates, a security policy and a code of conduct
+
+### Changed
+- Renamed from Ultra PDF Editor to Open PDF Editor, with a new logo. Settings, recent files and stamps are copied from `~/.ultra_pdf_editor` to `~/.open_pdf_editor` on first start; the old folder is left in place.
+- If you used `register_file_association.ps1`, run it again: it removes the old Ultra PDF Editor entry and shortcut and adds the new ones.
 
 ### Fixed
 - Light theme is readable when Windows is in dark mode (menus and labels were white on white)
