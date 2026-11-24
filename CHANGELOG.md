@@ -7,18 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- `TESSERACT_CMD` setting: point the app at `tesseract.exe` when it is installed somewhere unusual (it was documented before but not read)
-
-### Fixed
-- Editing a paragraph that spans several lines shows it at its real size, wrapped like on the page, instead of squeezed onto one line in tiny text
-
 ### Planned
 - Multi-tab document support
 - Batch processing wizard
 - Digital signature support
 - PDF comparison tool
 - Plugin architecture
+
+---
+
+## [1.1.1] - 2026-11-24
+
+### Added
+- `TESSERACT_CMD` setting: point the app at `tesseract.exe` when it is installed somewhere unusual (it was documented before but not read)
+
+### Fixed
+- Editing a paragraph that spans several lines shows it at its real size, wrapped like on the page, instead of squeezed onto one line in tiny text
 
 ---
 
@@ -155,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/uniqueabhishek/PDF-editor-full-featured/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/tag/v1.1.0
 [1.0.0]: https://github.com/uniqueabhishek/PDF-editor-full-featured/releases/tag/v1.0.0
