@@ -52,6 +52,10 @@ def _candidate_paths() -> Iterator[Path]:
 
 def _locate() -> str | None:
     """Return a path to a tesseract executable, or None if none is found."""
+    # An explicit path set by the user wins (documented in README and .env.example).
+    configured = os.environ.get("TESSERACT_CMD", "").strip().strip('"')
+    if configured and Path(configured).is_file():
+        return configured
     found = shutil.which("tesseract")
     if found:
         return found
