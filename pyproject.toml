@@ -58,6 +58,7 @@ python-preference = "only-system"
 dev = [
     "mypy>=2.4.1",
     "pre-commit>=4.6.2",
+    "pyinstaller>=6.22.3",
     "pytest>=8.0.0",
     "pytest-qt>=4.2.0",
     "ruff>=0.16",

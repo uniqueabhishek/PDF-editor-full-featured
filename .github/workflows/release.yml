@@ -1,0 +1,146 @@
+# Build the Windows download (installer + portable zip), test it, and publish it.
+#
+# - Run by hand (Actions > Release > Run workflow): build and test only; the files
+#   are kept as a workflow artifact for checking.
+# - Push a tag like v1.1.0: the same, then a GitHub Release is created with the
+#   files and the matching CHANGELOG section as release notes.
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # pyproject.toml sets python-preference = "only-system": use a python.org build.
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Read version
+        id: version
+        run: |
+          $v = uv run --locked python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "Tag $env:GITHUB_REF_NAME does not match pyproject version $v"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Tests
+        run: uv run --locked python -m pytest -p no:faulthandler
+
+      - name: Licence notices
+        run: |
+          $ref = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA }
+          uv run --locked python packaging/collect_licenses.py "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/tree/$ref"
+
+      - name: Build app
+        run: uv run --locked pyinstaller packaging/open_pdf_editor.spec --noconfirm --clean
+
+      - name: Smoke test (portable)
+        run: ./packaging/smoke-test.ps1 -Exe "dist/Open PDF Editor/Open PDF Editor.exe"
+
+      - name: Build installer
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress | Out-Null
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" packaging/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Install, smoke test, uninstall
+        run: |
+          $setup = Start-Process dist/OpenPDFEditor-Setup.exe -PassThru -Wait `
+            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=openwith'
+          if ($setup.ExitCode -ne 0) { throw "Installer exit code $($setup.ExitCode)" }
+          $dir = "$env:LOCALAPPDATA\Programs\Open PDF Editor"
+          ./packaging/smoke-test.ps1 -Exe "$dir\Open PDF Editor.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Installed app failed the smoke test" }
+          $un = Start-Process "$dir\unins000.exe" -PassThru -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
+          if ($un.ExitCode -ne 0) { throw "Uninstaller exit code $($un.ExitCode)" }
+          Start-Sleep -Seconds 3
+          if (Test-Path "$dir\Open PDF Editor.exe") { throw "Uninstall left the app behind" }
+
+      - name: Portable zip and checksums
+        run: |
+          Compress-Archive -Path "dist/Open PDF Editor" -DestinationPath dist/OpenPDFEditor-Portable.zip
+          Get-FileHash dist/OpenPDFEditor-Setup.exe, dist/OpenPDFEditor-Portable.zip -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), (Split-Path $_.Path -Leaf) } |
+            Set-Content dist/SHA256SUMS.txt
+          Get-Item dist/OpenPDFEditor-Setup.exe, dist/OpenPDFEditor-Portable.zip |
+            ForEach-Object { "{0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenPDFEditor-windows
+          path: |
+            dist/OpenPDFEditor-Setup.exe
+            dist/OpenPDFEditor-Portable.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: OpenPDFEditor-windows
+          path: dist
+
+      - name: Release notes from CHANGELOG
+        run: |
+          version='${{ needs.build.outputs.version }}'
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          cat >> notes.md <<'EOF'
+
+          ---
+          **Download:** `OpenPDFEditor-Setup.exe` (installs for you, no admin rights) or `OpenPDFEditor-Portable.zip` (unzip and run `Open PDF Editor.exe`). Windows 10/11, 64-bit.
+
+          **First launch:** the app is not code-signed yet, so Windows may show "Windows protected your PC". Click **More info → Run anyway**.
+          EOF
+          test -s notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Open PDF Editor ${{ needs.build.outputs.version }}
+          body_path: notes.md
+          files: |
+            dist/OpenPDFEditor-Setup.exe
+            dist/OpenPDFEditor-Portable.zip
+            dist/SHA256SUMS.txt
